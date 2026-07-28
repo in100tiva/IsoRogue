@@ -1,0 +1,110 @@
+/* ISOROGUE — tokens, reset e layout do documento.
+   Porte 1:1 de legacy/src-vanilla/ui.css (paleta e tipografia da §12 do
+   docs/CONTRACTS.md). Escala de espaçamento base-4: 4 / 8 / 12 / 16 / 24 / 32.
+
+   Divisão das folhas (única adaptação em relação ao vanilla, que tinha um
+   arquivo só): aqui ficam as variáveis, o reset e o layout de página
+   (.app / .palco / canvas); em ui.css ficam o painel lateral, seus blocos e os
+   sobrepostos (tooltip, depuração, morte). Nenhuma regra foi alterada. */
+
+:root {
+  --fundo: #0d1014;
+  --painel: #141920;
+  --borda: #232b36;
+  --texto: #c9d3de;
+  --fraco: #7d8899;
+  --ambar: #e0a43c;
+  --verde: #5fb36a;
+  --vermelho: #d9534f;
+  --azul: #4a90d9;
+  --roxo: #b06fd0;
+  --ciano: #3fd0d8;
+  --magenta: #e04fa0;
+
+  --campo: #0f141a;
+  --realce: #1b222c;
+  --borda-forte: #38445a;
+
+  --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Raiz do React. Sem `position` de propósito: o balão de tooltip é
+   `position: absolute` e precisa continuar ancorado no documento, como no
+   vanilla, onde ele era filho direto do <body>. */
+#raiz { height: 100%; }
+
+[hidden] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  display: flex;
+  align-items: stretch;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+}
+
+.palco {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--fundo);
+  overflow: hidden;
+}
+
+.game-canvas,
+.palco canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* ------------------------------------------------------------ responsivo */
+
+@media (max-width: 900px) {
+  .app { flex-direction: column; }
+
+  .palco {
+    flex: 1 1 auto;
+    min-height: 240px;
+  }
+}
+
+/* Viewport baixo (celular deitado): com `.palco` travado em 240px e o painel em
+   46vh, a soma mínima passa da altura da tela abaixo de 444px e o `overflow:
+   hidden` do body cortava a base do painel sem como alcançá-la. Aqui as duas
+   travas colapsam. */
+@media (max-width: 900px) and (max-height: 480px) {
+  .palco { min-height: 140px; }
+}

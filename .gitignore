@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# Build da bancada de revisão do personagem (docs/PERSONAGEM.md §10).
+# O artefato que se versiona é docs/ref/preview-atlas.png, não o HTML intermediário.
+.preview/
+*.local
+.DS_Store

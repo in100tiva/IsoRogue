@@ -1,0 +1,598 @@
+/* ISOROGUE — folha de estilo da interface.
+   Paleta e tipografia conforme a seção 12 do contrato.
+   Escala de espaçamento base-4: 4 / 8 / 12 / 16 / 24 / 32. */
+
+:root {
+  --fundo: #0d1014;
+  --painel: #141920;
+  --borda: #232b36;
+  --texto: #c9d3de;
+  --fraco: #7d8899;
+  --ambar: #e0a43c;
+  --verde: #5fb36a;
+  --vermelho: #d9534f;
+  --azul: #4a90d9;
+  --roxo: #b06fd0;
+  --ciano: #3fd0d8;
+  --magenta: #e04fa0;
+
+  --campo: #0f141a;
+  --realce: #1b222c;
+  --borda-forte: #38445a;
+
+  --mono: ui-monospace, SFMono-Regular, 'JetBrains Mono', Consolas, monospace;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+[hidden] { display: none !important; }
+
+:focus-visible {
+  outline: 2px solid var(--ambar);
+  outline-offset: 1px;
+}
+
+/* ---------------------------------------------------------------- layout */
+
+.app {
+  display: flex;
+  align-items: stretch;
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+}
+
+.palco {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  background: var(--fundo);
+  overflow: hidden;
+}
+
+#cv {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.painel {
+  flex: 0 0 320px;
+  width: 320px;
+  min-width: 0;
+  background: var(--painel);
+  border-left: 1px solid var(--borda);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #2c3644 var(--painel);
+}
+
+.painel::-webkit-scrollbar { width: 8px; }
+.painel::-webkit-scrollbar-track { background: var(--painel); }
+.painel::-webkit-scrollbar-thumb { background: #2c3644; border-radius: 4px; }
+.painel::-webkit-scrollbar-thumb:hover { background: var(--borda-forte); }
+
+.bloco {
+  padding: 16px;
+  border-bottom: 1px solid var(--borda);
+}
+
+.bloco:last-child { border-bottom: 0; }
+
+/* ------------------------------------------------------------- cabeçalho */
+
+.bloco-marca {
+  border-left: 2px solid var(--ambar);
+  padding-left: 14px;
+}
+
+.marca {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: #eef3f8;
+}
+
+.marca-sub {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--fraco);
+}
+
+/* ------------------------------------------------------------- primitivos */
+
+.titulo {
+  margin: 0 0 12px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fraco);
+}
+
+.rotulo {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fraco);
+}
+
+.valor {
+  display: block;
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+}
+
+.valor-g { font-size: 20px; }
+
+.valor-baixo { color: var(--vermelho); }
+
+.grade-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.nota {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--fraco);
+}
+
+/* ----------------------------------------------------------------- vitais */
+
+.vida-cabeca {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.valor-vida { font-size: 17px; }
+
+.barra {
+  position: relative;
+  height: 8px;
+  margin-top: 8px;
+  background: #0b0f14;
+  border: 1px solid var(--borda);
+  overflow: hidden;
+}
+
+.barra-preenche {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--verde);
+  transition: width 140ms linear;
+}
+
+.barra-ok { background: var(--verde); }
+.barra-alerta { background: var(--ambar); }
+.barra-critico { background: var(--vermelho); }
+
+/* ---------------------------------------------------------------- semente */
+
+.campo {
+  display: block;
+  width: 100%;
+  height: 34px;
+  padding: 0 8px;
+  background: var(--campo);
+  border: 1px solid var(--borda);
+  border-radius: 2px;
+  color: var(--texto);
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.campo::placeholder {
+  /* 4,55:1 sobre o fundo do campo (#0f141a) — passa o AA de texto normal. */
+  color: #737f90;
+  letter-spacing: 0.1em;
+}
+
+.campo:focus {
+  border-color: var(--ambar);
+  outline: none;
+}
+
+.botoes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.botao {
+  min-height: 34px;
+  padding: 0 8px;
+  background: var(--realce);
+  border: 1px solid var(--borda);
+  border-radius: 2px;
+  color: var(--texto);
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.botao:hover {
+  background: #212a36;
+  border-color: var(--borda-forte);
+}
+
+.botao:active { background: #171e27; }
+
+.botao-primario {
+  color: var(--ambar);
+  border-color: #4a3c22;
+}
+
+.botao-primario:hover { border-color: var(--ambar); }
+
+.botao-largo {
+  width: 100%;
+  min-height: 40px;
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+/* ---------------------------------------------------------- estado do mapa */
+
+.tabela { margin: 0; }
+
+.tabela-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(35, 43, 54, 0.55);
+}
+
+.tabela-linha:last-child { border-bottom: 0; }
+
+.tabela dt {
+  font-size: 12px;
+  color: var(--fraco);
+}
+
+.tabela dd {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+
+.valor-otimo { color: var(--verde); }
+
+/* --------------------------------------------------------------- registro */
+
+.bloco-registro { padding-bottom: 16px; }
+
+.log {
+  height: 216px;
+  padding: 8px;
+  background: #0b0f14;
+  border: 1px solid var(--borda);
+  border-radius: 2px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.45;
+  scrollbar-width: thin;
+  scrollbar-color: #2c3644 #0b0f14;
+}
+
+.log::-webkit-scrollbar { width: 8px; }
+.log::-webkit-scrollbar-track { background: #0b0f14; }
+.log::-webkit-scrollbar-thumb { background: #2c3644; border-radius: 4px; }
+
+.log-linha {
+  display: flex;
+  gap: 8px;
+  padding: 1px 0;
+}
+
+.log-turno {
+  flex: 0 0 auto;
+  min-width: 32px;
+  text-align: right;
+  /* 4,73:1 sobre o fundo do registro (#0b0f14) — passa o AA de texto normal e
+     continua mais apagado que o texto da linha. */
+  color: #737f90;
+  font-variant-numeric: tabular-nums;
+}
+
+.log-texto {
+  flex: 1 1 auto;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.log-info .log-texto { color: var(--texto); }
+.log-bom .log-texto { color: var(--verde); }
+.log-ruim .log-texto { color: var(--vermelho); }
+.log-aviso .log-texto { color: var(--ambar); }
+.log-sistema .log-texto { color: var(--fraco); }
+
+/* ------------------------------------------------------------------ ajuda */
+
+.ajuda {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ajuda li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 3px 0;
+}
+
+.teclas {
+  flex: 0 0 108px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+kbd {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 4px;
+  background: var(--realce);
+  border: 1px solid var(--borda);
+  border-bottom-color: #101720;
+  border-radius: 2px;
+  color: #aab6c4;
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: center;
+}
+
+.acao {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: var(--fraco);
+}
+
+/* ---------------------------------------------------------------- tooltip */
+
+.tooltip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  max-width: 264px;
+  padding: 8px 10px;
+  background: #10151c;
+  border: 1px solid #2c3644;
+  border-left: 2px solid var(--ambar);
+  border-radius: 2px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.55);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--texto);
+  pointer-events: none;
+}
+
+.tooltip b,
+.tooltip strong {
+  color: #eef3f8;
+  font-weight: 600;
+}
+
+/* Nome da criatura no topo do balão (emitido por 70-game.js). */
+.tooltip .tt-nome {
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #2c3644;
+  color: #eef3f8;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tooltip .fraco { color: var(--fraco); }
+
+/* ------------------------------------------------------------------ debug */
+
+.debug {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 30;
+  min-width: 188px;
+  padding: 8px 12px;
+  background: rgba(16, 21, 28, 0.92);
+  border: 1px solid var(--borda);
+  border-left: 2px solid var(--ciano);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: #a9b6c4;
+  white-space: pre;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ morte */
+
+.morte {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(9, 11, 14, 0.88);
+}
+
+.morte-caixa {
+  width: 100%;
+  max-width: 424px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  background: var(--painel);
+  border: 1px solid var(--borda);
+  border-top: 2px solid var(--vermelho);
+  border-radius: 3px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+.morte-tag {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vermelho);
+}
+
+.morte-titulo {
+  margin: 4px 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #eef3f8;
+}
+
+.morte-corpo { margin: 0; }
+
+.morte-linha {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(35, 43, 54, 0.55);
+}
+
+.morte-linha:last-child { border-bottom: 0; }
+
+.morte-rotulo {
+  font-size: 12px;
+  color: var(--fraco);
+}
+
+.morte-valor {
+  font-family: var(--mono);
+  font-size: 13px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto);
+}
+
+.morte-causa {
+  display: block;
+  margin-top: 16px;
+  padding: 8px 12px;
+  background: #0b0f14;
+  border-left: 2px solid var(--vermelho);
+  font-family: var(--sans);
+  font-size: 13px;
+  text-align: left;
+  color: #d7b3b2;
+}
+
+/* ------------------------------------------------------------ responsivo */
+
+@media (max-width: 900px) {
+  .app { flex-direction: column; }
+
+  .palco {
+    flex: 1 1 auto;
+    min-height: 240px;
+  }
+
+  .painel {
+    flex: 0 0 46vh;
+    width: 100%;
+    height: 46vh;
+    border-left: 0;
+    border-top: 1px solid var(--borda);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .bloco { padding: 12px 16px; }
+
+  .bloco-marca { padding-left: 14px; }
+
+  .log { height: 152px; }
+
+  .debug {
+    top: 8px;
+    left: 8px;
+    font-size: 10px;
+  }
+}
+
+/* Viewport baixo (celular deitado): com `.palco` travado em 240px e o painel em
+   46vh, a soma mínima passa da altura da tela abaixo de 444px e o `overflow:
+   hidden` do body cortava a base do painel sem como alcançá-la. Aqui as duas
+   travas colapsam. */
+@media (max-width: 900px) and (max-height: 480px) {
+  .palco { min-height: 140px; }
+
+  .painel {
+    flex: 0 0 40vh;
+    height: 40vh;
+  }
+
+  .log { height: 96px; }
+}
+
+@media (max-width: 380px) {
+  .botoes { grid-template-columns: 1fr 1fr; }
+  .botao-primario { grid-column: 1 / -1; }
+  .teclas { flex: 0 0 92px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra-preenche { transition: none; }
+}

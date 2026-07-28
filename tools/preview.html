@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark" />
+    <!--
+      Bancada de revisão visual do guerreiro — docs/PERSONAGEM.md §10.
+      Não é parte do jogo: nada daqui entra em dist/index.html.
+      Buildada por vite.preview.config.ts para .preview/preview.html (arquivo único)
+      e fotografada por tools/preview-personagem.mjs em docs/ref/preview-atlas.png.
+      Sem recurso externo: nenhuma URL, nenhuma fonte baixada, nenhuma imagem.
+    -->
+    <title>ISOROGUE — bancada do guerreiro</title>
+    <style>
+      :root {
+        --fundo: #0d1014;
+        --painel: #141920;
+        --painel-alto: #1a212a;
+        --borda: rgba(201, 211, 222, 0.12);
+        --texto: #c9d3de;
+        --fraco: #7d8899;
+        --ambar: #e0a43c;
+        --verde: #5fb36a;
+        --vermelho: #d9534f;
+        --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", "DejaVu Sans Mono", Consolas,
+          monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        background: var(--fundo);
+      }
+
+      body {
+        /* max-content: a largura da página é a largura do conteúdo, e é ela que
+           tools/preview-personagem.mjs lê para dimensionar a janela do Chrome. */
+        width: max-content;
+        min-width: 100%;
+        margin: 0;
+        padding: 22px 26px 26px;
+        background: var(--fundo);
+        color: var(--texto);
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      canvas {
+        display: block;
+        image-rendering: pixelated;
+      }
+
+      /* ---- cabeçalho ---- */
+      .cabecalho {
+        display: flex;
+        align-items: flex-end;
+        gap: 26px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--borda);
+        margin-bottom: 20px;
+      }
+
+      .titulo {
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        color: #e8eef6;
+        margin: 0;
+      }
+
+      .subtitulo {
+        color: var(--fraco);
+        margin: 2px 0 0;
+        font-size: 11px;
+      }
+
+      .medidas {
+        display: flex;
+        gap: 10px;
+        margin-left: auto;
+      }
+
+      .medida {
+        background: var(--painel);
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        padding: 6px 12px;
+        min-width: 96px;
+      }
+
+      .medida .rot {
+        display: block;
+        color: var(--fraco);
+        font-size: 10px;
+        letter-spacing: 0.4px;
+        text-transform: uppercase;
+      }
+
+      .medida .val {
+        display: block;
+        color: var(--ambar);
+        font-size: 15px;
+        font-weight: 700;
+      }
+
+      .medida.destaque .val {
+        color: var(--verde);
+      }
+
+      /* ---- seções ---- */
+      .secao {
+        background: var(--painel);
+        border: 1px solid var(--borda);
+        border-radius: 8px;
+        padding: 12px 14px 14px;
+        margin-bottom: 18px;
+      }
+
+      .secao > h2 {
+        margin: 0;
+        font-size: 13px;
+        font-weight: 700;
+        color: #e8eef6;
+        letter-spacing: 0.3px;
+      }
+
+      .secao > .sub {
+        margin: 2px 0 12px;
+        color: var(--fraco);
+        font-size: 11px;
+      }
+
+      /* stretch: os painéis de uma mesma faixa terminam na mesma altura. A sobra
+         fica DENTRO do painel, não como buraco no fundo — a folha lê como grade. */
+      .colunas {
+        display: flex;
+        gap: 18px;
+        align-items: stretch;
+        margin-bottom: 18px;
+      }
+
+      .colunas > .secao,
+      .colunas > .pilha > .colunas {
+        margin-bottom: 0;
+      }
+
+      /* Empilha faixas dentro de uma coluna — é o que deixa a folha de contato
+         (alta e estreita) ao lado de duas faixas baixas sem abrir buraco. */
+      .pilha {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .faixa {
+        display: flex;
+        flex-wrap: nowrap;
+        gap: 12px;
+        align-items: flex-start;
+      }
+
+      .cartao {
+        background: var(--painel-alto);
+        border: 1px solid var(--borda);
+        border-radius: 6px;
+        padding: 6px;
+      }
+
+      .cartao .rotulo {
+        margin-top: 6px;
+        color: #e8dfc4;
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .cartao .detalhe {
+        color: var(--fraco);
+        font-size: 11px;
+        white-space: nowrap;
+      }
+
+      /* ---- paleta ---- */
+      .paleta {
+        display: grid;
+        grid-template-columns: repeat(2, max-content);
+        gap: 4px 16px;
+      }
+
+      .amostra {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        white-space: nowrap;
+      }
+
+      .amostra i {
+        width: 15px;
+        height: 15px;
+        border: 1px solid rgba(0, 0, 0, 0.6);
+        border-radius: 2px;
+        display: inline-block;
+      }
+
+      .amostra span {
+        color: var(--fraco);
+        font-size: 11px;
+      }
+
+      .amostra b {
+        color: var(--texto);
+        font-weight: 400;
+      }
+
+      /* ---- gates ---- */
+      .gates {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        max-width: 460px;
+      }
+
+      .gates li {
+        padding: 3px 0 3px 22px;
+        position: relative;
+        color: var(--texto);
+        font-size: 11px;
+        line-height: 1.5;
+      }
+
+      .gates li::before {
+        content: "☐";
+        position: absolute;
+        left: 2px;
+        color: var(--ambar);
+      }
+
+      .gates b {
+        color: var(--ambar);
+        font-weight: 700;
+      }
+
+      /* ---- erro ---- */
+      .erro {
+        background: #2a1416;
+        border: 1px solid var(--vermelho);
+        border-radius: 8px;
+        padding: 16px 18px;
+        max-width: 1100px;
+      }
+
+      .erro h2 {
+        margin: 0 0 8px;
+        color: var(--vermelho);
+        font-size: 16px;
+      }
+
+      .erro p {
+        margin: 0 0 10px;
+        color: #f0c9c7;
+        font-size: 13px;
+        white-space: pre-wrap;
+      }
+
+      .erro pre {
+        margin: 0;
+        color: var(--fraco);
+        font-size: 11px;
+        white-space: pre-wrap;
+        max-height: 320px;
+        overflow: hidden;
+      }
+
+      .rodape {
+        color: var(--fraco);
+        font-size: 10px;
+        border-top: 1px solid var(--borda);
+        padding-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="bancada"></main>
+    <script type="module" src="./preview-entry.ts"></script>
+  </body>
+</html>
