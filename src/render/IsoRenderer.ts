@@ -78,8 +78,12 @@ import {
 } from './palette';
 import type { Luts } from './palette';
 import {
+  MODELO_ESPADA,
   MODELO_GUERREIRO,
+  MODELO_GUERREIRO_SEM_ESPADA,
   PALETA_GUERREIRO,
+  POSE_AJOELHADA,
+  POSE_CAIDA,
   POSE_PARADA,
   RAMPAS_GUERREIRO,
   RAMPA_DA_COR
@@ -111,7 +115,7 @@ import {
   RAMPAS_OGRO,
   RAMPA_DA_COR_OGRO
 } from './characters/ogre';
-import { forjarAtlas, quadroModulado } from './spriteForge';
+import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
 
@@ -137,6 +141,76 @@ const FORJA_GUERREIRO: OpcoesForja = {
   rampaDaCor: RAMPA_DA_COR,
   repouso: POSE_PARADA
 };
+
+/* ------------------------------------------------------------------ *
+ * As cinemáticas do guerreiro (intro da descida e morte)
+ *
+ * Tudo nesta seção é COSMÉTICO: alimentado por `dt` e por observação do
+ * estado (troca de mapa, borda de `game.over`), sem uma letra no engine (R54).
+ * As poses da morte não são animação de §6 — são REPUSOS de forja congelados
+ * na coluna ('parado', 0) de atlases secundários (a chave de cache do forge
+ * já inclui o repouso), lidos sempre nessa coluna, na direção do facing.
+ * ------------------------------------------------------------------ */
+
+/** A fase da cinemática, exposta à UI pelo micro-store de `ui/cinematics.ts`. */
+export type FaseCinematica = 'nenhuma' | 'intro' | 'morte' | 'concluida';
+
+/** Forja do corpo ajoelhado, sem espada (fase 3 da morte). */
+const FORJA_MORTE_AJOELHADO: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_AJOELHADA };
+/** Forja do corpo caído, sem espada (fase 4 da morte). */
+const FORJA_MORTE_CAIDO: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_CAIDA };
+/** Forja da espada solta — repouso neutro: a rotação da queda é de tela. */
+const FORJA_ESPADA: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_NEUTRA };
+
+/* --- tempos da INTRO (descendo as escadas) --- */
+/** Duração total da intro. */
+const DUR_INTRO = 1.3;
+/** Trecho em que o sprite desliza de `INTRO_ALTURA_PX`·zoom até a âncora. */
+const INTRO_DESLIZE = 1.0;
+/** Trecho final em que o glifo da escada esmaece (prop cinematográfico). */
+const INTRO_ESMAECER = 0.3;
+/** Altura de tela de onde o guerreiro desce, em px a zoom 1. */
+const INTRO_ALTURA_PX = 48;
+
+/* --- tempos da MORTE (sequência de 3,4 s) --- */
+/** Sangue: a poça cresce de 0 até aqui e persiste. */
+const MORTE_SANGUE = 0.9;
+/** Espada: solta-se da mão neste instante e pousa em `MORTE_ESPADA_FIM`. */
+const MORTE_ESPADA_INICIO = 0.15;
+const MORTE_ESPADA_FIM = 0.9;
+/** Troca dura para o atlas ajoelhado. */
+const MORTE_AJOELHADO = 0.9;
+/** Troca dura para o atlas caído. */
+const MORTE_CAIDO = 1.7;
+/** O fade preto começa aqui e fecha em alpha 0,9 no fim da sequência. */
+const MORTE_FADE_INICIO = 2.2;
+const DUR_MORTE = 3.4;
+
+/** Raio final da poça de sangue, em px a zoom 1. */
+const SANGUE_RAIO = 26;
+/** Giro total da espada na queda, em radianos (~75°). O giro pixelado é desejado. */
+const ESPADA_GIRO = (75 * Math.PI) / 180;
+
+/* --- transparência das paredes do canto frontal ---
+ * As três tiles à frente do jogador ((p.x+1,p.y), (p.x,p.y+1), (p.x+1,p.y+1))
+ * são desenhadas DEPOIS dele no passe das paredes e o cobrem. A parede que
+ * encobre o herói fica translúcida — nunca invisível: abaixo de ~0,3 o bloco
+ * some contra o fundo escuro e o buraco lê como erro de desenho. */
+const ALFA_PAREDE_OCULTA = 0.35;
+
+/**
+ * `prefers-reduced-motion`, consultado no instante do gatilho (a preferência
+ * pode mudar com a página aberta). jsdom-safe: sem `matchMedia`, degrada para
+ * "sem restrição" — que é o comportamento de sempre.
+ */
+function prefereReduzirMovimento(): boolean {
+  if (typeof matchMedia === 'undefined') return false;
+  try {
+    return matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
+}
 
 /* ------------------------------------------------------------------ *
  * O bestiário (docs/BESTIARIO.md §0.1, §1.1 e §7) — O PONTO DE EXTENSÃO
@@ -542,6 +616,35 @@ export class IsoRenderer {
     passo: 0, pe: 0, ataque: 0, respiro: 0, dano: 0, pronta: false
   };
 
+  /* --- as cinemáticas do guerreiro (ver o bloco de constantes acima) --- */
+  /**
+   * A máquina: fase + relógio próprio (soma de `dt`), no padrão de `anim`.
+   * Avançada em `update` e lida em `draw`/`drawPlayer`. Nada aqui toca o Game.
+   */
+  private readonly cin: { fase: FaseCinematica; t: number } = { fase: 'nenhuma', t: 0 };
+  /**
+   * Última `game.depth` observada (−1 = nenhuma ainda). O gatilho da intro é
+   * "turn 0 OU depth maior que a observada" — a primeira observação com turn >
+   * 0 é a retomada de save, e ela NÃO toca intro.
+   */
+  private ultimaDepth = -1;
+  /** Último `game.over` observado — a morte dispara na borda de subida. */
+  private ultimoOver = false;
+  /**
+   * Atlases secundários da morte (ajoelhado/caído/espada), memoizados sob
+   * demanda no padrão de `atlasInimigo`: `undefined` = nunca tentado, `null`
+   * guardado = já tentou e não há canvas (jsdom) — nunca retenta por quadro.
+   */
+  private readonly atlasMorte = new Map<string, AtlasPersonagem | null>();
+
+  /**
+   * Alpha corrente das paredes do canto frontal do jogador (índice de tile →
+   * 0,35..1). O alvo é `ALFA_PAREDE_OCULTA` para as três tiles à frente dele
+   * que são parede e 1 para todas as demais; o valor desliza em `update` e é
+   * lido no passe das paredes em `draw`. Entradas de volta a ~1 saem do mapa.
+   */
+  private readonly alfaParedes = new Map<number, number>();
+
   /* --- temporários (evitam alocação por frame) --- */
   private isoXTmp = 0;
   private isoYTmp = 0;
@@ -693,6 +796,13 @@ export class IsoRenderer {
     if (!game || !game.map || !game.player) return;
     this.syncRun(game);
 
+    // Cinemática de morte: dispara na BORDA de subida de `game.over` (o turno
+    // que matou já está resolvido — isto só ilustra, R54). Observação pura.
+    const over = !!game.over;
+    if (over && !this.ultimoOver) this.iniciarMorte();
+    this.ultimoOver = over;
+    this.avancarCinematica(d);
+
     const cam = this.camState;
     const p = game.player;
     if (!game.ui || game.ui.follow !== false) {
@@ -739,6 +849,38 @@ export class IsoRenderer {
         }
       }
       this.turnoOrientado = turno;
+    }
+
+    /*
+     * Paredes do canto frontal: desliza o alpha para o alvo. As três tiles à
+     * frente do jogador que são parede miram ALFA_PAREDE_OCULTA; as demais
+     * voltam a 1 e saem do mapa. Cosmético — não lê nada além de posição/tiles.
+     */
+    const mapaAlfa = this.alfaParedes;
+    const mw = game.map.w;
+    const mh = game.map.h;
+    const mt = game.map.tiles;
+    const ocultam: number[] = [];
+    if (p.x + 1 < mw && mt[p.y * mw + p.x + 1] === this.T_WALL) {
+      ocultam.push(p.y * mw + p.x + 1);
+    }
+    if (p.y + 1 < mh && mt[(p.y + 1) * mw + p.x] === this.T_WALL) {
+      ocultam.push((p.y + 1) * mw + p.x);
+    }
+    if (p.x + 1 < mw && p.y + 1 < mh && mt[(p.y + 1) * mw + p.x + 1] === this.T_WALL) {
+      ocultam.push((p.y + 1) * mw + p.x + 1);
+    }
+    const ka = Math.min(1, d * 9);
+    for (let j = 0; j < ocultam.length; j++) {
+      const ti = ocultam[j];
+      const a = mapaAlfa.has(ti) ? (mapaAlfa.get(ti) as number) : 1;
+      mapaAlfa.set(ti, a + (ALFA_PAREDE_OCULTA - a) * ka);
+    }
+    for (const [ti, a] of mapaAlfa) {
+      if (ocultam.indexOf(ti) >= 0) continue;
+      const na = a + (1 - a) * ka;
+      if (na > 0.995) mapaAlfa.delete(ti);
+      else mapaAlfa.set(ti, na);
     }
   }
 
@@ -864,7 +1006,7 @@ export class IsoRenderer {
         else if (t === this.T_DOOR) this.drawDoor(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
       }
 
-      /* --- paredes da antidiagonal (ocultam quem está atrás) --- */
+      /* --- paredes da antidiagonal (translúcidas quando encobrem o herói) --- */
       for (x = lo; x <= hi; x++) {
         y = s - x;
         i = y * w + x;
@@ -878,7 +1020,15 @@ export class IsoRenderer {
         d2 = dx * dx + dy * dy;
         lvl = seen ? (d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0) : 0;
         bucket = decor ? decor[i] & 7 : 0;
-        this.drawWall(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+        const wa = this.alfaParedes.get(i);
+        if (wa !== undefined && wa < 0.995) {
+          ctx.save();
+          ctx.globalAlpha = wa;
+          this.drawWall(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+          ctx.restore();
+        } else {
+          this.drawWall(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+        }
       }
 
       /* --- entidades da antidiagonal (só dentro do FOV — R31) --- */
@@ -909,6 +1059,26 @@ export class IsoRenderer {
     this.drawHover(ctx, game, hw, hh, ox, oy);
     if (game.ui && game.ui.debug) this.drawDebugLayer(ctx, game, hw, hh, ox, oy);
     if (game.ui && game.ui.fovProbe) this.drawFovProbe(ctx, game, hw, hh, ox, oy);
+
+    /*
+     * Cinemática de morte — o apagar das luzes, por cima de TUDO (última
+     * operação do quadro, alpha 0→0,9 entre MORTE_FADE_INICIO e o fim). Em
+     * 'concluida' o véu fica fechado: é sobre ele que o modal da UI abre.
+     */
+    const cin = this.cin;
+    let veu = 0;
+    if (cin.fase === 'concluida') veu = 0.9;
+    else if (cin.fase === 'morte' && cin.t > MORTE_FADE_INICIO) {
+      veu = 0.9 * (cin.t - MORTE_FADE_INICIO) / (DUR_MORTE - MORTE_FADE_INICIO);
+      if (veu > 0.9) veu = 0.9;
+    }
+    if (veu > 0) {
+      ctx.save();
+      ctx.globalAlpha = veu;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, this.vw, this.vh);
+      ctx.restore();
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -934,9 +1104,14 @@ export class IsoRenderer {
     // referência desta instância e o buffer de tingimento, que é dela.
     this.atlas = null;
     this.atlasInimigo.clear();
+    this.atlasMorte.clear();
     this.tinta = null;
     this.tintaCtx = null;
     this.anim.pronta = false;
+    this.cin.fase = 'nenhuma';
+    this.cin.t = 0;
+    this.ultimaDepth = -1;
+    this.ultimoOver = false;
   }
 
   /* ------------------------------------------------------------------ *
@@ -1005,6 +1180,9 @@ export class IsoRenderer {
     if (this.lastMap === game.map) return;
     this.lastMap = game.map;
     this.vfx = new Map<string, Vfx>();
+    // Índices de tile são por mapa: os alphas das paredes do nível anterior
+    // não significam nada no novo.
+    this.alfaParedes.clear();
     // Mapa novo = bestiário novo. O relógio de orientação (§0.2) volta a zero
     // para que a primeira leitura do andar já encare o jogador quem estiver
     // colado nele, em vez de esperar o turno seguinte.
@@ -1020,6 +1198,88 @@ export class IsoRenderer {
       cam.x = cam.tx = this.isoXTmp;
       cam.y = cam.ty = this.isoYTmp;
     }
+
+    /*
+     * Gatilho da INTRO (descendo as escadas). Mapa novo chega a três mãos:
+     *
+     *   - expedição nova (`game.turn === 0`) → toca;
+     *   - DESCIDA de nível (`game.depth` maior que a última observada) → toca;
+     *   - retomada de save (primeira observação, turn > 0) → NÃO toca: o
+     *     jogador já estava no andar, a escada não aconteceu na tela.
+     *
+     * O jogador nasce em `map.start`, que não é escada — o glifo desenhado
+     * durante a intro é prop cinematográfico, não o tile real.
+     */
+    this.cin.fase = 'nenhuma';
+    this.cin.t = 0;
+    const turn = typeof game.turn === 'number' ? game.turn : 0;
+    const depth = typeof game.depth === 'number' ? game.depth : 0;
+    const primeiraObservacao = this.ultimaDepth < 0;
+    if (turn === 0 || (!primeiraObservacao && depth > this.ultimaDepth)) {
+      this.iniciarIntro();
+    }
+    this.ultimaDepth = depth;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * A máquina de cinemática do guerreiro (intro e morte)
+   *
+   * Mesmo padrão de `anim`/`vfx`: campos da instância, avanço por `dt` em
+   * `update`, leitura em `draw`/`drawPlayer`. A UI lê a fase por
+   * `faseCinematica()` (o laço de rAF a republica no micro-store de
+   * `ui/cinematics.ts`, que segura o modal de morte e trava o input).
+   * ------------------------------------------------------------------ */
+
+  /** A fase atual — a mesma união que `ui/cinematics.ts` republica. */
+  faseCinematica(): FaseCinematica {
+    return this.cin.fase;
+  }
+
+  /**
+   * Leva a cinemática direto ao estado final — `prefers-reduced-motion` (no
+   * gatilho) e testes. Intro: some como se nunca houvesse; morte: corpo caído
+   * e fade fechado na hora, que é o que libera o modal.
+   */
+  pularCinematica(): void {
+    const cin = this.cin;
+    if (cin.fase === 'intro') {
+      cin.fase = 'nenhuma';
+      cin.t = 0;
+    } else if (cin.fase === 'morte') {
+      cin.fase = 'concluida';
+      cin.t = DUR_MORTE;
+    }
+  }
+
+  private iniciarIntro(): void {
+    this.cin.fase = 'intro';
+    this.cin.t = 0;
+    if (prefereReduzirMovimento()) this.pularCinematica();
+  }
+
+  private iniciarMorte(): void {
+    this.cin.fase = 'morte';
+    this.cin.t = 0;
+    if (prefereReduzirMovimento()) this.pularCinematica();
+  }
+
+  /** Avança o relógio e os cortes de fase. Só o tempo decide — nada do Game. */
+  private avancarCinematica(d: number): void {
+    const cin = this.cin;
+    if (cin.fase === 'intro') {
+      cin.t += d;
+      if (cin.t >= DUR_INTRO) {
+        cin.fase = 'nenhuma';
+        cin.t = 0;
+      }
+    } else if (cin.fase === 'morte') {
+      cin.t += d;
+      if (cin.t >= DUR_MORTE) {
+        cin.fase = 'concluida';
+        cin.t = DUR_MORTE;
+      }
+    }
+    // 'concluida' é terminal até a próxima partida (syncRun a zera).
   }
 
   private indexEntities(game: Game): void {
@@ -1597,13 +1857,14 @@ export class IsoRenderer {
    */
   private desenharSpriteJogador(
     ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem, p: Player,
-    cx: number, cy: number, z: number, flash: number
+    cx: number, cy: number, z: number, flash: number,
+    quadro?: { estado: Estado; frame: number }
   ): void {
     const cv = atlas.canvas;
     if (!cv) return;
     const lw = atlas.larguraFrame;
     const lh = atlas.alturaFrame;
-    const q = this.quadroDoJogador();
+    const q = quadro ?? this.quadroDoJogador();
     const alvo = atlas.quadro(normalizeFacing(p.facing), q.estado, q.frame);
     const dx = Math.round(cx - atlas.ancoraX * z);
     const dy = Math.round(cy - atlas.ancoraY * z);
@@ -1683,10 +1944,54 @@ export class IsoRenderer {
   private drawPlayer(
     ctx: CanvasRenderingContext2D, p: Player, sx: number, cyBase: number, z: number
   ): void {
+    const fase = this.cin.fase;
+
+    /*
+     * Cinemática de MORTE — o desenho inteiro do jogador é dela: decalque de
+     * sangue, corpo (parado → ajoelhado → caído), espada solta. SEM barra de
+     * vida (o guerreiro não tem mais vida a mostrar). O tile, não o deslize do
+     * passo, ancora a sequência: `sx`/`cyBase` crus.
+     */
+    if (fase === 'morte' || fase === 'concluida') {
+      this.desenharMorte(ctx, p, sx, cyBase, z);
+      return;
+    }
+
     const v = this.vfxOf('p', p.x, p.y, p.hp);
     const a = this.anim;
     const cx = sx + a.ox * z;
     const cy = cyBase + a.oy * z;
+
+    /*
+     * Cinemática de INTRO (descendo as escadas) — dois adereços sobre o desenho
+     * normal: o glifo de escada como prop no tile (esmaece nos últimos ~0,3 s)
+     * e o sprite entrando de `INTRO_ALTURA_PX`·zoom acima da âncora em ciclo de
+     * marcha, fechando em 'parado'. Curva ease-out simples.
+     */
+    let cySprite = cy;
+    let quadroIntro: { estado: Estado; frame: number } | undefined;
+    if (fase === 'intro') {
+      const t = this.cin.t;
+      const hw = this.HW0 * z;
+      const hh = this.HH0 * z;
+      let alfa = 1;
+      if (t > DUR_INTRO - INTRO_ESMAECER) {
+        alfa = (DUR_INTRO - t) / INTRO_ESMAECER;
+        if (alfa < 0) alfa = 0;
+      }
+      const alfaAntes = ctx.globalAlpha;
+      ctx.globalAlpha = alfaAntes * alfa;
+      this.drawStairs(ctx, sx, cyBase - hh, hw, hh, true, LEVELS - 1);
+      ctx.globalAlpha = alfaAntes;
+
+      let k = t / INTRO_DESLIZE;
+      if (k > 1) k = 1;
+      const ease = 1 - (1 - k) * (1 - k);
+      cySprite = cy - INTRO_ALTURA_PX * z * (1 - ease);
+      quadroIntro = k < 1
+        ? { estado: 'andando', frame: Math.floor(t / DUR_PASSO) % 4 }
+        : { estado: 'parado', frame: 0 };
+    }
 
     // §9.2 — a sombra elíptica continua existindo: é ela que cola o boneco no
     // chão. Ela acompanha o deslize NOS DOIS EIXOS (o vanilla só a arrastava na
@@ -1699,15 +2004,165 @@ export class IsoRenderer {
     const atlas = this.atlasDoGuerreiro();
     let topoBarra = 42;
     if (atlas) {
-      this.desenharSpriteJogador(ctx, atlas, p, cx, cy, z, v.flash);
+      this.desenharSpriteJogador(ctx, atlas, p, cx, cySprite, z, v.flash, quadroIntro);
       topoBarra = atlas.ancoraY - FOLGA_BARRA;
     } else {
-      this.desenharJogadorGeometrico(ctx, cx, cy - hopOf(v, 0) * 6 * z, z, v.flash);
+      this.desenharJogadorGeometrico(ctx, cx, cySprite - hopOf(v, 0) * 6 * z, z, v.flash);
     }
 
     if (p.maxHp > 0 && p.hp < p.maxHp) {
       this.drawHpBar(ctx, cx, cy - topoBarra * z, z, p.hp / p.maxHp);
     }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Cinemática de MORTE — o desenho por fase
+   *
+   * Sem atlas (jsdom, sem contexto 2D) nada quebra: o sangue e o véu são
+   * primitivas de canvas e desenham sempre; os sprites simplesmente não saem —
+   * o relógio e as fases, que são o que a UI consome, vivem em `update`.
+   * ------------------------------------------------------------------ */
+
+  /** Atlas secundário da morte, sob demanda e uma vez só (ver `atlasMorte`). */
+  private atlasDeMorte(qual: 'ajoelhado' | 'caido' | 'espada'): AtlasPersonagem | null {
+    const pronto = this.atlasMorte.get(qual);
+    if (pronto !== undefined) return pronto;
+    let atlas: AtlasPersonagem | null = null;
+    if (qual === 'ajoelhado') {
+      atlas = this.forjarSeguro(MODELO_GUERREIRO_SEM_ESPADA, FORJA_MORTE_AJOELHADO);
+    } else if (qual === 'caido') {
+      atlas = this.forjarSeguro(MODELO_GUERREIRO_SEM_ESPADA, FORJA_MORTE_CAIDO);
+    } else {
+      atlas = this.forjarSeguro(MODELO_ESPADA, FORJA_ESPADA);
+    }
+    this.atlasMorte.set(qual, atlas);
+    return atlas;
+  }
+
+  /**
+   * Cola a coluna ('parado', 0) de um atlas — a pose EXATA do repouso forjado
+   * (§7: `poseDoQuadro` devolve o repouso sem deltas em parado/0) — com a
+   * âncora sobre o centro do losango, na direção dada. Sem flash, sem barra.
+   */
+  private desenharQuadroExato(
+    ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem, dir: number,
+    cx: number, cy: number, z: number
+  ): void {
+    const cv = atlas.canvas;
+    if (!cv) return;
+    const lw = atlas.larguraFrame;
+    const lh = atlas.alturaFrame;
+    const alvo = atlas.quadro(dir, 'parado', 0);
+    const dx = Math.round(cx - atlas.ancoraX * z);
+    const dy = Math.round(cy - atlas.ancoraY * z);
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cv, alvo.sx, alvo.sy, lw, lh, dx, dy, lw * z, lh * z);
+    ctx.imageSmoothingEnabled = suave;
+  }
+
+  /**
+   * A poça de sangue (fase 1): elipse vermelho-escura no plano do piso,
+   * crescendo de 0 a `SANGUE_RAIO`·zoom em MORTE_SANGUE e persistindo até o
+   * fim. Desenhada ANTES do sprite — é decalque de chão. Os respingos saem de
+   * um LCG próprio semeado por (x, y): determinísticos e só cosméticos (nada
+   * de `Math.random` no render — ver tools/check-boundaries.mjs).
+   */
+  private desenharSangue(
+    ctx: CanvasRenderingContext2D, p: Player, cx: number, cy: number, z: number, t: number
+  ): void {
+    let k = t / MORTE_SANGUE;
+    if (k > 1) k = 1;
+    if (k <= 0) return;
+    const ease = 1 - (1 - k) * (1 - k);
+    const r = SANGUE_RAIO * z * ease;
+    const by = cy + 2 * z;
+    fillEllipse(ctx, cx, by, r, r * 0.42, '#6e1414');
+    fillEllipse(ctx, cx - 2 * z, by - 0.5 * z, r * 0.6, r * 0.25, '#4a0d0d');
+
+    /* Respingos determinísticos em torno da poça (LCG semeado pelo tile). */
+    let s = ((p.x * 374761393) ^ (p.y * 668265263) ^ 0x9e3779b9) >>> 0;
+    if (s === 0) s = 1;
+    for (let i = 0; i < 8; i++) {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const ang = (s / 4294967296) * TAU;
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const dist = (0.5 + (s / 4294967296) * 0.65) * SANGUE_RAIO * z * ease;
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const rr = (0.8 + (s / 4294967296) * 1.6) * z;
+      fillEllipse(
+        ctx, cx + Math.cos(ang) * dist, by + Math.sin(ang) * dist * 0.42,
+        rr, rr * 0.42, i % 2 === 0 ? '#6e1414' : '#4a0d0d'
+      );
+    }
+  }
+
+  /**
+   * A espada solta (fase 2): sai da altura da mão e cai ao lado girando até
+   * ~75°, acelerando (queda, não deslize); ao pousar, fica como decalque
+   * estático. O giro é de TELA (`ctx.rotate` com suavização desligada — o
+   * giro pixelado é desejado), então o atlas é sempre a coluna ('parado', 0)
+   * na direção do facing e a pose do rig não se envolve.
+   */
+  private desenharEspadaSolta(
+    ctx: CanvasRenderingContext2D, dir: number, cx: number, cy: number, z: number, t: number
+  ): void {
+    if (t < MORTE_ESPADA_INICIO) return;
+    const atlas = this.atlasDeMorte('espada');
+    if (!atlas || !atlas.canvas) return;
+    let k = (t - MORTE_ESPADA_INICIO) / (MORTE_ESPADA_FIM - MORTE_ESPADA_INICIO);
+    if (k > 1) k = 1;
+    const queda = k * k;
+    const px = (cx - 6 * z) + 20 * z * queda; // da mão para +14px·zoom ao lado
+    const py = (cy - 22 * z) + 28 * z * queda; // da altura da mão para +6px·zoom
+    const lw = atlas.larguraFrame;
+    const lh = atlas.alturaFrame;
+    const alvo = atlas.quadro(dir, 'parado', 0);
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.translate(px, py);
+    ctx.rotate(ESPADA_GIRO * k);
+    ctx.drawImage(
+      atlas.canvas, alvo.sx, alvo.sy, lw, lh,
+      Math.round(-atlas.ancoraX * z), Math.round(-atlas.ancoraY * z), lw * z, lh * z
+    );
+    ctx.restore();
+    ctx.imageSmoothingEnabled = suave;
+  }
+
+  /**
+   * A sequência completa, ancorada no tile (sem o deslize do passo): sangue →
+   * sombra → corpo por fase → espada solta. A barra de vida não existe aqui.
+   */
+  private desenharMorte(
+    ctx: CanvasRenderingContext2D, p: Player, sx: number, cyBase: number, z: number
+  ): void {
+    const t = this.cin.t;
+    const cx = sx;
+    const cy = cyBase;
+    const dir = normalizeFacing(p.facing);
+
+    // 1. SANGUE (0→0,9 s, persiste) — decalque de chão, antes de tudo.
+    this.desenharSangue(ctx, p, cx, cy, z, t);
+
+    // A sombra elíptica continua: o cadáver também está no chão.
+    fillEllipse(ctx, cx, cy + 2 * z, 12 * z, 5 * z, COL_SHADOW_ENT);
+
+    // 3/4. CORPO — parado (até 0,9) → AJOELHADO → CAÍDO (1,7). Trocas duras.
+    let corpo: AtlasPersonagem | null;
+    if (t >= MORTE_CAIDO) corpo = this.atlasDeMorte('caido');
+    else if (t >= MORTE_AJOELHADO) corpo = this.atlasDeMorte('ajoelhado');
+    else corpo = this.atlasDoGuerreiro();
+    if (corpo) {
+      this.desenharQuadroExato(ctx, corpo, dir, cx, cy, z);
+    } else if (t < MORTE_AJOELHADO) {
+      // Rede de segurança sem atlas (jsdom): o boneco geométrico de sempre.
+      this.desenharJogadorGeometrico(ctx, cx, cy, z, 0);
+    }
+
+    // 2. ESPADA (0,15→0,9) — depois do corpo: ao pousar é decalque ao lado.
+    this.desenharEspadaSolta(ctx, dir, cx, cy, z, t);
   }
 
   private drawPotion(

@@ -114,7 +114,11 @@ afetado: o espelho é em X e a frente é +Y.
 **O que quebra se mudar:** trocar `ART_POR_U` sem trocar `PIXEL` na razão inversa muda o
 tamanho do sprite na tela (o invariante é o produto, `2.5` px de tela por `u`); acrescentar
 cor à paleta sem passar pelo gate G5 reintroduz gradiente; usar `rz` para abrir um membro
-não move nada — membros se estendem em `−Z` local, então abdução é `ry`.
+não move nada — membros se estendem em `−Z` local, então abdução é `ry`. E desde as
+cinemáticas do guerreiro: **renomear um nó desativa `POSE_AJOELHADA`/`POSE_CAIDA` em
+silêncio** — elas são repousos de forja indexados por nome (`NOS_GUERREIRO`), e o forge
+não reclama de nome que não existe; idem para a poda do filho `espada` em
+`criarModeloGuerreiroSemEspada()`.
 
 Ver também: [[sprite-forge]], [[paleta-e-estilo]], [[projecao-isometrica]],
 [[revisar-o-personagem]], [[ADR-005-facing-cosmetico-invisivel-ao-oracle]].

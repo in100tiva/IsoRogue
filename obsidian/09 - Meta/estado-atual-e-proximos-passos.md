@@ -18,8 +18,9 @@ localStorage). Repositório: <https://github.com/in100tiva/IsoRogue>.
 |---|---|
 | Engine (masmorra, FOV, Dijkstra, IA, turnos) | completo e determinístico |
 | Casca React + TypeScript | completa |
-| Personagem do jogador | Guerreiro, 8 direções, animado |
-| Bestiário | Goblin (Perseguidor), Slime (Vinculador), Ogro (Sentinela) |
+| Personagem do jogador | Guerreiro, 8 direções, animado, com cinemáticas de intro (descida) e morte |
+| Bestiário | Goblin (Perseguidor), Slime (Vinculador), Ogro (Brutamontes) |
+| Render | paredes do canto frontal ficam translúcidas para não esconder o herói |
 | Testes | 73, com golden test de 12 sementes |
 | Cofre | esta documentação |
 
@@ -39,10 +40,13 @@ npm run preview:personagem -- elenco   # a folha dos 4 personagens (gates G9/G10
 
 ## O próximo passo combinado
 
-**Balanceamento de níveis e dificuldade.** É a fase em que os arquétipos podem ser revistos
-de verdade — e a primeira desde a migração que provavelmente vai **regenerar o oracle de
-propósito**, porque mexer em `populate()`, em pesos ou em atributos muda o que o golden test
-congelou. Isso é legítimo desde que seja decisão explícita, nunca acidente.
+**Balanceamento de níveis e dificuldade — agora a metade dos números.** A metade de
+arquétipos e distribuição já aconteceu em 2026-07-29 (ver "Resolvido" abaixo), e com ela a
+primeira **regeneração deliberada do oracle** desde a migração — o rito que se temia já tem
+fluxo documentado e não é mais desconhecido. O que falta é mexer nos números que **não**
+foram tocados: `PLAYER_BASE`, `POTION_HEAL`, hp/atk dos arquétipos e a curva por
+profundidade. Qualquer um deles regenera o oracle de novo — decisão explícita, nunca
+acidente, como da primeira vez.
 
 Insumos já levantados para essa conversa:
 
@@ -50,11 +54,24 @@ Insumos já levantados para essa conversa:
   de dano e causou 90. Numa partida real observada, morreu no turno 28 com 45 recebidos
   contra 24 causados. As constantes ficam no topo de `src/engine/game.ts`
   (`PLAYER_BASE 42/7/3`) e em `POTION_HEAL`.
-- **A distribuição de monstros é desequilibrada.** Pesos 5/2/1 dão, no nível 1:
-  Goblin 62% · Ogro 25% · Slime 13%. Medido em jogo: o Slime quase não aparece. O bicho de
-  encaixe mais natural é o mais raro.
-- **O encaixe do Ogro em Sentinela é forçado** (ataca a 6 tiles, mas é um brutamontes de
-  marreta). Ver [[ADR-007-monstro-e-aparencia-nao-arquetipo]].
+
+**Resolvido em 2026-07-29:** o `sentinel` deixou de ser a Sentinela atiradora (alcance 6,
+recuo tático) e virou o **Brutamontes** corpo a corpo — alcance 1, ideal 1, `aiSentinel`
+reescrita no molde de `aiChaser`; o encaixe forçado do Ogro acabou. E a distribuição de
+spawn passou de 5/2/1 para **10/1/100** ("a cada 10 slimes 1 goblin, a cada 10 goblins 1
+ogro"): o Slime agora responde por ~90% dos encontros no nível 1, com o reforço por
+profundidade mantido. O vanilla legacy recebeu as mesmas edições e o oracle foi
+**regenerado deliberadamente** — vanilla espelhado → `node tools/gen-golden.mjs` → 73/73
+verde. Detalhes em [[2026-07-29-brutamontes-e-a-masmorra-de-slimes]].
+
+**Também em 2026-07-29 (fase de render/UI, sem tocar o engine):** o guerreiro ganhou
+**cinemáticas** — intro de descida (~1,3 s: glifo de escada como prop + sprite entrando
+de cima em marcha) na run nova e a cada descida, e sequência de morte (~3,4 s: poça de
+sangue, espada solta girando, joelhos, queda, fade para preto) antes do resumo abrir.
+Poses `POSE_AJOELHADA`/`POSE_CAIDA` forjadas como **repouso** em atlases secundários
+(coluna `parado/0`), gate do modal via micro-store `src/ui/cinematics.ts`, trava de
+input no teclado e no ponteiro, `prefers-reduced-motion` respeitado. Detalhes em
+[[2026-07-29-cinematicas-do-guerreiro]].
 
 ## Pendências conhecidas
 

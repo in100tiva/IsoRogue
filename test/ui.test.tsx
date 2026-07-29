@@ -33,6 +33,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { store } from '../src/engine/store';
 import { setStorage } from '../src/engine/save';
 import { App } from '../src/ui/App';
+import { getRenderer } from '../src/ui/GameCanvas';
 
 /* Sem localStorage nos testes: cada caso parte de um estado explícito. */
 setStorage(null);
@@ -355,6 +356,26 @@ describe('UI — smoke da casca React (§7.4)', () => {
       g.cause = 'Morto pelo Perseguidor no nível 1';
       /* `setHover` é a via pública mais barata de notificar os assinantes. */
       store.setHover({ x: g.player.x, y: g.player.y });
+    });
+
+    /*
+     * Gate da cinemática de morte: o modal SÓ abre na fase 'concluida' (fade
+     * completo). Dirigimos a máquina pelo relógio de quadros manual: um quadro
+     * para o renderer detectar a borda de `game.over` e iniciar a sequência,
+     * `pularCinematica()` para levá-la ao fim na hora, e um segundo quadro para
+     * o laço de rAF republicar a fase no micro-store da UI. O comportamento
+     * pretendido é o mesmo do jogo — só que sem esperar os 3,4 s.
+     */
+    expect(overlay.hasAttribute('hidden'), 'o modal abriu antes do fim da cinemática')
+      .toBe(true);
+    act(() => {
+      passarQuadro();
+    });
+    act(() => {
+      getRenderer()!.pularCinematica();
+    });
+    act(() => {
+      passarQuadro();
     });
 
     expect(overlay.hasAttribute('hidden'), 'o overlay continuou escondido com over === true')
