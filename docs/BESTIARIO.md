@@ -250,3 +250,273 @@ em 4 níveis de luz. Sem isso, os dois gates não são julgáveis.
 - Alterar balanceamento, dano, alcance ou quantidade de inimigos.
 - Forjar um atlas por nível de luz.
 - Usar imagem, sprite externo ou data-URI. O goblin nasce de código, como o guerreiro.
+
+---
+
+# Monstros 2 e 3 — Slime e Ogro
+
+Mesmo método, mesmo pipeline, mesmas regras do §0. O que muda é só o rig e a paleta.
+Referências: `docs/ref/slime-referencia.jpg` e `docs/ref/ogro-referencia.png`.
+**Olhe as duas antes de escrever qualquer linha.**
+
+## 10. O encaixe nos arquétipos (e a honestidade sobre ele)
+
+O jogo tem **três** arquétipos e agora três monstros. O mapeamento:
+
+| Arquétipo | Comportamento | Monstro | Qualidade do encaixe |
+|---|---|---|---|
+| `chaser` (range 1, ideal 1, peso 5) | avança sempre, corpo a corpo | **Goblin** | natural |
+| `linker` (range 1, ideal 3, peso 1) | só ataca com aliado adjacente | **Slime** | natural — a própria referência mostra três juntos |
+| `sentinel` (range 6, ideal 4, peso 2) | mantém distância, ataca à distância | **Ogro** | **forçado** — ver abaixo |
+
+O Ogro é o encaixe fraco: a referência é um brutamontes de marreta, e `sentinel` ataca a
+6 tiles. A solução visual é dar a ele um **arremesso**: a marreta fica na mão esquerda,
+apoiada, e a mão direita arremessa pedra/entulho. A animação de ataque é o arremesso, não a
+martelada. Funciona e é comum no gênero, mas é adaptação — não finja que a referência pedia isso.
+
+**Isto não se resolve criando arquétipo novo agora**: `populate()` decide quantos e quais
+inimigos nascem por semente, e mexer ali invalida os 12 casos do oracle. O momento certo é a
+fase de **balanceamento de níveis e dificuldade**, que é o próximo passo combinado com o dono
+— lá os arquétipos serão revistos com o oracle regenerado de propósito.
+
+Uma consequência de produto que vale notar: com peso 5/2/1, o jogador vê **Goblin 62%,
+Ogro 25%, Slime 13%** no nível 1. O Slime é o mais raro justamente por ser o de encaixe mais
+natural; o balanceamento também vai querer olhar isso.
+
+## 11. Slime — o arquétipo `linker`
+
+### 11.1 Intake
+
+Gota gelatinosa verde-esmeralda, achatada e larga, com superfície brilhante e translúcida.
+Rosto minimalista e simpático: olhos em `+` amarelos luminosos e boca pequena. Uma antena
+fina sai do topo com uma bolinha luminosa na ponta, tipo isca de tamboril.
+
+> **É UM slime, não três.** A referência mostra três indivíduos lado a lado, mas isso é só
+> composição da arte — a imagem existe para mostrar o bicho de ângulos diferentes. O
+> entregável é **um único rig** (`MODELO_SLIME`), um único atlas, uma única criatura, como
+> Goblin e Ogro. A quantidade que aparece na masmorra quem decide é o `populate()` do engine,
+> que já sorteia vários inimigos por sala — não o modelo.
+>
+> O fato de a referência ter três só foi usado para justificar o **arquétipo**: `linker`
+> ("só ataca quando outro aliado está adjacente ao jogador") é o comportamento de bicho que
+> anda em bando, e é por isso que ele coube ali. Nada além disso.
+
+| # | Traço | Observação |
+|---|---|---|
+| S1 | Corpo em domo/gota, mais largo que alto | a silhueta inteira; não é uma esfera |
+| S2 | Verde-esmeralda com 4 tons | translucidez sugerida por camadas, não por alfa |
+| S3 | Brilho branco no topo-esquerdo | o ponto especular que diz "gelatina molhada" |
+| S4 | Olhos em `+` amarelos | **emissivos** (§1.1), como os do Goblin |
+| S5 | Antena com bolinha luminosa | **emissiva**; é o que impede o slime de ser um borrão verde |
+| S6 | Base achatada, quase colada no chão | ele não tem pernas: assenta no losango |
+
+Perder S5 e S4 transforma o slime numa pedra verde. Eles são a leitura à distância.
+
+### 11.2 Paleta
+
+```ts
+export const PALETA_SLIME = {
+  gosmaLuz:    '#7ee89a',
+  gosmaBase:   '#4fd07a',
+  gosmaMeio:   '#2fa85e',
+  gosmaSombra: '#1d7a45',
+  gosmaFundo:  '#145c34',
+  brilho:      '#d8fbe6',   // o especular do topo (S3)
+  antena:      '#14201a',
+  luzAmbar:    '#ffd94a',   // EMISSIVA — olhos e bolinha (S4, S5)
+  vazio:       '#0f2a1c',
+  contorno:    '#0a1a10'
+} as const;
+```
+
+### 11.3 Escala e rig
+
+```
+ALTURA_MASSA_SLIME    = 7u     (a GOTA, do chão à coroa — contra 13u do Goblin e 18u do Guerreiro)
+ALTURA_SILHUETA_SLIME = ~11u   (com o ápice do arco da antena; a bolinha centra em ~10u)
+LARGURA_SLIME         = 11u    (mais largo que alto — é a identidade S1)
+```
+
+**As duas alturas são medidas diferentes e as duas precisam existir.** A tabela de
+rig abaixo lista uma antena que sobe a 10,25u num modelo declarado de 7u — os dois
+números não podem ser verdade juntos, e a rodada 1 dos monstros resolveu isso
+encurtando a antena. Foi a decisão errada: com o arco baixo a bolinha encostava no
+domo e as duas máscaras fundiam, então S5 tinha área medida e **contribuição zero
+para a silhueta**. Área não é legibilidade.
+
+O alvo de **G10 se mede pela MASSA**, não pela silhueta — é o que a bancada já faz
+no painel 7 (`alturaAcimaDaAncora`). E o critério de aceite da antena não é área
+por direção: é **contribuição de máscara** (quantos pixels da silhueta somem quando
+a peça é removida) e **fundo livre** entre a bolinha e o domo. Uma medição que só
+olha área não enxerga fusão de silhueta — vale para qualquer apêndice de qualquer
+bicho futuro.
+
+```
+raiz (0,0,0)
+├─ corpo              pivô (0, 0, 0)      ← o domo, montado em camadas empilhadas
+│  ├─ base            10.4 × 9.0 × 1.4   gosmaMeio     cz +0.7   (a que toca o chão)
+│  ├─ meio            9.0 × 7.6 × 1.8    gosmaBase     cz +2.3
+│  ├─ alto            6.8 × 5.8 × 1.6    gosmaBase     cz +3.9
+│  ├─ topo            4.4 × 3.8 × 1.2    gosmaLuz      cz +5.2
+│  ├─ cume            2.2 × 2.0 × 0.8    gosmaLuz      cz +6.0
+│  ├─ especular       1.6 × 1.2 × 0.5    brilho        cx −1.8, cy −1.4, cz +5.6   ← S3
+│  ├─ olho.esq        1.0 × 0.5 × 1.0    luzAmbar      cx −1.9, cy +3.0, cz +3.2   ← S4 emissivo
+│  ├─ olho.dir        1.0 × 0.5 × 1.0    luzAmbar      cx +1.9, cy +3.0, cz +3.2   ← S4 emissivo
+│  └─ boca            1.0 × 0.4 × 0.5    vazio         cy +3.1, cz +2.2
+└─ antena             pivô (0.8, 0, 6.4)                                            ← S5
+   ├─ haste.a         0.35 × 0.35 × 1.6  antena        cz +0.8
+   ├─ haste.b         0.35 × 0.35 × 1.4  antena        cx +0.7, cz +2.1  (curva por escalonamento)
+   └─ bolha           1.3 × 1.3 × 1.3    luzAmbar      cx +1.4, cz +3.2  ← emissiva
+```
+
+Os olhos em `+` são sugeridos por **duas caixas cruzadas** por olho (uma vertical, uma
+horizontal), não por uma caixa só — é o que dá a forma de cruz da referência.
+
+### 11.4 Animação
+
+O slime não tem pernas: o ciclo de caminhada é **pulsação e salto**, não passada.
+
+| Estado | Quadros | Descrição |
+|---|---|---|
+| `parado` | 2 | respiração gelatinosa: achata 8% e alarga 6%, alternando |
+| `andando` | 4 | comprime → estica para cima → sobe 1.5u → assenta; a antena atrasa meio quadro |
+| `atacando` | 3 | recolhe, infla e projeta o corpo para a frente (bote), a antena chicoteia |
+
+O **atraso da antena** em relação ao corpo é o que faz a gelatina parecer gelatina. É o
+detalhe barato de maior retorno deste monstro — não corte.
+
+### 11.5 Facing
+
+Um domo é quase simétrico, então o giro se lê pelo **rosto e pela antena**, não pelo corpo.
+Garanta que olhos, boca e antena girem juntos e que em nenhuma das 8 direções o rosto fique
+ambíguo. Nas direções de costas, o rosto some e só a antena aparece — isso é correto e
+desejável, desde que a antena continue legível.
+
+## 12. Ogro — o arquétipo `sentinel`
+
+### 12.1 Intake
+
+Brutamontes enorme, curvado para a frente, com massa muscular desproporcional e assimétrica.
+
+| # | Traço | Observação |
+|---|---|---|
+| O1 | **Tamanho** — maior que o Guerreiro | a primeira coisa que o jogador percebe |
+| O2 | **Corcunda assimétrica** | o ombro esquerdo sobe ACIMA da cabeça; define a silhueta |
+| O3 | Máscara de metal com chifres de carneiro | chifres curvos, grossos, para os lados |
+| O4 | Ombreira com espinhos claros | no ombro alto, 3 a 4 espinhos grandes |
+| O5 | Marreta enorme | madeira escura com cabeça metálica |
+| O6 | Pele verde-acinzentada pálida | contrasta com o verde saturado do Goblin e do Slime |
+| O7 | Saiote de pele com fivela de caveira | quebra o volume do tronco |
+| O8 | Braços longos, pernas curtas e grossas, pés enormes | postura de gorila |
+
+O2 é o traço que faz um ogro parecer ogro e não um humano grande. Se a silhueta ficar
+simétrica, está errada.
+
+### 12.2 Paleta
+
+```ts
+export const PALETA_OGRO = {
+  peleLuz:     '#c6dcbb',
+  peleBase:    '#a3c096',
+  peleMeio:    '#7d9a72',
+  peleSombra:  '#576d50',
+  metalLuz:    '#dccfa6',   // a máscara
+  metalBase:   '#ab9668',
+  metalSombra: '#6e5c3e',
+  couroBase:   '#6b4a35',   // saiote, braçadeira
+  couroSombra: '#43301f',
+  madeira:     '#5c4530',   // cabo da marreta
+  osso:        '#e8e0cc',   // espinhos, chifres, caveira
+  ossoSombra:  '#9c9078',
+  vazio:       '#1a2416',
+  contorno:    '#111a0e'
+} as const;
+```
+
+Note que a pele do Ogro é **dessaturada** de propósito: os três monstros são esverdeados, e é
+a saturação que os separa à distância — Slime vibrante, Goblin médio, Ogro pálido.
+
+### 12.3 Escala e rig
+
+```
+ALTURA_MODELO_OGRO = 24u     (contra 18u do Guerreiro — ele INTIMIDA)
+LARGURA_OMBROS     = 16u     (com a corcunda)
+```
+
+```
+raiz (0,0,0)
+├─ quadril            pivô (0, 0, 8.0)
+│  ├─ pelve           7.6 × 5.4 × 3.0    peleMeio
+│  ├─ saiote          8.4 × 6.2 × 4.4    couroBase     cz −2.2      ← O7
+│  └─ caveira         2.0 × 1.0 × 1.8    osso          cy +3.2, cz −0.6   ← O7
+├─ torso              pivô (0, 0, 11.4)   (inclinado ~14° para a frente — postura O8)
+│  ├─ peito           9.0 × 6.0 × 6.4    peleBase
+│  ├─ ventre          7.6 × 5.6 × 2.6    peleMeio      cz −3.6
+│  ├─ corcunda        6.2 × 5.6 × 4.6    peleLuz       cx −3.4, cz +4.2   ← O2 (assimétrica!)
+│  ├─ ombreira.esq    5.0 × 5.0 × 3.0    couroSombra   cx −5.6, cz +3.4   ← O4
+│  ├─ espinho.a       1.2 × 1.2 × 2.6    osso          cx −6.4, cz +5.6   ← O4
+│  ├─ espinho.b       1.0 × 1.0 × 2.0    osso          cx −4.6, cy −1.4, cz +5.4
+│  └─ ombro.dir       4.2 × 4.4 × 2.6    peleBase      cx +5.0, cz +2.6
+├─ cabeca             pivô (0.6, 0, 16.2)  (baixa e à frente, entre os ombros — O2/O8)
+│  ├─ cranio          4.6 × 4.4 × 3.8    peleBase
+│  ├─ mascara         4.4 × 1.2 × 3.4    metalBase     cy +2.0            ← O3
+│  ├─ testeira        4.6 × 3.0 × 1.0    metalLuz      cz +2.2
+│  ├─ chifre.esq      1.2 × 3.4 × 1.2    chifre?osso   cx −3.0, cz +0.8   ← O3 (curvar por 2 caixas)
+│  ├─ chifre.dir      1.2 × 3.4 × 1.2    osso          cx +3.0, cz +0.8   ← O3
+│  └─ olhos           2.6 × 0.4 × 0.5    vazio         cy +2.4, cz +0.6
+├─ bracoEsq           pivô (−5.6, 0, 14.6)   ← segura a marreta
+│  ├─ braco           3.0 × 3.0 × 5.0    peleBase      cz −2.5
+│  ├─ antebraco       3.4 × 3.4 × 4.6    peleMeio      cz −7.4
+│  ├─ mao             3.2 × 3.4 × 2.2    peleBase      cz −10.4
+│  └─ marreta         (declare por ÚLTIMO)                               ← O5
+│     ├─ cabo         1.2 × 1.2 × 7.0    madeira       cz −13.0
+│     └─ cabeca       3.4 × 3.0 × 3.6    madeira       cz −17.4
+├─ bracoDir           pivô (+5.0, 0, 13.8)   ← ARREMESSA (§10)
+│  ├─ braco           2.8 × 2.8 × 4.8    peleBase      cz −2.4
+│  ├─ bracadeira      3.0 × 3.0 × 2.2    couroBase     cz −5.6            ← rebites
+│  ├─ antebraco       3.0 × 3.0 × 4.2    peleMeio      cz −8.2
+│  └─ mao             3.0 × 3.2 × 2.0    peleBase      cz −11.0
+├─ pernaEsq           pivô (−2.8, 0, 7.6)
+│  ├─ coxa            3.6 × 3.6 × 4.0    peleMeio      cz −2.0
+│  ├─ canela          3.2 × 3.2 × 3.4    peleBase      cz −5.6
+│  └─ pe              3.6 × 5.4 × 1.8    peleBase      cz −8.2, cy +1.2   ← O8 (pés enormes)
+└─ pernaDir           pivô (+2.8, 0, 7.6)   (espelho)
+```
+
+**A corcunda é assimétrica de propósito** — só do lado esquerdo. Não espelhe.
+
+### 12.4 Animação
+
+| Estado | Quadros | Descrição |
+|---|---|---|
+| `parado` | 2 | respiração pesada e lenta: o peito infla 0.5u, a corcunda acompanha |
+| `andando` | 4 | passada larga e lenta, torso balança lateralmente ~5° (gingado de peso) |
+| `atacando` | 3 | **arremesso**: recolhe o braço direito, gira o torso ~20° e projeta |
+
+O ogro é **lento**: a mesma contagem de quadros, porém a leitura tem de ser de peso. Amplitude
+maior e pose mais aberta do que o Goblin, jamais movimento nervoso.
+
+### 12.5 Oclusão — a armadilha deste monstro
+
+Com 24u ele é o maior sprite do jogo e vai invadir tiles vizinhos mais do que o Guerreiro já
+invade (pendência conhecida: ~12 px na mesma antidiagonal, sem z-buffer). **Meça** quanto o
+quadro do Ogro ocupa e reporte. Se ficar grotesco, a saída barata é reduzir para ~22u e
+compensar com largura — não é implementar z-buffer nesta fase.
+
+**Meça separando `artX` de `artY`.** Comparar largura de QUADRO com a do Guerreiro é
+enganoso e já produziu uma conclusão errada na rodada 1: a largura do Guerreiro vem da
+espada **erguida**, que ocupa `artY` acima do tile, enquanto a do Ogro vinha da marreta
+**deitada ao lado**, que ocupa `artX` e invade o tile vizinho no plano do chão — exatamente
+onde a ordem do pintor por antidiagonal erra sem z-buffer. São os mesmos pixels em lugares
+que doem de forma diferente.
+
+O número a publicar é o **extremo em `artX` contra os 32px de meio tile**, peça a peça.
+
+## 13. Gates (valem para os dois)
+
+Os mesmos G1–G8 do §8, mais:
+
+- **G9** Os **três** monstros lado a lado leem como espécies diferentes — silhueta e saturação
+  distintas, não três manchas verdes? A bancada precisa mostrar os três juntos, com o
+  Guerreiro, para este gate ser julgável.
+- **G10** O tamanho relativo conta a história certa? Slime < Goblin < Guerreiro < Ogro.

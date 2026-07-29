@@ -32,7 +32,74 @@
  *     array é compartilhado entre instâncias.
  *   - Traços de identidade I1..I8 (§2 do BESTIARIO) sobrevivem na silhueta.
  *     Perder as orelhas (I2) transforma o goblin num anão verde; perder a
- *     cimitarra no ombro (I6) ou os olhos (I4) tira a ameaça.
+ *     cimitarra (I6) ou os olhos (I4) tira a ameaça.
+ *
+ * RODADA 2 (§8) — A EMPUNHADURA MUDOU DE LADO, e é a maior mudança desde a
+ * entrega. A §5 e a referência mostram a cimitarra APOIADA SOBRE O OMBRO,
+ * passando por trás da cabeça, e a rodada 1 cumpriu isso ao pé da letra. Numa
+ * ILUSTRAÇÃO de 700px aquilo funciona: dá para ver o punho fechado na frente do
+ * peito, o antebraço, e o olho fecha sozinho o circuito "mão → cabo → lâmina".
+ * Num sprite de ~40px de arte não sobra mão nenhuma na frente do corpo, e o que
+ * resta é uma barra cinza atravessada atrás da cabeça, sem dono.
+ *
+ * A medição que condenou a pose (rasterização com ordem do pintor, 8 direções):
+ *   - em 3 das 8 (4, 5 e 6) a lâmina era desenhada POR CIMA da cabeça;
+ *   - em outras 3 (0, 1 e 2) 100% da lâmina visível ficava numa região da tela
+ *     sem nenhum pixel de mão, cabo ou braço por perto — a arma flutuava;
+ *   - o Guerreiro, no mesmo atlas e no mesmo pipeline, lê em todas as 8, porque
+ *     ele empunha a espada À FRENTE, com a mão fora da silhueta do tronco.
+ *
+ * Esta rodada troca I6 de "cimitarra apoiada no ombro" para "cimitarra empunhada
+ * em guarda diagonal à frente" — mais baixa e mais lateral que a do Guerreiro,
+ * porque a lâmina é curta e curva e o bicho é atarracado. É desvio consciente da
+ * referência, autorizado pela revisão visual: a legibilidade em 40px manda, e o
+ * que carrega I6 é a lâmina LARGA E CURVA, não o ombro onde ela descansa.
+ * Ver `AJUSTES_GOBLIN.maoY`, `ANGULOS_GOBLIN.cimitarraRx` e `criarBracoDir`.
+ *
+ * O PREÇO DA MUDANÇA, medido, para ninguém "consertar" isto por engano: o QUADRO
+ * CRESCEU (56×59 → 84×68 px de arte na rodada 2, e → 90×69 na 3). A arma sai da
+ * silhueta em vez de se dobrar sobre o corpo, e quem dimensiona o quadro é a
+ * caixa da silhueta (§7 de `../spriteForge`). É margem transparente: o corpo não
+ * mudou de tamanho (G7 continua 42px contra 57px do Guerreiro, 74%).
+ *
+ * RODADA 3 (§8) — O BRAÇO ABRIU. A rodada 2 curou a lâmina atrás da cabeça, mas
+ * "ler como segurando" só valia em 4 das 8 direções. O que faltava, medido por
+ * rasterização com ordem do pintor (a mesma de `../model3d`, contando pixels de
+ * BRAÇO + mão + cabo visíveis no repouso, por direção):
+ *
+ *   direção     0   1   2   3   4   5   6   7
+ *   rodada 2   40  60  61  16   0  46  63  44   ← a direção 4 não tinha NADA
+ *   rodada 3   56  83  94  20  12  73  82  50
+ *
+ * A rodada 2 escrevia aqui que a direção 4 "não é ajustável — é a projeção",
+ * porque um ponto no azimute de costas projeta em `artX = x − y = 0`. A conta
+ * está certa e a CONCLUSÃO estava errada: `artX = 0` vale para o azimute 225°
+ * exato, e o que decide o quanto a mão escapa da coluna do tronco é o RAIO dela
+ * em torno do eixo do corpo — 4,66u na rodada 2 contra 7,3u do Guerreiro, que
+ * resolve a mesma direção no mesmo atlas. Com a mão a 6,84u a direção 4 passa a
+ * mostrar 12px de braço e a lâmina inteira ligada a ele. Foi racionalização, não
+ * medição; ficou registrado aqui porque a próxima rodada acreditaria nela.
+ *
+ * Três números fizeram o trabalho, e os três estão neste arquivo — nada subiu
+ * para `../spriteForge` nem para `../model3d`:
+ *
+ * 1. a MÃO abriu de `x −4,0` para `x −6,4` (`AJUSTES_GOBLIN.maoX`), com úmero e
+ *    antebraço acompanhando em `criarBracoDir` — sem isso o braço descolava do
+ *    ombro e a mão viraria um bloco solto, que é o defeito que se estava curando;
+ * 2. a GUARDA subiu de 50,3° para 59,5° de elevação (`ANGULOS_GOBLIN`). O eixo
+ *    projetado da lâmina nas 8 direções passou de
+ *    `7,8 · 19,5 · 25,1 · 24,8 · 24,4 · 25,4 · 21,8 · 11,2` px de arte para
+ *    `12,7 · 21,7 · 26,4 · 26,7 · 26,7 · 26,3 · 21,3 · 12,3`: o pior caso sobe
+ *    58% e a razão pior/melhor cai de 3,3× para 2,2×. Ver a conta fechada em
+ *    `cimitarraRx`, que diz por que a elevação é o único parâmetro que levanta o
+ *    PISO e por que 35,26° seria o pior valor possível;
+ * 3. o ARCO DO GOLPE deixou de partir de uma guarda alta (ver `ANIMACAO_GOBLIN`).
+ *
+ * O que a varredura garante hoje, nos 32 quadros medidos (8 direções × repouso +
+ * 3 de ataque): ZERO pixel de lâmina desenhado sobre a cabeça (rodada 2: 59),
+ * nenhum quadro com menos de 32px de lâmina fora do corpo (rodada 2: 12) e a
+ * silhueta inteira em UMA ilha 4-conexa em todos eles — nada flutuando, que é a
+ * forma medível de "a arma está presa a alguém".
  */
 
 import type { Caixa, No, Pose } from '../model3d';
@@ -233,7 +300,10 @@ export const PROPORCOES_GOBLIN = {
    * massa mais larga do modelo passa a ser a cabeça, que é o que I8 pede.
    *
    * Efeito colateral que precisou de conta: o pivô do braço é também a origem da
-   * cimitarra, e aproximá-lo do centro encurta o percurso da lâmina até a nuca.
+   * cimitarra. Na rodada 1, com a lâmina deitada no ombro, aproximá-lo do centro
+   * encurtava o percurso da lâmina até a nuca; na rodada 2, com a arma empunhada
+   * à frente, ele passou a ser o que define o RAIO da mão em torno do eixo do
+   * corpo — e é esse raio que decide se a mão aparece ou some atrás do tronco.
    * Ver `AJUSTES_GOBLIN.maoY`.
    */
   xOmbro: 2.6,
@@ -294,24 +364,48 @@ export const AJUSTES_GOBLIN = {
 
   /**
    * Centro da mão direita no espaço de `bracoDir`, e — por construção — o pivô
-   * da cimitarra. Os dois saem da MESMA constante de propósito: a arma gira NA
-   * MÃO, e uma segunda cópia deste número seria a maneira silenciosa de a lâmina
-   * descolar do punho no primeiro ajuste de pose.
+   * da cimitarra. Os TRÊS eixos saem das MESMAS constantes de propósito: a arma
+   * gira NA MÃO, e uma segunda cópia destes números seria a maneira silenciosa
+   * de a lâmina descolar do punho no primeiro ajuste de pose.
    *
-   * Rodada 1 (§8): recuou de −1.0 para −1.4 por CONTA, não por gosto. Com o
-   * ombro puxado para dentro (`xOmbro` 2.9 → 2.6) a lâmina passa a cruzar o eixo
-   * do corpo 0,4u mais cedo, e com os ângulos novos (`cimitarraRx/Ry`) a folga
-   * atrás da nuca caía para 0,11u — meio pixel de arte, ou seja, a lâmina
-   * encostando no crânio em algumas direções. Recuando a mão 0,4u a folga volta
-   * a 0,5u:
+   * RODADA 2 (§8) — A MÃO ATRAVESSOU O CORPO, de trás para a frente. Era
+   * `(0, −1.4, +0.05)`: ACIMA e ATRÁS do ombro, que é onde ela tem de ficar para
+   * a lâmina cair sobre o ombro. O preço, medido, está no cabeçalho do módulo —
+   * em 3 direções a lâmina era desenhada por cima da cabeça e em outras 3 ela
+   * flutuava sem mão à vista. É o defeito que esta rodada existe para curar.
    *
-   *   travessia de x = 0 em `t = xOmbro / dx` = 2.6 / 0.7193 = 3,61u do punho
-   *   y na travessia = −1.4 − 3,61 · 0,5759 = −3,48
-   *   meia-espessura projetada da lâmina em Y = 0,72  →  borda dianteira −2,76
-   *   nuca do elmo (sy 4.5) = −2,25                   →  0,51u de folga
+   * Na rodada 2 virou `(−1.4, +2.4, −2.0)` e na 3 é **`(−3.8, +2.4, −2.3)`**, ou
+   * seja, no mundo (com o pivô do braço em `(−2.6, 0, 7.9)`):
+   * **(−6.4, +2.4, +5.6)**. O que cada eixo compra:
+   *
+   * - **Y +2.4** põe a mão 0,8u À FRENTE da face dianteira do colete (y +1.6) e
+   *   0,3u atrás do focinho (y +2.7). Ela recorta contra o fundo, não contra o
+   *   peito, e é isso que faz o olho ler "segurando", que é o pedido;
+   * - **Z −2.3** desce a mão para z 5,6 — altura do colete (4,5..6,7), entre o
+   *   cinto e o peito. Guarda BAIXA, como um bicho atarracado segura uma lâmina
+   *   curta; à altura do ombro ela viraria a pose do Guerreiro em miniatura;
+   * - **X −3.8** é o número desta rodada, e é ele que decide em quantas direções
+   *   existe braço na silhueta. A conta é a projeção: um ponto no azimute
+   *   "de costas para a câmera" (225°) projeta em `artX = x − y = 0`, ou seja na
+   *   coluna do corpo. Isso NÃO significa que a direção 4 seja perdida — o que
+   *   decide é a distância angular até esse azimute cego e o RAIO da mão em
+   *   torno do eixo do corpo. Com `−1.4` o raio era `hypot(4.0, 2.4) = 4,66u` e
+   *   a direção 4 saía com ZERO pixel de braço, mão ou cabo; com `−3.8` o raio é
+   *   `hypot(6.4, 2.4) = 6,84u` (o Guerreiro usa 7,3u, e é por isso que ele lê
+   *   nessa direção) e sobram 12px. A tabela das 8 direções está no cabeçalho.
+   *
+   * O TETO deste número não é estético, é anatômico: com `−3.8` o segmento
+   * ombro→mão mede `hypot(3.8, 2.4, 2.3) = 5,05u`, 39% da altura do bicho —
+   * proporção de braço humano (~44%). O que cresceu foi a ABDUÇÃO, não o osso: o
+   * goblin passou a segurar a cimitarra afastada do corpo, que é o que a leitura
+   * em 40px exige. Passar disto começa a pedir um braço longo demais para I8.
+   *
+   * A lâmina, saindo daqui, nunca mais volta para o corpo: ver
+   * `ANGULOS_GOBLIN.cimitarraRx`.
    */
-  maoY: -1.4,
-  maoZ: 0.05
+  maoX: -3.8,
+  maoY: 2.4,
+  maoZ: -2.3
 } as const;
 
 /**
@@ -320,49 +414,70 @@ export const AJUSTES_GOBLIN = {
  */
 export const ANGULOS_GOBLIN = {
   /**
-   * A cimitarra deitada sobre os ombros (I6) — o traço que faz a silhueta ler
-   * como "goblin encrenqueiro" à distância.
+   * A cimitarra em GUARDA DIAGONAL À FRENTE (I6) — lâmina saindo da mão para
+   * fora e para cima, longe do corpo e longe da cabeça em todas as 8 direções.
    *
    * Convenção de sinal, e ela é o INVERSO da dos membros: um membro se estende
    * no −Z local (`ry > 0` leva a extremidade para −X), mas a cimitarra é
    * declarada apontando para +Z a partir da mão (ver `criarCimitarra`). Para um
    * apêndice em +Z vale `d = (sin ry, −cos ry · sin rx, cos ry · cos rx)`: logo
-   * `ry > 0` leva a PONTA para +X e `rx > 0` a leva para −Y, o fundo. É o par
-   * que joga a lâmina para o outro ombro e para trás da cabeça.
+   * `ry > 0` leva a PONTA para +X e `rx > 0` a leva para −Y, o fundo.
    *
-   * Rodada 1 (§8) — o par `rx 74° / ry 55°` REPROVOU, e a medição diz por quê:
-   * o eixo da lâmina valia (0.819, −0.551, 0.158), ou seja subia só 9° acima da
-   * horizontal, e a ponta fechava em z ≈ 10,9 — ABAIXO do topo do elmo (11,15).
-   * Uma lâmina que não passa da cabeça não lê como cimitarra apoiada: lê como
-   * tábua. Na direção 1 ela sumia por completo e na 5 virava uma barra cinza
-   * atravessada no peito. A referência mostra o contrário — a lâmina sobe em
-   * diagonal com a ponta bem acima da cabeça.
+   * O braço da arma mora em −X (§6.1), então o sinal que AFASTA a lâmina do
+   * corpo é `ry < 0` — e é aqui que a rodada 1 errava por construção: com
+   * `ry +46` a ponta viajava para +X, isto é, atravessava o corpo inteiro em
+   * direção ao outro ombro, passando por trás da cabeça. Trocar o sinal é
+   * metade da cura desta rodada; a outra metade é a mão (`AJUSTES_GOBLIN.maoY`).
    *
-   * Com `rx 56° / ry 46°` o eixo vale
-   * `(sen 46, −cos 46 · sen 56, cos 46 · cos 56) = (0.719, −0.576, 0.388)`:
+   * Com `rx −6° / ry −30°` (rodada 3) o eixo vale
+   * `(sen −30, −cos −30 · sen −6, cos −30 · cos −6) = (−0.500, +0.091, +0.861)`:
    *
-   * - sobe 23° acima da horizontal, contra 9° antes;
-   * - a ponta (7,95u do pivô da mão, mais o desvio de 0,6u da barriga da lâmina)
-   *   fecha em z ≈ 12,7 — acima do elmo (11,15), na linha do espinho central
-   *   (12,45) e da ponta da orelha (12,73). É a leitura da referência;
-   * - a lâmina continua passando POR TRÁS da cabeça: na travessia do eixo do
-   *   corpo ela está em y = −3,48 e a borda dianteira em −2,76, contra a nuca do
-   *   elmo em −2,25 — 0,5u de folga (ver a conta em `AJUSTES_GOBLIN.maoY`, que
-   *   foi ajustada junto justamente para manter essa folga);
-   * - a ordem do pintor (§4.4) fecha o resto sem z-buffer: quando a face frontal
-   *   da cabeça é visível, a profundidade da lâmina é sempre MENOR que a dela
-   *   (a lâmina está atrás e o desenho é do fundo para a frente); quando o que
-   *   se vê é a nuca, a relação se inverte sozinha e a lâmina aparece na frente
-   *   das costas — que é o certo.
+   * - **sobe 59,5°** acima da horizontal e aponta 170° no azimute (medindo de
+   *   +X), ou seja quase reto para fora e levemente à frente. É a diagonal do
+   *   Guerreiro (ele sobe 67°) rebaixada, que é o que a lâmina curta e o bicho
+   *   atarracado pedem;
+   * - a **ponta** (8,65u do pivô da mão, com a caixa do bico) fecha em
+   *   `(−10.72, +3.18, +13.05)`. Compare com o elmo (|x| ≤ 2,65), com o colete
+   *   (|x| ≤ 2,05) e com a ponta da orelha (|x| 5,15): saindo da mão em x −6,4 e
+   *   só DIMINUINDO em x (o giro `rx` não mexe em X, e o desvio da barriga
+   *   também não), a lâmina não tem como cruzar cabeça nem tronco. Não é ordem do
+   *   pintor segurando as pontas — é separação geométrica, e por isso vale nas 8
+   *   direções e nos 9 quadros;
+   * - medido por rasterização com ordem do pintor, **zero** pixel de lâmina sai
+   *   por cima da cabeça nos 32 quadros medidos (rodada 1: 3 direções com a
+   *   lâmina sobre o crânio; rodada 2: 59px, concentrados no quadro de armar das
+   *   direções 0 e 7).
    *
-   * O parágrafo da rodada anterior dizia que "baixar de ~70° enfia a lâmina na
-   * cabeça". Aquela conta valia para `ry 55`, onde a lâmina corre quase paralela
-   * ao plano frontal; com `ry 46` ela sai mais para o lado por unidade de
-   * profundidade e o limite se desloca. O que continua verdade: subir `rx` além
-   * de ~75° deita a lâmina na horizontal e ela some no perfil.
+   * POR QUE A ELEVAÇÃO É O PARÂMETRO QUE IMPORTA — a conta que a rodada 2 não
+   * fez. Escreva o eixo da lâmina como `h = cos(elev)` no azimute `φ` mais
+   * `sen(elev)` em Z. Sob a projeção de §4.2, girado de `θ`, ele mede
+   *
+   *   artX = h·√2·cos(ψ)          artY = h·(√2/2)·sen(ψ) − sen(elev)
+   *
+   * com `ψ = φ + θ + 45°`. O eixo projetado ZERA quando `cos ψ = 0` e os dois
+   * termos de `artY` se cancelam, isto é quando `tg(elev) = √2/2` —
+   * **elev = 35,26°**, o pior valor possível para qualquer azimute. Longe dele o
+   * PISO sobe, e é só a elevação que o levanta: o azimute apenas escolhe QUAIS
+   * das 8 direções caem perto do buraco. Daí a rodada 2, a 50,3°, ter ficado com
+   * o pior eixo em 7,8px enquanto 59,5° o leva a 12,3px:
+   *
+   *   dir 0..7 (rodada 2):  7,8 · 19,5 · 25,1 · 24,8 · 24,4 · 25,4 · 21,8 · 11,2
+   *   dir 0..7 (rodada 3): 12,7 · 21,7 · 26,4 · 26,7 · 26,7 · 26,3 · 21,3 · 12,3
+   *
+   * — pior caso +58%, razão pior/melhor de 3,3× para 2,2×. O ótimo teórico desta
+   * família fica em ~69° de elevação (piso 15,4px), e não foi usado porque acima
+   * de ~62° a lâmina volta a subir na frente do rosto nas direções 0 e 7.
+   *
+   * Limites, para quem for ajustar. Eles dependem de `AJUSTES_GOBLIN.maoX`, e é
+   * por isso que os dois números têm de ser mexidos JUNTOS: o teto de ~52° de
+   * subida que a rodada 2 registrou aqui foi medido com a mão em x −4,0, e com a
+   * mão em x −6,4 a folga lateral cresce 2,4u e o teto vai para ~62°. Abaixo de
+   * ~35° a lâmina cai no buraco da projeção acima; abaixo de ~20° ela deita e lê
+   * como tábua, o defeito da rodada 1. O SINAL de `ry` continua inegociável:
+   * positivo joga a ponta contra o próprio corpo.
    */
-  cimitarraRx: 56,
-  cimitarraRy: 46,
+  cimitarraRx: -6,
+  cimitarraRy: -30,
 
   /**
    * O braço esquerdo, que só pende. `ry < 0` porque este braço mora em +X (o rig
@@ -415,36 +530,85 @@ export const ANIMACAO_GOBLIN = {
    * arcos genéricos de `../spriteForge` (o canal `ry` é multiplicado por
    * `ESPELHO` na aplicação; o canal `rx` não).
    *
-   * Rodada 1 (§8): o arco GENÉRICO reprovou neste bicho, e a causa é geométrica.
-   * O guerreiro segura a espada apontando para +Z a partir da mão, quase
-   * alinhada com o eixo do braço; o goblin apoia a cimitarra DEITADA sobre o
-   * ombro, então o vetor punho→ponta tem uma componente −Y enorme. Nesse
-   * arranjo o sinal se inverte: `rx` positivo BAIXA a ponta e `rx` negativo a
-   * levanta. Aplicado cru, o arco genérico (`+25 / −25 / −5`) fazia a ponta
-   * viajar z 6,5 → 16,0 → 13,3 — o bicho erguia a cimitarra e parava. Medido na
-   * bancada, a lâmina percorria 2px de arte nos três quadros, com o ponto mais
-   * ALTO no quadro do meio: o goblin ameaçava e não batia.
+   * Rodada 1 (§8): o arco GENÉRICO reprovou neste bicho, e a causa era
+   * geométrica. Com a cimitarra DEITADA sobre o ombro, o vetor punho→ponta tinha
+   * uma componente −Y enorme e o sinal de `rx` se invertia — o arco genérico
+   * fazia o goblin erguer a arma e parar. A cura de então foi inverter os sinais
+   * (`rx +55/+75` no impacto).
    *
-   * O arco daqui é monotonicamente DESCENDENTE, medido no eixo de tela da
-   * direção 2 (`artY = (x + y)/2 − z`, onde o giro é zero):
+   * RODADA 2 (§8): a pose de repouso mudou de lado (ver o cabeçalho do módulo) e
+   * o arco da rodada 1 morreu junto — ele estava calibrado para uma arma que
+   * nascia atrás da nuca. Pior: como o repouso escondia a arma, o quadro 0 do
+   * ataque partia de uma guarda invisível, e era isso que fazia a animação "ficar
+   * feia" mesmo com números grandes de percurso. Golpe começa onde o olho já
+   * estava.
    *
-   *   | quadro | rx  | ry  | ponta da lâmina | `artY` da ponta |
-   *   |--------|-----|-----|-----------------|-----------------|
-   *   | 0 armar    | −25 | +25 | (1,05, −2,70, 15,46) | −16,3 |
-   *   | 1 impacto  | +55 | −25 | (4,12, −3,96,  3,79) |  −3,7 |
-   *   | 2 assentar | +75 | −35 | (4,17, −1,17,  2,38) |  −0,9 |
+   * Com a arma à frente, os sinais voltam a ser os NATURAIS, os mesmos do
+   * Guerreiro: a mão está em `+Y/−Z` em relação ao ombro, então `rx > 0` a leva
+   * para a frente e para CIMA (armar) e `rx < 0` a traz para baixo (desferir).
+   * O canal `ry` é multiplicado por `ESPELHO` na aplicação (§ `poseDoQuadro` de
+   * `../spriteForge`), de modo que `ry` NEGATIVO aqui abre o braço para FORA e
+   * `ry` positivo o traz para dentro, cruzando o corpo — que é o gesto de quem
+   * corta com uma lâmina curva.
    *
-   * ou seja 15,4u de arte de percurso, com o grosso dele ENTRE os quadros 0 e 1
-   * — o quadro de impacto é o **1**, e é com ele que o `IsoRenderer` sincroniza
-   * o clarão de dano. No quadro 2 a ponta fecha em z 2,38, abaixo do quadril
-   * (4,4): o golpe termina embaixo, como §6 pede.
+   * RODADA 3 (§8): o arco da rodada 2 ARMAVA ALTO (`rx +15`) e depois cruzava o
+   * corpo (`ry` de −10 a +45). As duas coisas cobravam preço nos extremos: o
+   * armar alto pintava 30px de lâmina sobre a cabeça na direção 0 e 29px na 7 —
+   * a queixa original do dono reencarnada no quadro de preparo —, e o cruzamento
+   * enfiava a lâmina atrás do tronco nas rotações de costas, onde o quadro de
+   * impacto da direção 4 caía para 18px de arte. Agora o arco COMEÇA MAIS BAIXO
+   * (`rx −4`) e vira menos para dentro.
    *
-   * O `ry` acompanha porque o plano X-Z é o único que a projeção isométrica
-   * nunca achata (a mesma causa raiz de `LATERAL` em `../spriteForge`): sem ele
-   * o arco viveria no plano Y-Z e encolheria em metade das direções.
+   * O arco é monotonicamente DESCENDENTE. Medido no eixo de tela da direção 2
+   * (`artY = (x + y)/2 − z`, onde o giro é zero; `artY` cresce para BAIXO), já
+   * com o `deslocY` que o forge aplica por quadro (`ALTURA_GOLPE`, +2/−2/0 px de
+   * arte — esquecê-lo é medir um percurso que o atlas não tem):
+   *
+   *   | quadro     | rx  | ry  | ponta da lâmina        | `artY` |
+   *   |------------|-----|-----|------------------------|--------|
+   *   | 0 armar    |  −4 |  −4 | (−10,35, +4,46, 13,21) | −42,4  |
+   *   | 1 impacto  |  −8 | +12 | (−11,60, +4,49, 10,56) | −33,3  |
+   *   | 2 assentar | −54 | +14 | (−11,71, +4,78,  6,33) | −24,5  |
+   *
+   * O quadro de impacto é o **1** — é com ele que o `IsoRenderer` sincroniza o
+   * clarão de dano. No quadro 2 a ponta fecha em z 6,33, abaixo do ombro (7,9) e
+   * na linha do peito: o golpe termina descendo, como §6 manda.
+   *
+   * O CRITÉRIO DE ACEITAÇÃO, endurecido nesta rodada. O da rodada 2 dava por bom
+   * "a máscara vale 17% da do melhor quadro", e foi ele que carimbou como OK um
+   * quadro de impacto com 18px de arte de lâmina. Agora cada um dos 24 quadros de
+   * ataque tem de ter, medido por rasterização com ordem do pintor:
+   *
+   * - **≥ 25px de arte de lâmina FORA da silhueta do corpo** (piso absoluto) e
+   *   **≥ 40% do melhor quadro daquela direção** (piso relativo). Hoje o pior de
+   *   todos vale 32px, contra 12px da rodada 2;
+   * - **zero** pixel de lâmina sobre a cabeça (rodada 2: 59px no total);
+   * - a silhueta desenhada em **uma única ilha 4-conexa** — é a forma medível de
+   *   "a arma está presa a alguém", e é o que reprova a lâmina flutuante que o
+   *   dono recusou;
+   * - a ponta DESCE na tela nos dois passos em **8 das 8** direções, com percurso
+   *   0→1 ≥ 8px de arte (hoje: mínimo 8,4) e 1→2 ≥ 60% do primeiro passo (hoje:
+   *   mínimo 0,67, média 0,79) — os três quadros nunca se confundem e o terceiro
+   *   deixou de ser um cutucão.
+   *
+   * UM ALVO QUE FOI MEDIDO E RECUSADO, para não voltar como pedido: "a máscara do
+   * quadro 2 vale ≥ 80% da do quadro de impacto". Ele é INALCANÇÁVEL neste rig —
+   * varrendo a família inteira de arcos e de guardas, o melhor que existe é 74%,
+   * e não porque o golpe recolha: nas direções 3 e 4 a lâmina chega ao impacto de
+   * FACE para a câmera (máscara ~131px) e termina o arco mais de fio (~89px). É
+   * encurtamento de perspectiva de uma lâmina rígida, não perda de leitura — o
+   * valor absoluto continua 3× acima do piso. O que a rodada 2 tinha de errado
+   * ali era outra coisa: 36px, 39% do impacto.
+   *
+   * Os valores de `ry` existem porque o plano X-Z é o único que a projeção
+   * isométrica nunca achata (a mesma causa raiz de `LATERAL` em
+   * `../spriteForge`); um arco só em `rx` vive no plano Y-Z e encolhe em metade
+   * das direções. Mas eles são MENORES que os da rodada 2 de propósito: `ry`
+   * positivo traz o braço para dentro, cruzando o corpo, e passar de ~+15 no
+   * último quadro põe a lâmina atrás do tronco nas direções 3 e 4.
    */
-  golpeRx: [-25, 55, 75],
-  golpeRy: [25, -25, -35]
+  golpeRx: [-4, -8, -54],
+  golpeRy: [-4, 12, 14]
 } as const;
 
 /* ------------------------------------------------------------------ *
@@ -803,23 +967,44 @@ function criarCabeca(): No {
  * parágrafo seguinte exige a lâmina "apoiada sobre o ombro".
  *
  * A compensação é feita na DECLARAÇÃO, não na pose (mesma cura de `criarEspada`
- * em `./warrior`): o nó é ancorado no centro da mão e as quatro peças são
- * espelhadas para +Z. As distâncias ao punho são as mesmas da §5, peça por peça
- * (0,95 · 2,10 · 3,85 · 6,65u), e nenhum tamanho mudou de propósito — é o mesmo
- * blockout, empunhado do jeito certo. A lâmina nasce apontando para CIMA com
- * rotação zero; quem a deita no ombro é `POSE_PARADA_GOBLIN`, com os dois
- * ângulos documentados em `ANGULOS_GOBLIN`.
+ * em `./warrior`): o nó é ancorado no centro da mão e as peças são espelhadas
+ * para +Z. As distâncias ao punho são as mesmas da §5, peça por peça
+ * (0,95 · 2,10 · 3,85 · 6,65u), mais o `bico` da rodada 3 em 8,0u — a lâmina
+ * fecha em 8,65u da mão, contra 7,95 da §5, +9% de comprimento e nada de
+ * proporção: continua uma cimitarra curta, não uma espada. A lâmina nasce
+ * apontando para CIMA com
+ * rotação zero; quem a inclina na guarda à frente é `POSE_PARADA_GOBLIN`, com os
+ * dois ângulos documentados em `ANGULOS_GOBLIN`.
+ *
+ * O pivô sai INTEIRO de `AJUSTES_GOBLIN.mao{X,Y,Z}` — as mesmas três constantes
+ * que posicionam a caixa da mão em `criarBracoDir`. Enquanto for assim, mudar a
+ * guarda move mão e arma juntas e não existe o estado "cabo a meio palmo do
+ * punho", que é o defeito silencioso deste tipo de rig.
  *
  * A CURVA sai do escalonamento das duas caixas, como a §5 manda: a ponta é mais
- * larga (2.4 contra 1.6) e desloca 0,6u no +Y local. Com a pose de repouso o +Y
- * local aponta quase para cima, então o alargamento vira barriga de lâmina
- * subindo para a ponta — a curva da cimitarra. Não é uma caixa torta: é o
+ * larga (2.4 contra 1.6) e desloca 0,6u no +Y local. Com a guarda de repouso o
+ * +Y local aponta para cima e para a frente, então o alargamento vira barriga de
+ * lâmina subindo para a ponta — a curva da cimitarra. Não é uma caixa torta: é o
  * degrau entre duas caixas, que na rasterização em baixa resolução lê como
  * curva pelo mesmo motivo que o octógono do escudo lê como disco.
  *
- * Espessuras: 0.8 e 0.9u (a §5 pede 0.7 e 0.8). É o piso de ~2px de arte de
+ * Espessuras: 1.1 e 1.0u (a §5 pede 0.7 e 0.8). É o piso de ~2px de arte de
  * novo — abaixo dele a lâmina se desfia em pontilhado e o contorno acaba de
  * matá-la. A largura da lâmina (1.6 e 2.4u) não mudou: é ela que carrega I6.
+ *
+ * RODADA 3 (§8) — DUAS MUDANÇAS NA LÂMINA, as duas por legibilidade de perfil:
+ *
+ * - a ESPESSURA subiu de 0.8/0.9 para 1.1/1.0u. Nas direções em que a lâmina
+ *   fica de fio para o observador ela imprimia 1–3px e virava um espeto; com
+ *   ~2,5px de arte sobra corpo cinza mesmo no pior giro. Custa alguns pixels de
+ *   silhueta e nada na forja;
+ * - ganhou uma QUARTA caixa, o `bico`, mais estreita que a ponta (1.4 contra
+ *   2.4u) e depois dela. O degrau passa a ser 1,6 → 2,4 → 1,4: a barriga cresce e
+ *   depois afina, que é o desenho da cimitarra de I6, e a silhueta termina em
+ *   BICO em vez de reto. Sem ela, nas direções em que a lâmina aparece de face
+ *   (0 e 7, as de eixo mais curto — ver `ANGULOS_GOBLIN.cimitarraRx`), o que se
+ *   via era um retângulo cinza sem ponta. É a mesma economia do escudo do
+ *   Guerreiro: aproximar a forma por caixas em vez de pedir rotação ao rig.
  *
  * `acoBase` e não `acoLuz`: com o `REALCE_TOPO` de `../model3d` uma caixa
  * `acoBase` cai em acoLuz (topo) / acoBase (frente) / acoSombra (lado) — os TRÊS
@@ -832,19 +1017,20 @@ function criarCabeca(): No {
 function criarCimitarra(): No {
   return {
     nome: NOS_GOBLIN.cimitarra,
-    pivo: [0, AJ.maoY, AJ.maoZ],
+    pivo: [AJ.maoX, AJ.maoY, AJ.maoZ],
     caixas: [
       detalhe('couroBase', [0.8, 0.8, 1.8], [0, 0, 0.95]), //  punho enfaixado (§5: cz −5.2)
       detalhe('acoSombra', [1.8, 0.9, 0.5], [0, 0, 2.1]), //  guarda          (§5: cz −6.2)
-      detalhe('acoBase', [0.9, 1.6, 3.0], [0, 0, 3.85]), //  lamina.base     (§5: cz −8.0)
-      detalhe('acoBase', [0.8, 2.4, 2.6], [0, 0.6, 6.65]) //  lamina.ponta    (§5: cz −10.6)
+      detalhe('acoBase', [1.1, 1.6, 3.0], [0, 0, 3.85]), //  lamina.base     (§5: cz −8.0)
+      detalhe('acoBase', [1.0, 2.4, 2.6], [0, 0.6, 6.65]), //  lamina.ponta    (§5: cz −10.6)
+      detalhe('acoBase', [0.9, 1.4, 1.3], [0, 0.9, 8.0]) //  bico            ← I6 (a curva fecha em ponta)
     ]
   };
 }
 
 /**
- * bracoDir — o braço que apoia a cimitarra no ombro (I6). Mora em −X pelo
- * espelho de §6.1.
+ * bracoDir — o braço que empunha a cimitarra (I6). Mora em −X pelo espelho de
+ * §6.1.
  *
  * O COTOVELO é dobrado na geometria, e isto merece explicação porque contraria a
  * leitura ingênua da §5 (`braco`, `antebraco` e `mao` empilhados em −Z, um braço
@@ -852,31 +1038,58 @@ function criarCimitarra(): No {
  *
  * O rig da §5 é plano: braço, antebraço e mão são caixas do MESMO nó, não nós
  * encadeados — não existe junta de cotovelo para dobrar por pose. E um braço
- * reto de 4,2u girando no ombro descreve um círculo de raio 4,2: a mão nunca
- * pode ficar PERTO do ombro, que é justamente onde a referência a põe. Qualquer
- * rotação que erga a mão à altura do ombro a joga 4,2u para fora do corpo, e a
- * cimitarra sai flutuando no ar em vez de apoiada.
+ * reto de 4,2u girando no ombro descreve um círculo de raio 4,2: a mão só pode
+ * estar na borda desse círculo, nunca dobrada à frente do peito. Acrescentar um
+ * nó de antebraço resolveria, e foi recusado: mudaria a árvore de §5 (que o
+ * `NOS_HUMANOIDE` do forge espelha) para ganhar um grau de liberdade que nenhuma
+ * animação desta fase usa. A cura barata é a mesma da arma — descrever a dobra
+ * nas coordenadas das caixas.
  *
- * Acrescentar um nó de antebraço resolveria, e foi recusado: mudaria a árvore de
- * §5 (que o `NOS_HUMANOIDE` do forge espelha) para ganhar um grau de liberdade
- * que nenhuma animação desta fase usa. A cura barata é a mesma da arma —
- * descrever a dobra nas coordenadas das caixas: o braço pende do ombro, o
- * antebraço sobe por trás (em `trapo`, a bandagem de I7) e a mão fecha ACIMA e
- * ATRÁS do ombro, a 1,4u da linha do tronco. Dali a lâmina cai sobre o ombro
- * com um giro só, e a arma fica onde a referência a mostra.
+ * RODADA 2 (§8) — A DOBRA VIROU DE LADO. Ela apontava para TRÁS (`antebraço` em
+ * `cy −0.75`, mão em `cy −1.4`): o cotovelo subia por trás e a mão fechava acima
+ * e atrás do ombro, que é o único jeito de deitar a lâmina no ombro. O efeito
+ * colateral era o defeito desta rodada — o conjunto punho-guarda-lâmina ficava
+ * inteiro atrás do plano do tronco, sem mão à vista na frente do corpo.
  *
- * Efeito colateral desejado: como a mão nasce atrás do ombro, todo o conjunto
- * punho-guarda-lâmina fica ATRÁS do plano do tronco, e a ordem do pintor (§4.4)
- * resolve a oclusão sozinha nas 8 direções — sem z-buffer e sem caso especial.
+ * Agora a dobra é um **L para a frente e para FORA**, a mesma de quem segura uma
+ * arma em guarda afastada do corpo:
+ *
+ *   ombro (0, 0, 0) → cotovelo (≈ −1.7, +1.4, −1.9) → mão (−3.8, +2.4, −2.3)
+ *
+ * - o `braço` (úmero) PENDE do ombro abrindo para fora: a caixa cobre o pivô
+ *   (x −1.9..+0.3) e por isso continua costurada na caixa `ombro.esq` do torso
+ *   (x −3.4..−1.6 no mundo), sem vão;
+ * - o `antebraço` sai para a FRENTE e para fora, em `trapo` — e este é o único
+ *   lugar do rig onde a bandagem clara de I7 recorta contra o FUNDO, porque a
+ *   caixa fecha em x −6,35..−4,25 no mundo, inteiramente fora do colete
+ *   (|x| ≤ 2,05). É a peça que liga visualmente ombro e cabo;
+ * - a `mão` fecha em `AJUSTES_GOBLIN.mao{X,Y,Z}`, à frente do peito. As três
+ *   constantes são as MESMAS que ancoram `criarCimitarra` — ver lá.
+ *
+ * RODADA 3 (§8) — AS TRÊS CAIXAS ACOMPANHARAM A MÃO, e não é acabamento: é a
+ * condição para a abertura do braço não virar outro defeito. A mão foi de x −4,0
+ * para x −6,4 no mundo (ver `AJUSTES_GOBLIN.maoX`); com o úmero e o antebraço nos
+ * números da rodada 2 sobraria um VÃO entre o ombro e a mão, e a silhueta se
+ * partiria em duas ilhas — exatamente a "peça de metal solta" que esta fase
+ * existe para eliminar, só que agora com a mão junto. As caixas se sobrepõem em
+ * cadeia (ombro −3,4..−1,6 · úmero −4,5..−2,3 · antebraço −6,35..−4,25 · mão
+ * −7,1..−5,7), e a varredura confirma: silhueta em UMA ilha 4-conexa nos 32
+ * quadros medidos. O úmero também engrossou em X (1.5 → 2.2) porque, esticado, um
+ * cilindro fino de 1,5u lê como galho, não como braço.
+ *
+ * O que se perde, e é aceitável: sem nó de cotovelo, o golpe (§6) gira o braço
+ * inteiro no ombro, então a dobra é RÍGIDA durante o ataque — o goblin corta com
+ * o ombro, não com o cotovelo. Num bicho de 40px de arte isso não é distinguível;
+ * o que é distinguível, e agora existe, é a lâmina saindo da mão.
  */
 function criarBracoDir(): No {
   return {
     nome: NOS_GOBLIN.bracoDir,
     pivo: [-P.xOmbro, 0, P.zOmbro],
     caixas: [
-      detalhe('peleBase', [1.5, 1.5, 2.2], [0, 0.1, -1.1]), //  braço
-      detalhe('trapo', [1.3, 1.9, 1.5], [0, -0.75, -1.25]), //  antebraço dobrado ← I7
-      detalhe('peleBase', [1.4, 1.4, 1.0], [0, AJ.maoY, AJ.maoZ]) //  mão
+      detalhe('peleBase', [2.2, 1.6, 2.0], [-0.8, 0.2, -0.95]), //  braço (pende do ombro, abrindo)
+      detalhe('trapo', [2.1, 1.9, 1.4], [-2.7, 1.4, -1.95]), //  antebraço à frente ← I7
+      detalhe('peleBase', [1.4, 1.4, 1.1], [AJ.maoX, AJ.maoY, AJ.maoZ]) //  mão
     ],
     filhos: [criarCimitarra()]
   };
@@ -985,10 +1198,11 @@ export const MODELO_GOBLIN: No = criarModeloGoblin();
 const A = ANGULOS_GOBLIN;
 
 /**
- * A pose de referência: cimitarra DEITADA sobre o ombro, passando por trás da
- * cabeça e saindo do outro lado (I6), e o braço livre pendendo um pouco aberto.
- * É a pose que faz a silhueta ler como "goblin encrenqueiro" à distância — a
- * arma pendurada ao lado não lê.
+ * A pose de referência: cimitarra EMPUNHADA À FRENTE, em guarda diagonal baixa e
+ * lateral (I6), e o braço livre pendendo um pouco aberto. É a pose que faz a
+ * silhueta ler como "goblin encrenqueiro" à distância — a arma pendurada ao lado
+ * não lê, e a arma deitada no ombro (a da rodada 1, e a da referência) lê como
+ * barra cinza solta neste tamanho de sprite. Ver o cabeçalho do módulo.
  *
  * É a base sobre a qual a animação de §6 SOMA respiração, passo saltitante e
  * golpe descendente. Como `poseDoQuadro` (`../spriteForge`) clona o repouso e

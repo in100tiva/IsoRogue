@@ -1265,9 +1265,16 @@ const SOMBRA_LUZ: readonly [number, number, number] = [13, 17, 24];
  * `./palette` multiplica a cor por `0.5 + 0.5·b`, ou seja, no nível 0 uma
  * entidade sai com metade do brilho. Com `Co = αs·Cs + (1−αs)·Cb` e uma sombra
  * quase preta, `αs = 0.52` reproduz esse mesmo meio-brilho. Isso importa porque
- * `sentinel` e `linker` continuam geométricos nesta fase (§7.3 do BESTIARIO):
- * o goblin em sprite e o sentinela em losango têm de escurecer JUNTOS, senão a
- * leitura de distância mente para o jogador.
+ * o desenho geométrico não saiu do jogo: com os três arquétipos já em sprite
+ * (§11 e §12 do BESTIARIO), ele virou a rede de segurança de quem não conseguiu
+ * forjar atlas (jsdom, sem contexto 2D). Se um ambiente cair para o losango, ele
+ * tem de escurecer com a distância do MESMO jeito que o sprite escurece, senão a
+ * leitura de profundidade muda conforme o ambiente.
+ *
+ * Medido com os quatro atlas do elenco (`parado`, quadro 0, direção 2), a queda
+ * de luminância média do corpo entre brilho pleno e degrau 0: Guerreiro 45,5%,
+ * Goblin 44,2%, Slime 44,9%, Ogro 46,0% — os quatro em torno do meio-brilho que
+ * este alfa foi escrito para reproduzir.
  */
 const ALFA_SOMBRA_MAX = 0.52;
 

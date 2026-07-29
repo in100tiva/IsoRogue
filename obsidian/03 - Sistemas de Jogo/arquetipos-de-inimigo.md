@@ -163,8 +163,11 @@ frase de morte a partir dele — ver [[turnos-e-progressao]].
 - **Trocar `isVisibleFrom` por um teste de LOS próprio na Sentinela** — reintroduz o tiro
   assimétrico que o [[campo-de-visao-shadowcasting]] existe para eliminar.
 
-Nota visual: os inimigos **não** migraram para o sistema de sprites do jogador; continuam
-em formas geométricas (`TODO(inimigos-no-atlas)`, `src/render/IsoRenderer.ts:923`). Ver
+Nota visual: os três arquétipos agora têm **rosto** — `chaser` é o Goblin, `linker` é o Slime
+e `sentinel` é o Ogro (`RETRATOS`, `src/render/IsoRenderer.ts:262`). Nada disso é
+comportamento: a tabela acima não mudou uma célula, e não muda por causa de arte
+([[ADR-007-monstro-e-aparencia-nao-arquetipo]]). O desenho geométrico desta seção continua no
+código como rede de segurança para ambientes sem Canvas. Ver [[bestiario-monstros]],
 [[sprite-forge]] e [[personagem-rig-3d]].
 
 Ver também: [[dijkstra-e-comportamento]], [[turnos-e-progressao]],

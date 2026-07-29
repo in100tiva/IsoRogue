@@ -3,7 +3,10 @@
  * ISOROGUE — bancada de revisão visual dos personagens.
  *
  *   guerreiro → docs/PERSONAGEM.md §10, gates G1..G6
- *   goblin    → docs/BESTIARIO.md   §8, gates G1..G8
+ *   goblin    → docs/BESTIARIO.md   §8,  gates G1..G8
+ *   slime     → docs/BESTIARIO.md   §13, gates G1..G10
+ *   ogro      → docs/BESTIARIO.md   §13, gates G1..G10
+ *   elenco    → docs/BESTIARIO.md   §13, gates G9 e G10 (folha só do elenco)
  *
  * Esta página NÃO faz parte do jogo. Ela existe para que um humano possa abrir
  * a folha gerada ao lado da imagem de referência do personagem e responder por
@@ -23,8 +26,11 @@
  *      para julgar legibilidade;
  *   4b. (só monstro) o personagem ao lado do GUERREIRO, mesma escala, sobre
  *      losangos de tile, com a altura de cada silhueta MEDIDA no atlas — G7;
- *   4c. (só monstro) o mesmo quadro em 4 níveis de luz, do pleno ao quase
- *      escuro, com as cores emissivas preservadas — G8;
+ *   4c. (só monstro) o mesmo quadro em 5 níveis de luz, do pleno ao escuro
+ *      total, com as cores emissivas preservadas — G8;
+ *   4d. (só monstro) O ELENCO INTEIRO lado a lado, na mesma escala, sobre
+ *      losangos de tile, na ordem de tamanho Slime · Goblin · Guerreiro ·
+ *      Ogro, com a altura de corpo de cada um medida no atlas — G9 e G10;
  *   5. a paleta efetivamente exportada (G5);
  *   6. a lista de gates, para o revisor responder olhando;
  *   7. o atlas inteiro com cada quadro demarcado — quadro vazio salta aos olhos (G2).
@@ -145,6 +151,16 @@ interface NomesDeExport {
    */
   readonly emissivas: readonly string[];
   /**
+   * Nomes de export da LISTA pronta de emissivas (`CORES_EMISSIVAS_SLIME`).
+   * Quando um deles existir e tiver a forma certa, ele manda sobre `emissivas`.
+   *
+   * Isto é por personagem, e não uma lista global, por causa do Ogro: a paleta
+   * dele não tem cor emissiva NENHUMA (`CORES_EMISSIVAS_OGRO = []`), e uma
+   * busca por forma que aceitasse lista vazia acabaria casando com a do vizinho
+   * errado. Ver `emissivaPorContrato` na ficha.
+   */
+  readonly listaEmissivas: readonly string[];
+  /**
    * §6 — o arco do golpe PRÓPRIO do personagem, em radianos, no formato
    * `{ rx, ry }` que `forjarAtlas` aceita em `opts.arcoGolpe`. Sem ele a bancada
    * desenharia o golpe genérico do forge e a faixa "atacando" mentiria sobre o
@@ -158,7 +174,12 @@ interface Ficha {
   readonly chave: string;
   readonly apelidos: readonly string[];
   readonly titulo: string;
-  /** Sufixo do caminho do módulo dentro de src/render/characters/. */
+  /**
+   * `personagem` = a folha de um bicho só (o caso de sempre).
+   * `elenco` = a folha que só tem a tira dos quatro juntos — G9 e G10.
+   */
+  readonly modo: 'personagem' | 'elenco';
+  /** Sufixo do caminho do módulo dentro de src/render/characters/. Vazio no elenco. */
   readonly modulo: string;
   /** Onde mora o contrato deste personagem. */
   readonly doc: string;
@@ -170,14 +191,77 @@ interface Ficha {
   readonly gates: readonly (readonly [string, string])[];
   /** Chave do personagem com quem comparar escala (G7). `null` = não compara. */
   readonly compararCom: string | null;
-  /** Mostra a tira de 4 níveis de luz (G8). */
+  /** Mostra a tira de níveis de luz (G8). */
   readonly tiraDeLuz: boolean;
+  /**
+   * Mostra a tira do ELENCO INTEIRO (G9 e G10). Fica ligada nos três monstros:
+   * um gate que só é julgável noutra folha não é julgado.
+   */
+  readonly tiraDeElenco: boolean;
+  /**
+   * Altura do MODELO em `u`, como o contrato a declara (§4 do BESTIARIO para o
+   * Goblin, §11.3 para o Slime, §12.3 para o Ogro, §3 do PERSONAGEM.md para o
+   * Guerreiro).
+   *
+   * Não é decoração: é o alvo contra o qual a tira de escala confere a altura
+   * MEDIDA no atlas. A §4 é explícita em que a diferença de tamanho tem de vir
+   * da altura real do modelo, com um `ART_POR_U` só para o projeto — se alguém
+   * "resolver" o tamanho com um fator de escala no sprite, a razão medida
+   * continua bonita e a perspectiva quebra. Publicar os dois números (alvo em
+   * `u`, medido em px) é o que torna essa fraude visível.
+   */
+  readonly alturaU: number;
+  /**
+   * Legenda dos painéis de ANIMAÇÃO, por estado, quando a genérica de `ESTADOS`
+   * mente sobre este personagem.
+   *
+   * Ela existe porque `ESTADOS` descreve o ciclo do forge em vocabulário
+   * HUMANOIDE — "pernas ±14°, braços ±14°, arco do braço direito" —, e o Slime
+   * não tem pernas nem braços: os nós `torso` e `bracoDir` dele são
+   * ADAPTADORES (ver `NOS_SLIME` em src/render/characters/slime.ts) que
+   * carregam o corpo e a antena. A legenda herdada dizia o que o forge faz e
+   * não o que a imagem mostra, e o público desta bancada é justamente quem vai
+   * decidir o próximo ajuste olhando a imagem.
+   *
+   * Ausente, vale a descrição genérica de `ESTADOS` — que continua correta para
+   * Guerreiro, Goblin e Ogro, os três humanoides.
+   */
+  readonly legendasAnim?: Readonly<Record<string, string>>;
+  /**
+   * Prefixos de nome de cor que NÃO contam como corpo na medição de escala —
+   * tipicamente a arma. `contorno` entra sempre, sem precisar ser declarado.
+   * Ver `coresForaDoCorpo`, que explica por que esta lista existe.
+   */
+  readonly prefixosDeArma: readonly string[];
+  /** Participa da tira do elenco (G9/G10) e em que cor é rotulado nela. */
+  readonly corNaTira: string;
+  /**
+   * A paleta deste personagem não tem cor emissiva POR DECISÃO (o Ogro, §12.2),
+   * e não por esquecimento. Sem esta marca a folha acusaria um defeito que não
+   * existe — e o revisor procuraria um olho aceso que o contrato nunca pediu.
+   */
+  readonly emissivaPorContrato: boolean;
 }
+
+/** Os dois gates do §13 do BESTIARIO, iguais nos três monstros. */
+const GATES_ELENCO: readonly (readonly [string, string])[] = [
+  [
+    'G9',
+    'Os TRÊS monstros lado a lado leem como espécies diferentes — silhueta e ' +
+      'saturação distintas, não três manchas verdes? (faixa do elenco)'
+  ],
+  [
+    'G10',
+    'O tamanho relativo conta a história certa: Slime < Goblin < Guerreiro < Ogro? ' +
+      '(faixa do elenco, linha de veredito)'
+  ]
+];
 
 const FICHA_GUERREIRO: Ficha = {
   chave: 'guerreiro',
   apelidos: ['warrior', 'atlas'],
   titulo: 'ISOROGUE — bancada do guerreiro',
+  modo: 'personagem',
   modulo: 'warrior.ts',
   doc: 'docs/PERSONAGEM.md §10',
   docGate: '§10',
@@ -188,6 +272,7 @@ const FICHA_GUERREIRO: Ficha = {
     rampaDaCor: ['RAMPA_DA_COR_GUERREIRO', 'RAMPA_DA_COR'],
     repouso: ['POSE_PARADA', 'POSE_REPOUSO', 'POSE_NEUTRA'],
     emissivas: [],
+    listaEmissivas: ['CORES_EMISSIVAS_GUERREIRO'],
     arcoGolpe: []
   },
   gates: [
@@ -199,16 +284,23 @@ const FICHA_GUERREIRO: Ficha = {
     ['G6', 'A espada e o escudo estão nos lados certos e legíveis em todas as direções?']
   ],
   compararCom: null,
-  tiraDeLuz: false
+  tiraDeLuz: false,
+  tiraDeElenco: false,
+  // §3 do PERSONAGEM.md — a régua contra a qual os três monstros são medidos.
+  alturaU: 18,
+  prefixosDeArma: ['aco'],
+  corNaTira: '#e0a43c',
+  emissivaPorContrato: false
 };
 
 const FICHA_GOBLIN: Ficha = {
   chave: 'goblin',
   apelidos: ['gob'],
   titulo: 'ISOROGUE — bancada do goblin',
+  modo: 'personagem',
   modulo: 'goblin.ts',
   doc: 'docs/BESTIARIO.md §8',
-  docGate: '§8 do BESTIARIO.md',
+  docGate: '§8 e §13 do BESTIARIO.md',
   referencia: 'docs/ref/goblin-referencia.jpg',
   nomes: {
     paleta: ['PALETA_GOBLIN', 'PALETA'],
@@ -216,6 +308,7 @@ const FICHA_GOBLIN: Ficha = {
     rampaDaCor: ['RAMPA_DA_COR_GOBLIN', 'RAMPA_DA_COR'],
     repouso: ['POSE_PARADA_GOBLIN', 'POSE_PARADA', 'POSE_REPOUSO'],
     emissivas: ['olhoBrasa'],
+    listaEmissivas: ['CORES_EMISSIVAS_GOBLIN'],
     arcoGolpe: ['ARCO_GOLPE_GOBLIN', 'ARCO_GOLPE']
   },
   gates: [
@@ -225,14 +318,186 @@ const FICHA_GOBLIN: Ficha = {
     ['G4', 'O contorno está contínuo, sem furos?'],
     ['G5', 'A paleta é a do §3, sem cor inventada nem gradiente contínuo?'],
     ['G6', 'As orelhas e a cimitarra são legíveis em TODAS as direções?'],
-    ['G7', 'Ao lado do Guerreiro, o goblin lê claramente como MENOR? (faixa 4b)'],
-    ['G8', 'Com pouca luz o corpo escurece e os OLHOS continuam acesos? (faixa 4c)']
+    ['G7', 'Ao lado do Guerreiro, o goblin lê claramente como MENOR? (faixa da escala)'],
+    ['G8', 'Com pouca luz o corpo escurece e os OLHOS continuam acesos? (faixa de luz)'],
+    ...GATES_ELENCO
   ],
   compararCom: 'guerreiro',
-  tiraDeLuz: true
+  tiraDeLuz: true,
+  tiraDeElenco: true,
+  // §4 do BESTIARIO: ALTURA_MODELO_GOBLIN = 13u contra 18u do Guerreiro.
+  alturaU: 13,
+  prefixosDeArma: ['aco'],
+  corNaTira: '#5fb36a',
+  emissivaPorContrato: false
 };
 
-const FICHAS: readonly Ficha[] = [FICHA_GUERREIRO, FICHA_GOBLIN];
+const FICHA_SLIME: Ficha = {
+  chave: 'slime',
+  apelidos: ['gosma'],
+  titulo: 'ISOROGUE — bancada do slime',
+  modo: 'personagem',
+  modulo: 'slime.ts',
+  doc: 'docs/BESTIARIO.md §11',
+  docGate: '§13 do BESTIARIO.md',
+  referencia: 'docs/ref/slime-referencia.jpg',
+  nomes: {
+    paleta: ['PALETA_SLIME', 'PALETA'],
+    rampas: ['RAMPAS_SLIME', 'RAMPAS'],
+    rampaDaCor: ['RAMPA_DA_COR_SLIME', 'RAMPA_DA_COR'],
+    repouso: ['POSE_PARADA_SLIME', 'POSE_PARADA', 'POSE_REPOUSO'],
+    emissivas: ['luzAmbar'],
+    listaEmissivas: ['CORES_EMISSIVAS_SLIME'],
+    arcoGolpe: ['ARCO_GOLPE_SLIME', 'ARCO_GOLPE']
+  },
+  gates: [
+    ['G1', 'A silhueta lê como ESTE slime? (S1–S6 — domo mais largo que alto, olhos em + e antena)'],
+    ['G2', 'As 8 direções têm mesma altura e volume, sem "pular" entre elas?'],
+    ['G3', 'A direção 0 (leste do grid) olha para baixo-direita na tela?'],
+    ['G4', 'O contorno está contínuo, sem furos?'],
+    ['G5', 'A paleta é a do §11.2, sem cor inventada nem gradiente contínuo?'],
+    [
+      'G6',
+      'A ANTENA (S5) é legível em TODAS as direções e o rosto (S4) gira junto com ela? ' +
+        'Nas costas o rosto some e só a antena aparece — §11.5 diz que isso é o certo'
+    ],
+    ['G7', 'Ao lado do Guerreiro, o slime lê como MUITO menor? (faixa da escala)'],
+    ['G8', 'Com pouca luz o corpo escurece e os OLHOS e a BOLHA continuam acesos? (faixa de luz)'],
+    ...GATES_ELENCO
+  ],
+  compararCom: 'guerreiro',
+  tiraDeLuz: true,
+  tiraDeElenco: true,
+  // §11.3: ALTURA_MODELO_SLIME = 7u — a MASSA (a gota, do chão à coroa). A
+  // silhueta com o arco da antena vai a ~11,8u; ver `PROPORCOES_SLIME.altura`,
+  // que separa as duas medidas, e a nota da linha de veredito da tira.
+  alturaU: 7,
+  legendasAnim: {
+    andando:
+      'o slime não tem pernas — quique de 1,6u nos quadros pares (§11.4 pede salto, não passada) ' +
+      '+ o ATRASO DA ANTENA: o nó `bracoDir` do rig é a haste, e o balanço de ±14° do ciclo ' +
+      'chega ao extremo um quadro DEPOIS do ápice do corpo',
+    atacando:
+      'o BOTE (§11.4) — arco próprio do personagem em rx/ry no nó da antena (a isca chicoteia ' +
+      'para a frente-esquerda), com o corpo afundando 0,8u e inclinando 7° no quadro 1, que é o de impacto'
+  },
+  // O slime não tem arma nenhuma: só o contorno sai da conta do corpo.
+  prefixosDeArma: [],
+  corNaTira: '#4fd07a',
+  emissivaPorContrato: false
+};
+
+const FICHA_OGRO: Ficha = {
+  chave: 'ogro',
+  apelidos: ['ogre'],
+  titulo: 'ISOROGUE — bancada do ogro',
+  modo: 'personagem',
+  modulo: 'ogre.ts',
+  doc: 'docs/BESTIARIO.md §12',
+  docGate: '§13 do BESTIARIO.md',
+  referencia: 'docs/ref/ogro-referencia.png',
+  nomes: {
+    paleta: ['PALETA_OGRO', 'PALETA'],
+    rampas: ['RAMPAS_OGRO', 'RAMPAS'],
+    rampaDaCor: ['RAMPA_DA_COR_OGRO', 'RAMPA_DA_COR'],
+    repouso: ['POSE_PARADA_OGRO', 'POSE_PARADA', 'POSE_REPOUSO'],
+    emissivas: [],
+    listaEmissivas: ['CORES_EMISSIVAS_OGRO'],
+    arcoGolpe: ['ARCO_GOLPE_OGRO', 'ARCO_GOLPE']
+  },
+  gates: [
+    [
+      'G1',
+      'A silhueta lê como ESTE ogro? (O1–O8, com atenção a O2: o ombro esquerdo tem de ' +
+        'passar ACIMA da cabeça, e a silhueta NÃO pode ser simétrica)'
+    ],
+    ['G2', 'As 8 direções têm mesma altura e volume, sem "pular" entre elas?'],
+    ['G3', 'A direção 0 (leste do grid) olha para baixo-direita na tela?'],
+    ['G4', 'O contorno está contínuo, sem furos?'],
+    ['G5', 'A paleta é a do §12.2, sem cor inventada nem gradiente contínuo?'],
+    ['G6', 'A marreta (O5), os chifres (O3) e a ombreira espinhada (O4) são legíveis em TODAS as direções?'],
+    ['G7', 'Ao lado do Guerreiro, o ogro lê claramente como MAIOR? (faixa da escala)'],
+    [
+      'G8',
+      'Com pouca luz o corpo escurece por inteiro? O Ogro NÃO tem cor emissiva (§12.2) — ' +
+        'nenhum ponto pode ficar aceso'
+    ],
+    ...GATES_ELENCO,
+    [
+      'G11',
+      '§12.5 — quanto o quadro invade os tiles vizinhos? A medida está no cabeçalho ' +
+        '(quadro × tile). Se ficar grotesco a saída é reduzir para ~22u e compensar com ' +
+        'largura, não implementar z-buffer nesta fase'
+    ]
+  ],
+  compararCom: 'guerreiro',
+  tiraDeLuz: true,
+  tiraDeElenco: true,
+  // §12.3: ALTURA_MODELO_OGRO = 24u — ele INTIMIDA.
+  alturaU: 24,
+  // A marreta é madeira + aros de metal escuro; o OSSO (chifres, espinhos da
+  // ombreira) é CORPO, não arma — a §12.3 mede os 24u até a ponta do espinho.
+  prefixosDeArma: ['madeira'],
+  corNaTira: '#c6dcbb',
+  emissivaPorContrato: true
+};
+
+/**
+ * A folha só do elenco. Ela não tem personagem "alvo": é a tira dos quatro, em
+ * tamanho grande, e nada mais.
+ *
+ * Por que ela existe além da faixa que já entra em cada folha de monstro: as
+ * folhas de monstro são densas (72 quadros, atlas, paleta, gates) e a tira do
+ * elenco chega lá embaixo, pequena, entre outras dez coisas. G9 e G10 não são
+ * gates de detalhe — são as duas perguntas de PRODUTO desta fase ("são espécies
+ * diferentes?" e "o tamanho conta a história certa?"), e quem responde a elas é
+ * o dono do jogo, olhando uma imagem só. Uma folha própria é a imagem que se
+ * manda para ele; a faixa embutida é a que o escultor usa sem trocar de folha.
+ */
+const FICHA_ELENCO: Ficha = {
+  chave: 'elenco',
+  apelidos: ['todos', 'cast'],
+  titulo: 'ISOROGUE — o elenco (G9 e G10)',
+  modo: 'elenco',
+  modulo: '',
+  doc: 'docs/BESTIARIO.md §13',
+  docGate: '§13 do BESTIARIO.md',
+  referencia: 'docs/ref/{slime,goblin,guerreiro,ogro}-referencia.*',
+  nomes: {
+    paleta: [],
+    rampas: [],
+    rampaDaCor: [],
+    repouso: [],
+    emissivas: [],
+    listaEmissivas: [],
+    arcoGolpe: []
+  },
+  gates: GATES_ELENCO,
+  compararCom: null,
+  tiraDeLuz: false,
+  tiraDeElenco: true,
+  alturaU: 0,
+  prefixosDeArma: [],
+  corNaTira: '#c9d3de',
+  emissivaPorContrato: false
+};
+
+const FICHAS: readonly Ficha[] = [
+  FICHA_GUERREIRO,
+  FICHA_GOBLIN,
+  FICHA_SLIME,
+  FICHA_OGRO,
+  FICHA_ELENCO
+];
+
+/**
+ * O elenco, NA ORDEM DE TAMANHO do §13/G10 — Slime < Goblin < Guerreiro < Ogro.
+ *
+ * A ordem é o enunciado do gate escrito na imagem: a tira desenha nesta ordem e
+ * depois CONFERE que as alturas medidas crescem junto. Se alguém reordenar isto
+ * para "ficar bonito", o veredito de G10 passa a comparar outra coisa.
+ */
+const ORDEM_ELENCO: readonly string[] = ['slime', 'goblin', 'guerreiro', 'ogro'];
 
 /**
  * Módulos de personagem, varridos no BUILD.
@@ -441,15 +706,6 @@ function ehArcoGolpe(v: unknown): boolean {
   });
 }
 
-/** Lista de nomes de cor (para `CORES_EMISSIVAS_*`, §1.1 do BESTIARIO). */
-function ehListaDeNomes(v: unknown, coresValidas: readonly string[]): boolean {
-  return (
-    Array.isArray(v) &&
-    v.length >= 1 &&
-    v.every((n) => typeof n === 'string' && coresValidas.includes(n))
-  );
-}
-
 /** Nome canônico primeiro; forma depois. Nunca devolve algo que não sirva. */
 function acharExport(
   mod: Registro,
@@ -501,6 +757,17 @@ function montarOpcoes(mod: Registro, ficha: Ficha): { opts: Registro; achados: s
     opts['arcoGolpe'] = arcoGolpe;
     achados.push('arcoGolpe');
   }
+  // §1.1 — os NOMES das cores emissivas. O forge usa isto para extrair a camada
+  // emissiva do atlas (`AtlasPersonagem.emissivo`), que é o que o jogo recola em
+  // brilho pleno por cima do quadro escurecido. Passar o mesmo canal que o jogo
+  // passa é o que impede a bancada de julgar G8 sobre um atlas diferente do que
+  // o jogador vai ver. Não altera um pixel do atlas base — só acrescenta a folha
+  // emissiva ao lado.
+  const emissivas = nomesEmissivos(mod, ficha);
+  if (emissivas.length > 0) {
+    opts['emissivas'] = emissivas;
+    achados.push('emissivas');
+  }
   return { opts, achados };
 }
 
@@ -543,18 +810,29 @@ function empacotar(c: readonly [number, number, number]): number {
  * legítimo aqui porque o sprite forge snapa todo pixel para a paleta antes de
  * colar no atlas (§2.1 de spriteForge) — no atlas não existe meio-tom.
  */
-function coresEmissivas(mod: Registro, ficha: Ficha): number[] {
+function nomesEmissivos(mod: Registro, ficha: Ficha): readonly string[] {
+  // O Ogro declara `CORES_EMISSIVAS_OGRO = []` de propósito (§12.2). Buscar por
+  // FORMA aqui casaria a lista vazia dele com qualquer array vazio do módulo, e
+  // pior: uma checagem de forma que exigisse length ≥ 1 nunca casaria com a
+  // lista vazia dele e sairia procurando a emissiva de outro personagem. Por
+  // isso a procura é por NOME declarado na ficha, e só ele.
   const paleta = acharExport(mod, ficha.nomes.paleta, ehPaleta);
   if (!ehPaleta(paleta)) return [];
   const cores = Object.keys(paleta);
-  const exportada = acharExport(mod, ['CORES_EMISSIVAS_GOBLIN', 'CORES_EMISSIVAS', 'EMISSIVAS'], (v) =>
-    ehListaDeNomes(v, cores)
-  );
-  const nomes: readonly string[] = Array.isArray(exportada)
-    ? (exportada as readonly string[])
-    : ficha.nomes.emissivas;
+  for (const nome of ficha.nomes.listaEmissivas) {
+    const v = mod[nome];
+    if (Array.isArray(v) && v.every((n) => typeof n === 'string' && cores.includes(n))) {
+      return v as readonly string[];
+    }
+  }
+  return ficha.nomes.emissivas.filter((n) => cores.includes(n));
+}
+
+function coresEmissivas(mod: Registro, ficha: Ficha): number[] {
+  const paleta = acharExport(mod, ficha.nomes.paleta, ehPaleta);
+  if (!ehPaleta(paleta)) return [];
   const saida: number[] = [];
-  for (const nome of nomes) {
+  for (const nome of nomesEmissivos(mod, ficha)) {
     const hex = paleta[nome];
     if (typeof hex !== 'string') continue;
     const rgb = lerHex(hex);
@@ -578,10 +856,16 @@ function coresEmissivas(mod: Registro, ficha: Ficha): number[] {
  * veredito a bancada calcula sozinha, e um falso negativo levaria o escultor a
  * inflar o goblin atrás de um número que não existe.
  *
- * A heurística é o PREFIXO do nome da cor (`acoLuz`, `acoBase`, `acoSombra`),
- * porque é a convenção que as duas paletas já seguem. Uma paleta que não a siga
- * devolve lista vazia — aí a medição de corpo cai na de silhueta cheia, que é o
- * comportamento de antes, e o rótulo diz qual das duas está mostrando.
+ * A heurística é o PREFIXO do nome da cor, DECLARADO NA FICHA — `aco` para o
+ * Guerreiro e o Goblin, `madeira` para o Ogro, nenhum para o Slime, que não tem
+ * arma. Ela era um `/^aco/` fixo aqui dentro, e isso já estava errado no
+ * primeiro monstro novo: a arma do Ogro é `madeira` + `metalSombra`, e o `osso`
+ * dos chifres e dos espinhos da ombreira é CORPO — a §12.3 mede os 24u dele
+ * justamente até a PONTA DO ESPINHO, que é o ponto mais alto do modelo. Excluir
+ * osso teria decapitado a medida de O2 e reprovado G10 por instrumento.
+ *
+ * Uma paleta sem nenhum prefixo declarado devolve só o contorno — aí a medição
+ * de corpo é a silhueta inteira menos o outline, e o rótulo diz isso.
  *
  * O CONTORNO entra na lista junto com o aço, e sem ele a medição não funciona:
  * o passe de máscara do sprite forge (§2.1) repinta de `contorno` todo pixel de
@@ -596,7 +880,8 @@ function coresForaDoCorpo(mod: Registro, ficha: Ficha): number[] {
   if (!ehPaleta(paleta)) return [];
   const saida: number[] = [];
   for (const [nome, hex] of Object.entries(paleta)) {
-    if (!/^aco/i.test(nome) && nome !== 'contorno') continue;
+    const arma = ficha.prefixosDeArma.some((p) => nome.toLowerCase().startsWith(p.toLowerCase()));
+    if (!arma && nome !== 'contorno') continue;
     const rgb = lerHex(hex);
     if (rgb) saida.push(empacotar(rgb));
   }
@@ -1066,6 +1351,8 @@ interface Lado {
   readonly atlas: AtlasPronto;
   readonly nome: string;
   readonly cor: string;
+  /** Altura do modelo em `u` (§4/§11.3/§12.3). 0 = não publica alvo. */
+  readonly alturaU?: number;
 }
 
 function textoCentrado(
@@ -1125,51 +1412,183 @@ function colarQuadro(
   );
 }
 
+/** Ponto de referência da razão de escala: é sempre o Guerreiro (§4, §12.3). */
+const CHAVE_REGUA = 'guerreiro';
+
 /**
- * G7 — os dois personagens lado a lado, MESMA escala, sobre losangos de tile.
+ * Tolerância da razão medida contra a razão de contrato, em pontos percentuais
+ * RELATIVOS ao alvo.
  *
- * Nada aqui reescala nada: os dois atlas são colados com o mesmo `zoom` e com a
+ * 14% reproduziria, para o Goblin, exatamente a janela 62–82% que a rodada 1
+ * (§8) calibrou à mão em torno dos 72%. Ficou em 18% por causa de um viés que a
+ * medição por altura-acima-da-âncora reduz mas não elimina: a parte de TRÁS do
+ * modelo ainda sobe meio pixel por `u` de profundidade, então quanto mais fundo
+ * o bicho, mais alto ele lê. Medido nos quatro (px acima do chão contra
+ * `u × ART_POR_U` esperado): guerreiro +3, slime +4,5, goblin +5,5, ogro +8.
+ *
+ * Com 14% o Slime caía exatamente em cima da borda (44% contra 39% ± 5) e um
+ * ajuste de meio `u` no rig o faria piscar entre verde e vermelho sem nada ter
+ * ficado errado. Um gate que oscila é um gate que se aprende a ignorar; a janela
+ * absorve o viés conhecido e continua estreita o bastante para pegar o erro que
+ * ela existe para pegar — alguém escalando o sprite em vez de mudar o modelo,
+ * que desloca a razão em dezenas de pontos, não em cinco.
+ */
+const TOLERANCIA_RAZAO = 0.18;
+
+interface MedidaLado {
+  readonly lado: Lado;
+  /** Silhueta inteira, ponta de arma inclusa. */
+  readonly cheia: Extremos | null;
+  /** Corpo: sem os pixels de arma nem de contorno. É a medida dos gates. */
+  readonly corpo: Extremos | null;
+}
+
+/** `— ` quando não deu para medir: número ausente é melhor que número inventado. */
+function px(m: Extremos | null): string {
+  return m ? `${m.altura}px` : '—';
+}
+
+/**
+ * Quanto o corpo SOBE ACIMA DA ÂNCORA, em px de tela. É a medida de G7 e G10.
+ *
+ * NÃO é a altura da silhueta, e a diferença entre as duas não é detalhe: ela
+ * reprovou o Slime por instrumento na primeira rodada dos três monstros.
+ *
+ * A projeção do jogo é `isoY = (x + y) / 2`, então a PROFUNDIDADE de um modelo
+ * entra na altura da silhueta em tela: a parte de trás da peça sobe meio pixel
+ * por `u` de profundidade e a da frente desce outro tanto. Para dois humanoides
+ * de bitola parecida isso se cancela na razão e ninguém percebe — foi o caso do
+ * Goblin contra o Guerreiro. Para o Slime não: ele tem 6,6u de altura e 9u de
+ * PROFUNDIDADE (S1 — "mais largo que alto" é a identidade do bicho), e a
+ * silhueta dele mede 34px onde a altura vale 16. Medido contra os 57px do
+ * guerreiro isso dá 60% e o contrato pede 39% (7u/18u) — um falso negativo de 21
+ * pontos que mandaria o escultor achatar um slime que está certo.
+ *
+ * A altura acima da âncora não tem esse problema. A âncora é a projeção da
+ * origem do modelo (centro dos pés, z = 0) e o eixo Z projeta 1:1 para cima na
+ * tela, então um ponto a `z` unidades do chão cai exatamente `z × ART_POR_U` px
+ * acima da âncora — a mesma grandeza que as §4/§11.3/§12.3 declaram em `u`. É
+ * também, sem coincidência nenhuma, a altura em que as tracejadas já eram
+ * desenhadas: o desenho estava certo e o número ao lado dele é que não era.
+ */
+function alturaAcimaDaAncora(m: MedidaLado): number | null {
+  if (!m.corpo) return null;
+  const acima = m.lado.atlas.ancoraY - m.corpo.topo;
+  return acima > 0 ? acima : null;
+}
+
+interface LinhaRodape {
+  readonly texto: string;
+  readonly cor: string;
+  readonly tam: number;
+}
+
+/**
+ * Largura de um texto no mesmo `font` com que ele será desenhado.
+ *
+ * Existe porque o rodapé desta tira é MAIS LARGO que a tira em si quando há
+ * poucos personagens: com dois bonecos a zoom 3 o grupo tem ~410px e a linha de
+ * veredito passa de 700, e ela saía cortada nas duas pontas — um gate ilegível é
+ * um gate não julgado, que é exatamente o que esta bancada existe para impedir.
+ * Medir antes de dimensionar a tela resolve para qualquer contagem.
+ */
+function larguraDoTexto(texto: string, tam: number): number {
+  const tela = telaDeRascunho(1, 1);
+  tela.ctx.font = `${tam}px ui-monospace, monospace`;
+  return tela.ctx.measureText(texto).width;
+}
+
+/**
+ * G7, G9 e G10 — o elenco lado a lado, MESMA escala, sobre losangos de tile.
+ *
+ * Nada aqui reescala nada: todos os atlas são colados com o mesmo `zoom` e com a
  * ÂNCORA (o plano z = 0 do modelo, o centro dos pés) na mesma linha de base. É
  * assim que o jogo os desenha, então a diferença de tamanho que aparece nesta
  * tira é a diferença de tamanho que o jogador vai ver — nem mais, nem menos.
  *
+ * Ela nasceu com dois lados fixos (G7: monstro contra guerreiro) e recebe agora
+ * uma lista, porque G9 e G10 do §13 pedem os QUATRO juntos e um par não decide
+ * nenhum dos dois: "leem como espécies diferentes?" só tem resposta com todos na
+ * mesma imagem, e "Slime < Goblin < Guerreiro < Ogro" é uma cadeia de três
+ * comparações, não uma. Com dois elementos ela desenha o que sempre desenhou.
+ *
  * Duas linhas tracejadas por personagem, e a distinção entre elas é o conserto
  * de rodada 1 (§8): a CHEIA marca o topo da silhueta inteira (para o guerreiro,
  * a ponta da espada erguida) e a de CORPO marca o topo ignorando os pixels de
- * aço — que para o guerreiro é o topo do elmo, e é contra ESSA linha que os
+ * arma — que para o guerreiro é o topo do elmo, e é contra ESSA linha que os
  * 13u/18u ≈ 72% da §4 se comparam. O rótulo publica a razão de CORPO, porque a
  * razão de silhueta compara corpo com ponta de arma e dá um falso negativo de
  * ~20 pontos (ver `coresForaDoCorpo`).
  */
 function tiraComparativa(
-  a: Lado,
-  b: Lado,
+  lados: readonly Lado[],
   dirs: readonly number[],
   zoom: number,
   rotularAltura: boolean
 ): HTMLCanvasElement {
+  const n = Math.max(1, lados.length);
   // A célula é dimensionada pela EXTENSÃO PINTADA em torno da âncora, não pela
   // largura do quadro: o quadro do guerreiro tem 118px por causa da varredura da
-  // espada nos 72 quadros, e usar isso aqui afastaria os dois bonecos meia tela
-  // um do outro — que é justamente o que a tira precisa aproximar. Sem medição
-  // (jsdom), cai na largura do quadro, que nunca corta nada.
-  const extA = extensaoHorizontal(a.atlas, dirs);
-  const extB = extensaoHorizontal(b.atlas, dirs);
+  // espada nos 72 quadros, e usar isso aqui afastaria os bonecos meia tela um do
+  // outro — que é justamente o que a tira precisa aproximar. Sem medição (jsdom),
+  // cai na largura do quadro, que nunca corta nada.
+  let extMax: number | null = 0;
+  let larguraQuadroMax = CONFIG.TW + 6;
+  for (const l of lados) {
+    const e = extensaoHorizontal(l.atlas, dirs);
+    if (e === null) extMax = null;
+    else if (extMax !== null && e > extMax) extMax = e;
+    if (l.atlas.larguraFrame > larguraQuadroMax) larguraQuadroMax = l.atlas.larguraFrame;
+  }
   const larguraCelula =
-    (extA === null || extB === null
-      ? Math.max(a.atlas.larguraFrame, b.atlas.larguraFrame, CONFIG.TW + 6)
-      : Math.max(extA * 2 + 6, extB * 2 + 6, CONFIG.TW + 6)) * zoom;
-  const gapPar = 22;
+    (extMax === null ? larguraQuadroMax : Math.max(extMax * 2 + 6, CONFIG.TW + 6)) * zoom;
+
+  const gapGrupo = 22;
   const margem = 14;
-  const acima = Math.max(a.atlas.ancoraY, b.atlas.ancoraY) * zoom + 22;
-  const abaixo =
-    Math.max(
-      a.atlas.alturaFrame - a.atlas.ancoraY,
-      b.atlas.alturaFrame - b.atlas.ancoraY,
-      CONFIG.TH
-    ) * zoom;
-  const rodape = rotularAltura ? 42 : 20;
-  const w = margem * 2 + dirs.length * (larguraCelula * 2 + gapPar) - gapPar;
+  let ancoraMax = 0;
+  // Anotado: `CONFIG` é `as const` e `TH` chega aqui como o literal 32.
+  let abaixoMax: number = CONFIG.TH;
+  for (const l of lados) {
+    if (l.atlas.ancoraY > ancoraMax) ancoraMax = l.atlas.ancoraY;
+    const sob = l.atlas.alturaFrame - l.atlas.ancoraY;
+    if (sob > abaixoMax) abaixoMax = sob;
+  }
+  const acima = ancoraMax * zoom + 22;
+  const abaixo = abaixoMax * zoom;
+  const rodape = rotularAltura ? 54 : 20;
+
+  // As medidas saem ANTES da tela: `medirSilhueta` só toca o canvas de rascunho,
+  // e o rodapé precisa estar escrito para a tela poder nascer larga o bastante
+  // para caber nele. Com dois personagens a zoom 3 o grupo tem ~410px e a linha
+  // de veredito passa de 700 — antes desta ordem ela saía cortada nas pontas.
+  const medidasPorDir: MedidaLado[][] = [];
+  const rodapePorDir: LinhaRodape[][] = [];
+  let larguraRodape = 0;
+  for (const d of dirs) {
+    const dir = d ?? 0;
+    const medidas: MedidaLado[] = [];
+    for (const lado of lados) {
+      medidas.push({
+        lado: lado,
+        cheia: medirSilhueta(lado.atlas, dir, 'parado', 0),
+        corpo: medirSilhueta(lado.atlas, dir, 'parado', 0, lado.aco ?? [])
+      });
+    }
+    medidasPorDir.push(medidas);
+    if (rotularAltura) {
+      const linhas = linhasDeEscala(medidas);
+      rodapePorDir.push(linhas);
+      for (const l of linhas) {
+        const lw = larguraDoTexto(l.texto, l.tam);
+        if (lw > larguraRodape) larguraRodape = lw;
+      }
+    } else {
+      rodapePorDir.push([]);
+    }
+  }
+
+  const larguraGrupo = Math.max(larguraCelula * n, Math.ceil(larguraRodape) + 12);
+  const w = margem * 2 + dirs.length * (larguraGrupo + gapGrupo) - gapGrupo;
   const h = acima + abaixo + rodape;
   const baseY = acima;
 
@@ -1179,70 +1598,132 @@ function tiraComparativa(
 
   for (let i = 0; i < dirs.length; i++) {
     const dir = dirs[i] ?? 0;
-    const x0 = margem + i * (larguraCelula * 2 + gapPar);
-    const cxA = x0 + larguraCelula / 2;
-    const cxB = x0 + larguraCelula * 1.5;
+    const x0 = margem + i * (larguraGrupo + gapGrupo);
+    const x1 = x0 + larguraGrupo;
+    const medidas = medidasPorDir[i] ?? [];
+    // O grupo pode ter ficado mais largo que as células por causa do rodapé:
+    // centraliza os bonecos dentro dele, senão eles encostam na borda esquerda.
+    const folga = (larguraGrupo - larguraCelula * n) / 2;
 
-    losango(ctx, cxA, baseY, CONFIG.TW * zoom, CONFIG.TH * zoom, '#3a4250', 'rgba(255,255,255,0.07)');
-    losango(ctx, cxB, baseY, CONFIG.TW * zoom, CONFIG.TH * zoom, '#3a4250', 'rgba(255,255,255,0.07)');
+    for (let j = 0; j < n; j++) {
+      const lado = lados[j];
+      if (!lado) continue;
+      const cx = x0 + folga + larguraCelula * (j + 0.5);
+      losango(ctx, cx, baseY, CONFIG.TW * zoom, CONFIG.TH * zoom, '#3a4250', 'rgba(255,255,255,0.07)');
+      const q = lado.atlas.quadro(dir, 'parado', 0);
+      colarQuadro(ctx, lado.atlas, lado.atlas.canvas, q.sx, q.sy, cx, baseY, zoom);
+    }
 
-    const qa = a.atlas.quadro(dir, 'parado', 0);
-    const qb = b.atlas.quadro(dir, 'parado', 0);
-    colarQuadro(ctx, a.atlas, a.atlas.canvas, qa.sx, qa.sy, cxA, baseY, zoom);
-    colarQuadro(ctx, b.atlas, b.atlas.canvas, qb.sx, qb.sy, cxB, baseY, zoom);
-
-    const ma = medirSilhueta(a.atlas, dir, 'parado', 0);
-    const mb = medirSilhueta(b.atlas, dir, 'parado', 0);
-    // Corpo = silhueta sem os pixels de arma nem de contorno. É a medida de G7.
-    const ca = medirSilhueta(a.atlas, dir, 'parado', 0, a.aco ?? []);
-    const cb = medirSilhueta(b.atlas, dir, 'parado', 0, b.aco ?? []);
-    const x1 = x0 + larguraCelula * 2;
-    // A tracejada FRACA é a silhueta cheia (ponta de arma inclusa); a forte é o
-    // corpo. Trocar a ordem esconderia a de corpo sob a outra quando coincidem.
-    if (ma) {
-      const y = Math.round(baseY - (a.atlas.ancoraY - ma.topo) * zoom);
+    // A tracejada FRACA (silhueta cheia) vai ANTES da forte (corpo): trocar a
+    // ordem esconderia a de corpo sob a outra quando as duas coincidem.
+    for (const m of medidas) {
+      if (!m.cheia) continue;
+      const y = Math.round(baseY - (m.lado.atlas.ancoraY - m.cheia.topo) * zoom);
       linhaTracejada(ctx, x0, x1, y, COR_SILHUETA_CHEIA);
     }
-    if (mb) {
-      const y = Math.round(baseY - (b.atlas.ancoraY - mb.topo) * zoom);
-      linhaTracejada(ctx, x0, x1, y, COR_SILHUETA_CHEIA);
-    }
-    if (ca) {
-      const y = Math.round(baseY - (a.atlas.ancoraY - ca.topo) * zoom);
-      linhaTracejada(ctx, x0, x1, y, a.cor);
-    }
-    if (cb) {
-      const y = Math.round(baseY - (b.atlas.ancoraY - cb.topo) * zoom);
-      linhaTracejada(ctx, x0, x1, y, b.cor);
+    for (const m of medidas) {
+      if (!m.corpo) continue;
+      const y = Math.round(baseY - (m.lado.atlas.ancoraY - m.corpo.topo) * zoom);
+      linhaTracejada(ctx, x0, x1, y, m.lado.cor);
     }
 
-    textoCentrado(ctx, `${a.nome} · dir ${dir}`, cxA, h - (rotularAltura ? 30 : 7), a.cor, 10);
-    textoCentrado(ctx, `${b.nome} · dir ${dir}`, cxB, h - (rotularAltura ? 30 : 7), b.cor, 10);
-    if (rotularAltura && ca && cb) {
-      const razao = Math.round((cb.altura / ca.altura) * 100);
-      const dentro = razao >= 62 && razao <= 82;
-      textoCentrado(
-        ctx,
-        `corpo (sem arma nem contorno): ${ca.altura}px · ${cb.altura}px = ${razao}% ` +
-          '(alvo §4: 13u/18u = 72%)',
-        (x0 + x1) / 2,
-        h - 17,
-        dentro ? '#5fb36a' : '#d9534f',
-        10
-      );
-      if (ma && mb) {
-        textoCentrado(
-          ctx,
-          `silhueta cheia (com arma): ${ma.altura}px · ${mb.altura}px — NÃO é o número de G7`,
-          (x0 + x1) / 2,
-          h - 6,
-          COR_SILHUETA_CHEIA,
-          9
-        );
-      }
+    for (let j = 0; j < medidas.length; j++) {
+      const m = medidas[j];
+      if (!m) continue;
+      const cx = x0 + folga + larguraCelula * (j + 0.5);
+      textoCentrado(ctx, `${m.lado.nome} · dir ${dir}`, cx, h - (rotularAltura ? 42 : 7), m.lado.cor, 10);
     }
+
+    if (rotularAltura) desenharRodape(ctx, rodapePorDir[i] ?? [], (x0 + x1) / 2, h);
   }
   return cv;
+}
+
+/**
+ * As três linhas de veredito sob um grupo da tira: razão de corpo de cada um
+ * contra o Guerreiro (G7), a cadeia de ordenação (G10) e a silhueta cheia.
+ *
+ * A régua é o Guerreiro, e não "o primeiro da lista", porque é ele que os três
+ * contratos usam como denominador (13u/18u, 7u/18u, 24u/18u). Sem ele na tira a
+ * razão não é calculável e a folha diz isso em vez de inventar um denominador.
+ */
+function linhasDeEscala(medidas: readonly MedidaLado[]): LinhaRodape[] {
+  const regua = medidas.find((m) => m.lado.nome === CHAVE_REGUA);
+  const alturaRegua = regua ? alturaAcimaDaAncora(regua) : null;
+  const uRegua = regua && typeof regua.lado.alturaU === 'number' ? regua.lado.alturaU : 0;
+
+  const partes: string[] = [];
+  let tudoDentro = alturaRegua !== null && uRegua > 0;
+  for (const m of medidas) {
+    const acima = alturaAcimaDaAncora(m);
+    if (acima === null) {
+      partes.push(`${m.lado.nome} —`);
+      tudoDentro = false;
+      continue;
+    }
+    if (alturaRegua === null || uRegua <= 0 || typeof m.lado.alturaU !== 'number' || m.lado.alturaU <= 0) {
+      partes.push(`${m.lado.nome} ${acima}px`);
+      continue;
+    }
+    const razao = Math.round((acima / alturaRegua) * 100);
+    const alvo = Math.round((m.lado.alturaU / uRegua) * 100);
+    const tol = Math.max(4, Math.round(alvo * TOLERANCIA_RAZAO));
+    const dentro = razao >= alvo - tol && razao <= alvo + tol;
+    if (!dentro) tudoDentro = false;
+    partes.push(
+      `${m.lado.nome} ${acima}px ${razao}% (alvo ${m.lado.alturaU}u = ${alvo}%)${dentro ? '' : ' ✗'}`
+    );
+  }
+  // G10 — a cadeia. Ela é conferida na ORDEM EM QUE A TIRA DESENHA, que é a
+  // ordem do §13; um "cresce" aqui é o gate respondido por medição.
+  const alturas = medidas.map((m) => alturaAcimaDaAncora(m));
+  const mensuravel = alturas.every((a) => a !== null);
+  let cresce = mensuravel;
+  for (let i = 1; i < alturas.length && cresce; i++) {
+    const ant = alturas[i - 1];
+    const at = alturas[i];
+    if (ant === null || at === null || at <= ant) cresce = false;
+  }
+  const cadeia = medidas.map((m) => m.lado.nome).join(' < ');
+
+  return [
+    {
+      texto: `corpo acima do chão (sem arma nem contorno), % do guerreiro: ${partes.join(' · ')}`,
+      cor: tudoDentro ? '#5fb36a' : '#d9534f',
+      tam: 10
+    },
+    {
+      texto: mensuravel
+        ? cresce
+          ? `G10 ok — a altura acima do chão cresce na ordem ${cadeia}`
+          : `G10 REPROVADO — a altura acima do chão NÃO cresce na ordem ${cadeia}`
+        : 'G10 não medível nesta folha (getImageData indisponível)',
+      cor: mensuravel && cresce ? '#5fb36a' : '#d9534f',
+      tam: 10
+    },
+    {
+      texto:
+        'silhueta cheia, do topo à base, com arma e com a PROFUNDIDADE dobrada pela projeção: ' +
+        `${medidas.map((m) => `${m.lado.nome} ${px(m.cheia)}`).join(' · ')} — NÃO é o número dos gates`,
+      cor: COR_SILHUETA_CHEIA,
+      tam: 9
+    }
+  ];
+}
+
+/** Desenha as três linhas do rodapé, de baixo para cima a partir de `h`. */
+function desenharRodape(
+  ctx: CanvasRenderingContext2D,
+  linhas: readonly LinhaRodape[],
+  cx: number,
+  h: number
+): void {
+  const base = [h - 29, h - 17, h - 6];
+  for (let i = 0; i < linhas.length; i++) {
+    const l = linhas[i];
+    if (!l) continue;
+    textoCentrado(ctx, l.texto, cx, base[i] ?? h - 6, l.cor, l.tam);
+  }
 }
 
 /**
@@ -1541,13 +2022,87 @@ function contador(): () => string {
   return () => String(++n);
 }
 
+/** Um `Preparado` visto pela tira de escala. */
+function ladoDe(p: Preparado, cor?: string): Lado {
+  return {
+    atlas: p.atlas,
+    nome: p.ficha.chave,
+    cor: cor ?? p.ficha.corNaTira,
+    aco: p.aco,
+    alturaU: p.ficha.alturaU
+  };
+}
+
+/**
+ * O elenco na ordem do §13 (Slime, Goblin, Guerreiro, Ogro), pulando quem não
+ * pôde ser forjado. Um bicho ausente não pode derrubar a tira: G9 com três dos
+ * quatro ainda é uma pergunta respondível, e a legenda diz quem faltou.
+ */
+function elencoDisponivel(cache: Map<string, Preparado | null>): Preparado[] {
+  const saida: Preparado[] = [];
+  for (const chave of ORDEM_ELENCO) {
+    const p = cache.get(chave);
+    if (p) saida.push(p);
+  }
+  return saida;
+}
+
+/** Quem o elenco não conseguiu forjar, para a legenda dizer em vez de omitir. */
+function faltandoNoElenco(cache: Map<string, Preparado | null>): string[] {
+  return ORDEM_ELENCO.filter((c) => !cache.get(c));
+}
+
+/**
+ * A faixa do elenco (G9 e G10), pronta para entrar em qualquer folha.
+ *
+ * `zoomGrande` é a linha de julgamento — uma direção só, ampliada, com o rodapé
+ * de medidas. Abaixo dela vêm as 8 direções em tamanho de jogo, em duas linhas
+ * de quatro: numa linha só a tira passaria de 3000px e a folha inteira herdaria
+ * essa largura, porque o `<body>` é `max-content`.
+ */
+function faixaDoElenco(
+  elenco: readonly Preparado[],
+  zoomGrande: number,
+  incluirOitoDirecoes: boolean
+): HTMLElement[] {
+  const lados = elenco.map((p) => ladoDe(p));
+  const nos: HTMLElement[] = [tiraComparativa(lados, [DIR_ANIMACAO], zoomGrande, true)];
+  if (incluirOitoDirecoes) {
+    nos.push(tiraComparativa(lados, [0, 1, 2, 3], 1, false));
+    nos.push(tiraComparativa(lados, [4, 5, 6, 7], 1, false));
+  }
+  return nos;
+}
+
+/** O subtítulo da faixa do elenco, incluindo quem faltou. */
+function subtituloElenco(faltando: readonly string[]): string {
+  const base =
+    'mesma escala, mesma âncora, mesmos losangos — nenhum fator de zoom entre eles · ' +
+    'ordem de tamanho do §13: ' +
+    ORDEM_ELENCO.join(' < ') +
+    ' · G9 se julga pela SILHUETA e pela SATURAÇÃO (Slime vibrante, Goblin médio, ' +
+    'Ogro pálido — §12.2), G10 pela linha de veredito, que compara a altura de corpo ' +
+    'ACIMA DO CHÃO medida no atlas com a razão de contrato em `u` (ver ' +
+    '`alturaAcimaDaAncora`: a altura da silhueta NÃO serve, porque a projeção ' +
+    'isométrica soma a profundidade do bicho dentro dela)' +
+    ' · O VEREDITO DE G10 É A CADEIA, NÃO A %: o `alvo` sai da altura de MASSA que ' +
+    'o contrato declara em `u` (7 · 13 · 18 · 24), enquanto o MEDIDO é o pixel de corpo ' +
+    'mais alto — e esse inclui crista, orelha, antena e espinho, que nenhum dos quatro ' +
+    'contratos conta na altura declarada. Por isso os três monstros medem alguns pontos ' +
+    'ACIMA do alvo por construção, e não por erro de âncora; quem calibrar o quinto bicho ' +
+    'pela % vai achatá-lo sem motivo';
+  if (faltando.length === 0) return base;
+  return `${base} · ATENÇÃO: faltou forjar ${faltando.join(', ')} — a tira está incompleta`;
+}
+
 function montar(
   raiz: HTMLElement,
   alvo: Preparado,
-  comparado: Preparado | null,
+  outros: Map<string, Preparado | null>,
   forjaMs: number
 ): number {
   const ficha = alvo.ficha;
+  const comparado = ficha.compararCom ? (outros.get(ficha.compararCom) ?? null) : null;
   const atlas = alvo.atlas;
   const zDir = zoomDirecoes(atlas);
   const zAnim = Math.max(4, zDir - 1);
@@ -1582,6 +2137,17 @@ function montar(
   }
   if (typeof atlas.pixel === 'number') meds.append(medida('pixel', `${atlas.pixel}×`));
   meds.append(medida('ampliação', `${zDir}×`));
+  // §12.5 — a oclusão, medida em vez de estimada: quanto a silhueta transborda
+  // do losango de 64×32 para cada lado da âncora. É o número que o Ogro (24u)
+  // precisa publicar, e ele vale para todo mundo porque a pendência de z-buffer
+  // é do renderer, não do bicho. O verde é a folga já conhecida do Guerreiro.
+  const invasao = extensaoHorizontal(atlas, [0, 1, 2, 3, 4, 5, 6, 7]);
+  if (invasao !== null) {
+    const excesso = Math.max(0, Math.round(invasao - CONFIG.TW / 2));
+    meds.append(
+      medida('invade o tile', `${excesso}px (meia silhueta ${invasao}px · meio tile ${CONFIG.TW / 2}px)`, excesso <= 12)
+    );
+  }
   cab.append(tit, meds);
   raiz.append(cab);
 
@@ -1617,7 +2183,8 @@ function montar(
     if (estado.chave === 'parado') continue;
     const s = secao(
       `${n()} · ${estado.chave} — ${rotuloDir}`,
-      `${estado.quadros} quadros · ${estado.descricao} · ampliados ${zAnim}×`
+      `${estado.quadros} quadros · ${ficha.legendasAnim?.[estado.chave] ?? estado.descricao} · ` +
+        `ampliados ${zAnim}×`
     );
     const f = el('div', 'faixa');
     for (let i = 0; i < estado.quadros; i++) {
@@ -1653,22 +2220,25 @@ function montar(
       comparado
         ? 'mesma escala, mesma âncora, mesmos losangos — nenhum fator de zoom entre os dois · ' +
             'tracejada COLORIDA = topo do corpo (sem arma nem contorno), tracejada cinza = ' +
-            'silhueta cheia · G7 se julga pela primeira: a §4 compara 13u de corpo com 18u ' +
-            'de corpo, não com a ponta da espada erguida'
+            'silhueta cheia · G7 se julga pela primeira, e o número publicado é a altura ' +
+            `ACIMA DO CHÃO: a §4 compara ${ficha.alturaU}u de corpo com ` +
+            `${FICHA_GUERREIRO.alturaU}u de corpo, não com a ponta da espada erguida nem ` +
+            'com a profundidade que a projeção isométrica dobra dentro da silhueta'
         : 'INDISPONÍVEL — ver aviso abaixo'
     );
     if (comparado) {
-      const ladoRef: Lado = {
-        atlas: comparado.atlas,
-        nome: comparado.ficha.chave,
-        cor: '#e0a43c',
-        aco: comparado.aco
-      };
-      const ladoAlvo: Lado = { atlas: atlas, nome: ficha.chave, cor: '#5fb36a', aco: alvo.aco };
+      // A ordem é a de tamanho do §13 quando ela é conhecida: o Ogro fica à
+      // DIREITA do guerreiro e o Slime à esquerda, para a leitura da tira bater
+      // com a cadeia que G10 cobra. Sem altura declarada, mantém guerreiro
+      // primeiro, que é como a tira nasceu.
+      const par: readonly Lado[] =
+        alvo.ficha.alturaU > comparado.ficha.alturaU
+          ? [ladoDe(comparado), ladoDe(alvo)]
+          : [ladoDe(alvo), ladoDe(comparado)];
       sCmp.append(
         pilhaDeCanvas(
-          tiraComparativa(ladoRef, ladoAlvo, [DIR_ANIMACAO], 3, true),
-          tiraComparativa(ladoRef, ladoAlvo, [0, 1, 2, 3, 4, 5, 6, 7], 1, false)
+          tiraComparativa(par, [DIR_ANIMACAO], 3, true),
+          tiraComparativa(par, [0, 1, 2, 3, 4, 5, 6, 7], 1, false)
         )
       );
     } else {
@@ -1688,14 +2258,18 @@ function montar(
   if (ficha.tiraDeLuz) {
     const semEmissiva = alvo.emissivas.length === 0;
     const sLuz = secao(
-      `${n()} · 4 níveis de luz (G8)`,
+      `${n()} · ${NIVEIS_LUZ.length} níveis de luz (G8)`,
       `atlas forjado UMA vez com brilho pleno e escurecido no desenho (§1) · ` +
         `${LUZ.degraus} degraus quantizados, cache por (quadro, degrau) · ` +
         `alfa da sombra no degrau 0 = ${LUZ.alfaMax} (ALFA_SOMBRA_MAX do forge, ` +
         'calibrado pelo `litEntity` dos inimigos geométricos — o corpo perde ~metade ' +
         'do brilho, não vira preto) · ' +
         (semEmissiva
-          ? 'ATENÇÃO: nenhuma cor emissiva encontrada na paleta — os olhos vão escurecer junto'
+          ? ficha.emissivaPorContrato
+            ? 'este personagem NÃO tem cor emissiva, por decisão do contrato (§12.2): ' +
+              'aqui G8 se julga só pelo corpo escurecendo por inteiro — nenhum ponto ' +
+              'pode ficar aceso'
+            : 'ATENÇÃO: nenhuma cor emissiva encontrada na paleta — os olhos vão escurecer junto'
           : `emissivas preservadas: ${ficha.nomes.emissivas.join(', ')} (§1.1)`)
     );
     const ladoLuz: Lado = { atlas: atlas, nome: ficha.chave, cor: '#5fb36a' };
@@ -1707,6 +2281,32 @@ function montar(
     if (detalhe) canvasesLuz.push(detalhe);
     sLuz.append(pilhaDeCanvas(...canvasesLuz));
     colsExtra.append(sLuz);
+    temExtra = true;
+  }
+
+  /* --- o elenco inteiro: G9 e G10 (§13) --- */
+  if (ficha.tiraDeElenco) {
+    const elenco = elencoDisponivel(outros);
+    const faltando = faltandoNoElenco(outros);
+    const sElenco = secao(
+      `${n()} · o elenco inteiro (G9 e G10)`,
+      elenco.length >= 2
+        ? subtituloElenco(faltando)
+        : 'INDISPONÍVEL — não houve personagem suficiente para montar a tira'
+    );
+    if (elenco.length >= 2) {
+      // Sem as 8 direções aqui: elas custam ~1500px de largura e esta folha já é
+      // a do bicho. Quem precisa das oito abre `preview-elenco.png`.
+      sElenco.append(pilhaDeCanvas(...faixaDoElenco(elenco, 3, false)));
+      const nota = el(
+        'p',
+        'sub',
+        'esta é a mesma tira que a folha do elenco (docs/ref/preview-elenco.png, ' +
+          '`npm run preview:personagem -- elenco`) mostra em tamanho maior e nas 8 direções.'
+      );
+      sElenco.append(nota);
+    }
+    colsExtra.append(sElenco);
     temExtra = true;
   }
 
@@ -1770,6 +2370,112 @@ function montar(
   );
 
   return totalQuadros;
+}
+
+/**
+ * A folha do ELENCO — só a tira dos quatro, grande, e o que ajuda a julgá-la.
+ *
+ * Ela não tem atlas, nem paleta, nem 72 quadros: é a imagem de PRODUTO desta
+ * fase. Quem a abre está respondendo duas perguntas — "são espécies diferentes?"
+ * (G9) e "o tamanho conta a história certa?" (G10) —, e qualquer coisa a mais
+ * na página só disputa a atenção com elas.
+ *
+ * O que entra além da tira: as quatro paletas empilhadas, porque G9 é metade
+ * silhueta e metade SATURAÇÃO (§12.2: Slime vibrante, Goblin médio, Ogro
+ * pálido), e essa metade não se julga olhando sprite de 60px.
+ */
+function montarElenco(
+  raiz: HTMLElement,
+  ficha: Ficha,
+  cache: Map<string, Preparado | null>,
+  forjaMs: number
+): number {
+  const elenco = elencoDisponivel(cache);
+  const faltando = faltandoNoElenco(cache);
+  const n = contador();
+
+  const cab = el('header', 'cabecalho');
+  const tit = el('div');
+  tit.append(
+    el('h1', 'titulo', ficha.titulo),
+    el(
+      'p',
+      'subtitulo',
+      `${elenco.length} de ${ORDEM_ELENCO.length} personagens forjados · ${ficha.doc} · ` +
+        'compare com as quatro referências de docs/ref/'
+    )
+  );
+  const meds = el('div', 'medidas');
+  meds.append(medida('forja total', `${forjaMs.toFixed(1)} ms`));
+  for (const p of elenco) {
+    meds.append(medida(p.ficha.chave, `${p.ficha.alturaU}u · ${p.ms.toFixed(0)} ms`));
+  }
+  cab.append(tit, meds);
+  raiz.append(cab);
+
+  if (elenco.length < 2) {
+    const aviso = el(
+      'div',
+      'erro',
+      `O elenco precisa de pelo menos dois personagens forjados e só ${elenco.length} ` +
+        `saiu. Faltaram: ${faltando.join(', ') || '(nenhum)'}.`
+    );
+    raiz.append(aviso);
+    return 0;
+  }
+
+  const sTira = secao(`${n()} · o elenco (G9 e G10)`, subtituloElenco(faltando));
+  sTira.append(pilhaDeCanvas(...faixaDoElenco(elenco, 4, true)));
+  raiz.append(sTira);
+
+  const colsBaixo = el('div', 'colunas');
+
+  const sPal = secao(
+    `${n()} · as paletas lado a lado (a metade de G9 que o sprite não mostra)`,
+    'os três monstros são esverdeados de propósito e é a SATURAÇÃO que os separa à ' +
+      'distância (§12.2) · se duas colunas destas parecerem a mesma coisa aqui, elas ' +
+      'vão parecer a mesma coisa na masmorra'
+  );
+  for (const p of elenco) {
+    const pares = paresDaPaleta(p.ficha, p.mod);
+    if (pares.length === 0) continue;
+    sPal.append(el('div', 'rotulo', `${p.ficha.chave} — ${pares.length} cores`));
+    const grade = el('div', 'paleta');
+    for (const [nome, cor] of pares) {
+      const a = el('div', 'amostra');
+      const sw = el('i');
+      sw.style.background = cor;
+      a.append(sw, el('span', undefined, nome), el('b', undefined, cor));
+      grade.append(a);
+    }
+    sPal.append(grade);
+  }
+  colsBaixo.append(sPal);
+
+  const sGates = secao(`${n()} · gates desta folha (${ficha.docGate})`, 'responda por escrito, um a um');
+  const lista = el('ul', 'gates');
+  for (const [id, texto] of ficha.gates) {
+    const li = el('li');
+    li.append(el('b', undefined, `${id} `), document.createTextNode(texto));
+    lista.append(li);
+  }
+  sGates.append(lista);
+  colsBaixo.append(sGates);
+  raiz.append(colsBaixo);
+
+  raiz.append(
+    el(
+      'div',
+      'rodape',
+      'Gerado por tools/preview-personagem.mjs -- elenco · nenhum recurso externo · ' +
+        'a folha de cada bicho (preview-slime/goblin/ogro.png) traz esta mesma tira ' +
+        'menor, junto dos outros oito gates.'
+    )
+  );
+
+  // O "quadro" desta folha é o somatório dos atlas que ela abriu — é o número
+  // que o capturador imprime, e zero aqui pareceria folha vazia.
+  return elenco.length * 8 * ESTADOS.reduce((s, e) => s + e.quadros, 0);
 }
 
 function painelErro(raiz: HTMLElement, ficha: Ficha, e: unknown): void {
@@ -1839,31 +2545,72 @@ function escolherFicha(): Ficha {
   return FICHA_GUERREIRO;
 }
 
+/**
+ * Forja os personagens de apoio de uma folha, tolerando falha em cada um.
+ *
+ * Um bicho que não forja não pode derrubar a folha inteira: G7, G9 e G10 ficam
+ * sem imagem, e os outros sete gates continuam julgáveis. O `Map` guarda também
+ * o `null` do que falhou, para a legenda poder dizer QUEM faltou em vez de
+ * simplesmente desenhar menos gente sem explicar.
+ *
+ * O cache é por chave e alimentado uma vez só, porque cada `prepararPersonagem`
+ * forja 72 quadros: a folha do ogro precisa dele, do guerreiro (G7) e do elenco
+ * inteiro (G9/G10), e sem cache o guerreiro seria forjado duas vezes.
+ */
+function prepararApoio(
+  chaves: readonly string[],
+  cache: Map<string, Preparado | null> = new Map<string, Preparado | null>()
+): Map<string, Preparado | null> {
+  for (const chave of chaves) {
+    if (cache.has(chave)) continue;
+    const outra = FICHAS.find((f) => f.chave === chave && f.modo === 'personagem');
+    if (!outra) {
+      cache.set(chave, null);
+      continue;
+    }
+    try {
+      cache.set(chave, prepararPersonagem(outra));
+    } catch (e) {
+      console.warn(`personagem de apoio indisponível (${chave}):`, msgDe(e));
+      cache.set(chave, null);
+    }
+  }
+  return cache;
+}
+
+/** Quem esta folha precisa forjar além do alvo. */
+function apoioNecessario(ficha: Ficha): string[] {
+  const chaves: string[] = [];
+  if (ficha.compararCom) chaves.push(ficha.compararCom);
+  if (ficha.tiraDeElenco) chaves.push(...ORDEM_ELENCO);
+  return chaves;
+}
+
 function principal(): void {
   const raiz = document.getElementById('bancada');
   if (!raiz) return;
   const ficha = escolherFicha();
   document.title = ficha.titulo;
   try {
-    const alvo = prepararPersonagem(ficha);
-    let comparado: Preparado | null = null;
-    if (ficha.compararCom) {
-      const outra = FICHAS.find((f) => f.chave === ficha.compararCom);
-      if (outra) {
-        try {
-          comparado = prepararPersonagem(outra);
-        } catch (e) {
-          // A comparação é acessório: sem ela G7 fica sem imagem, mas a folha do
-          // personagem continua útil para os outros sete gates.
-          console.warn('comparação indisponível:', msgDe(e));
-          comparado = null;
-        }
-      }
+    if (ficha.modo === 'elenco') {
+      const cache = prepararApoio(ORDEM_ELENCO);
+      let soma = 0;
+      for (const p of cache.values()) if (p) soma += p.ms;
+      const forjaMs = forjaInformada() ?? soma;
+      const quadros = montarElenco(raiz, ficha, cache, forjaMs);
+      marcar(ficha.chave, forjaMs, quadros);
+      return;
     }
+
+    const alvo = prepararPersonagem(ficha);
+    // O alvo entra no cache ANTES do apoio: ele aparece na própria lista do
+    // elenco, e sem a semente `prepararApoio` o forjaria uma segunda vez.
+    const semente = new Map<string, Preparado | null>([[ficha.chave, alvo]]);
+    const cache = prepararApoio(apoioNecessario(ficha), semente);
     // Ordem de preferência: o número real medido pelo capturador (passada 1, sem
     // relógio virtual) > o que a própria forja cronometrou > o nosso relógio.
     const forjaMs = forjaInformada() ?? alvo.ms;
-    const quadros = montar(raiz, alvo, comparado, forjaMs);
+    const quadros = montar(raiz, alvo, cache, forjaMs);
     marcar(ficha.chave, forjaMs, quadros);
   } catch (e) {
     painelErro(raiz, ficha, e);

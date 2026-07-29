@@ -5,6 +5,9 @@
  *   node tools/preview-personagem.mjs                → docs/ref/preview-atlas.png  (guerreiro)
  *   npm run preview:personagem                       → idem
  *   npm run preview:personagem -- goblin             → docs/ref/preview-goblin.png
+ *   npm run preview:personagem -- slime              → docs/ref/preview-slime.png
+ *   npm run preview:personagem -- ogro               → docs/ref/preview-ogro.png
+ *   npm run preview:personagem -- elenco             → docs/ref/preview-elenco.png
  *   node tools/preview-personagem.mjs --personagem=goblin --sem-build
  *
  * Sem argumento nada muda em relação a antes desta fase: mesma página, mesmo
@@ -50,6 +53,22 @@ const FONTES_COMUNS = [
 ];
 
 /**
+ * Os quatro rigs que as tiras de G7, G9 e G10 precisam ter no disco.
+ *
+ * Toda folha de monstro exige os quatro, e não só o seu: G9 ("leem como
+ * espécies diferentes?") e G10 ("Slime < Goblin < Guerreiro < Ogro?") só são
+ * julgáveis com o elenco inteiro na imagem. Faltando um, a página degrada com
+ * aviso — mas é melhor descobrir isso aqui, com um erro legível, do que numa
+ * folha em que a tira aparece com três bonecos e ninguém repara.
+ */
+const ELENCO = [
+  'src/render/characters/slime.ts',
+  'src/render/characters/goblin.ts',
+  'src/render/characters/warrior.ts',
+  'src/render/characters/ogre.ts'
+];
+
+/**
  * Os personagens que a bancada sabe fotografar. `chave` é o que se passa na
  * linha de comando e no fragmento da URL — tem de bater com a ficha de mesmo
  * nome em tools/preview-entry.ts, senão a página desenha o guerreiro e a
@@ -75,12 +94,62 @@ const PERSONAGENS = [
     saida: join('docs', 'ref', 'preview-goblin.png'),
     fonte: 'src/render/characters/goblin.ts',
     referencia: 'docs/ref/goblin-referencia.jpg',
-    gates: 'G1..G8',
-    doc: 'docs/BESTIARIO.md §8',
-    // G7 põe o guerreiro ao lado do goblin: sem o rig dele a folha sai com um
-    // aviso vermelho no lugar da tira de escala.
-    exigeTambem: ['src/render/characters/warrior.ts'],
+    gates: 'G1..G10',
+    doc: 'docs/BESTIARIO.md §8 e §13',
+    // G7 põe o guerreiro ao lado do goblin e G9/G10 põem o elenco inteiro: sem
+    // os rigs deles a folha sai com um aviso vermelho no lugar das tiras.
+    exigeTambem: ELENCO,
     dicaFalta: 'o rig do goblin ainda não foi escrito — veja docs/BESTIARIO.md §5 e §7.'
+  },
+  {
+    chave: 'slime',
+    apelidos: ['gosma'],
+    saida: join('docs', 'ref', 'preview-slime.png'),
+    fonte: 'src/render/characters/slime.ts',
+    referencia: 'docs/ref/slime-referencia.jpg',
+    gates: 'G1..G10',
+    doc: 'docs/BESTIARIO.md §11 e §13',
+    exigeTambem: ELENCO,
+    dicaFalta: 'o rig do slime ainda não foi escrito — veja docs/BESTIARIO.md §11.3.'
+  },
+  {
+    chave: 'ogro',
+    apelidos: ['ogre'],
+    saida: join('docs', 'ref', 'preview-ogro.png'),
+    fonte: 'src/render/characters/ogre.ts',
+    referencia: 'docs/ref/ogro-referencia.png',
+    gates: 'G1..G11',
+    doc: 'docs/BESTIARIO.md §12 e §13',
+    exigeTambem: ELENCO,
+    dicaFalta: 'o rig do ogro ainda não foi escrito — veja docs/BESTIARIO.md §12.3.'
+  },
+  {
+    /*
+     * A folha do elenco: só a tira dos quatro juntos, grande e nas 8 direções.
+     *
+     * Ela é a única entrada sem personagem próprio, e é de propósito. G9 ("leem
+     * como espécies diferentes?") e G10 ("Slime < Goblin < Guerreiro < Ogro?")
+     * são as duas perguntas de PRODUTO desta fase, e quem as responde é o dono
+     * do jogo olhando UMA imagem — não caçando uma faixa pequena no rodapé de
+     * três folhas densas de 72 quadros cada. A mesma tira continua embutida em
+     * cada folha de monstro, menor, para o escultor não trocar de arquivo a cada
+     * ajuste; esta aqui é a que se manda para o dono.
+     */
+    chave: 'elenco',
+    apelidos: ['todos', 'cast'],
+    saida: join('docs', 'ref', 'preview-elenco.png'),
+    // Sem "o" personagem: a folha exige os quatro, e `exigeTambem` cobre todos.
+    fonte: 'src/render/characters/warrior.ts',
+    referencia: 'docs/ref/ (as quatro referências)',
+    gates: 'G9 e G10',
+    doc: 'docs/BESTIARIO.md §13',
+    exigeTambem: ELENCO,
+    // Esta folha forja QUATRO atlas: o número que ela publica é a SOMA, e o
+    // alvo de < 40 ms de §7 é por atlas. Sem esta marca o relatório acusaria um
+    // estouro que não existe — ver onde `somaForja` é lido, mais abaixo.
+    somaForja: true,
+    dicaFalta:
+      'algum rig do elenco ainda não foi escrito — a folha do elenco precisa dos quatro.'
   }
 ];
 
@@ -103,7 +172,19 @@ function curto(caminho) {
 }
 
 const TAMANHO_RESERVA = { largura: 1800, altura: 1200 };
-const LIMITES = { larguraMin: 320, larguraMax: 8000, alturaMin: 240, alturaMax: 12000 };
+/**
+ * Os limites existem para o caso de a página publicar um número absurdo — não
+ * para "caber". Subiram na fase dos três monstros, depois de o teto anterior de
+ * 8000 cortar a folha do Ogro (8453px na época) EM SILÊNCIO, bem na coluna da
+ * folha de contato: um PNG com um pedaço faltando e um "✓" verde ao lado.
+ *
+ * A largura em si foi resolvida onde devia — as legendas longas passaram a
+ * quebrar (`.sub { max-width }` em tools/preview.html) e o Ogro voltou para
+ * ~6300px. O que ficou daqui é a lição: o teto agora é o do próprio Chrome, que
+ * não aloca framebuffer acima de ~16384px por eixo, e `medirPagina` AVISA
+ * quando corta. Um limite que corta calado é pior que folha grande.
+ */
+const LIMITES = { larguraMin: 320, larguraMax: 16000, alturaMin: 240, alturaMax: 16000 };
 
 /* ------------------------------------------------------------------ *
  * Utilidades
@@ -140,8 +221,12 @@ function ajuda() {
       '  --sem-build   reaproveita .preview/preview.html (iteração rápida na página)\n' +
       '  --saida=      destino do PNG (padrão: o da ficha do personagem)\n\n' +
       'exemplos:\n' +
-      `  npm run preview:personagem              → ${PERSONAGENS[0].saida}\n` +
-      `  npm run preview:personagem -- goblin    → ${PERSONAGENS[1].saida}`
+      '  npm run preview:personagem              → ' +
+      PADRAO.saida +
+      '\n' +
+      PERSONAGENS.filter((p) => p !== PADRAO)
+        .map((p) => `  npm run preview:personagem -- ${p.chave.padEnd(9)} → ${p.saida}`)
+        .join('\n')
   );
 }
 
@@ -282,6 +367,7 @@ function medirPagina(chrome, perfil, url) {
       largura: TAMANHO_RESERVA.largura,
       altura: TAMANHO_RESERVA.altura,
       forjaMs: null,
+      corte: null,
       quadros: null,
       personagem: personagem ? personagem[1] : null,
       erroPagina: erro ? erro[1] : null,
@@ -289,10 +375,20 @@ function medirPagina(chrome, perfil, url) {
     };
   }
   const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const pedidaL = Number(tamanho[1]);
+  const pedidaA = Number(tamanho[2]);
+  const largura = clamp(pedidaL, LIMITES.larguraMin, LIMITES.larguraMax);
+  const altura = clamp(pedidaA, LIMITES.alturaMin, LIMITES.alturaMax);
+  const cortes = [];
+  if (largura !== pedidaL) cortes.push(`largura ${pedidaL} → ${largura}`);
+  if (altura !== pedidaA) cortes.push(`altura ${pedidaA} → ${altura}`);
   return {
     medido: true,
-    largura: clamp(Number(tamanho[1]), LIMITES.larguraMin, LIMITES.larguraMax),
-    altura: clamp(Number(tamanho[2]), LIMITES.alturaMin, LIMITES.alturaMax),
+    largura: largura,
+    altura: altura,
+    // Corte é achado, não detalhe: o PNG sai com um pedaço da folha faltando e
+    // o revisor não tem como saber olhando a imagem.
+    corte: cortes.length > 0 ? cortes.join(' · ') : null,
     forjaMs: forja ? Number(forja[1]) : null,
     quadros: quadros ? Number(quadros[1]) : null,
     personagem: personagem ? personagem[1] : null,
@@ -359,6 +455,12 @@ function principal() {
           (medida.pista ? ` ${cor.fraco(medida.pista)}` : '')
       );
     }
+    if (medida.corte) {
+      console.warn(
+        cor.aviso(`! a folha não cabe no limite da captura e SAIU CORTADA: ${medida.corte}`) +
+          `\n  ${cor.fraco('ajuste LIMITES em tools/preview-personagem.mjs ou enxugue a folha.')}`
+      );
+    }
     // A página diz qual ficha ela usou. Divergência aqui significa fragmento
     // ignorado ou chave sem ficha correspondente — fotografar assim mesmo
     // produziria um PNG do personagem errado com o nome do certo.
@@ -389,13 +491,30 @@ function principal() {
     }
 
     if (medida.forjaMs !== null) {
-      const dentro = medida.forjaMs <= 40;
+      // O alvo de §7 é por ATLAS. A folha do elenco forja quatro deles, então
+      // medir a soma contra 40 ms acusaria um estouro que não existe — e um
+      // aviso amarelo que ninguém pode consertar é um aviso que se aprende a
+      // ignorar, inclusive quando ele passar a ser verdade.
+      if (personagem.somaForja) {
+        console.log(
+          `  forja dos ${ELENCO.length} atlas: ${medida.forjaMs.toFixed(1)} ms ` +
+            cor.fraco('(soma — o alvo de < 40 ms de §7 é por atlas, ver as folhas individuais)')
+        );
+      } else {
+        const dentro = medida.forjaMs <= 40;
+        console.log(
+          `  forja do atlas: ${medida.forjaMs.toFixed(1)} ms ` +
+            (dentro ? cor.ok('(alvo < 40 ms — ok)') : cor.aviso('(alvo < 40 ms — estourou)'))
+        );
+      }
+    }
+    if (medida.quadros !== null) {
       console.log(
-        `  forja do atlas: ${medida.forjaMs.toFixed(1)} ms ` +
-          (dentro ? cor.ok('(alvo < 40 ms — ok)') : cor.aviso('(alvo < 40 ms — estourou)'))
+        personagem.somaForja
+          ? `  quadros nos ${ELENCO.length} atlas: ${medida.quadros}`
+          : `  quadros no atlas: ${medida.quadros}`
       );
     }
-    if (medida.quadros !== null) console.log(`  quadros no atlas: ${medida.quadros}`);
 
     console.log(
       '\n' +

@@ -8,7 +8,7 @@ tags: [indice, render, arte, personagem, moc]
 
 Canvas 2D escrito à mão, sem WebGL, sem biblioteca de matriz e sem um único arquivo de
 imagem: a arte é código que desenha. Esta pasta cobre de como um tile vira losango até como
-o guerreiro vira 72 quadros de pixel art forjados no boot.
+o guerreiro — e os três monstros — viram 72 quadros de pixel art forjados sob demanda.
 
 ## O mundo na tela
 
@@ -35,9 +35,21 @@ Leia nesta ordem: a decisão, o modelo, a fábrica.
 - [[ADR-006-atlas-forjado-em-runtime]] — por que forjar o atlas no boot (~37 ms) em vez de
   rasterizar o rig a cada frame ou embutir um PNG.
 
+## Os monstros
+
+O mesmo pipeline do guerreiro, apontado para os inimigos — e uma regra que protege o oracle.
+
+- [[ADR-007-monstro-e-aparencia-nao-arquetipo]] — por que Goblin, Slime e Ogro entraram como
+  **rosto** de `chaser`, `linker` e `sentinel`, sem uma linha de engine. Traz o custo dito por
+  extenso: o encaixe do Ogro é forçado e continua assim de propósito, com a correção marcada
+  para a fase de balanceamento.
+- [[bestiario-monstros]] — a tabela `RETRATOS` como ponto de extensão (três passos para o
+  próximo bicho), a modulação do sprite pela luz do tile, o cache LRU de 64 slots e as cores
+  emissivas que fazem um goblin no escuro virar dois pontos vermelhos.
+
 ## As armadilhas desta pasta
 
-Três erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando
+Cinco erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando
 alguma coisa parece "bug de cor" ou "bug de conversão".
 
 - [[armadilha-do-yaw-isometrico]] — a spec prescrevia `atan2(dy, dx)` e estava **errada**: o
@@ -50,6 +62,9 @@ alguma coisa parece "bug de cor" ou "bug de conversão".
 - [[virtual-time-congela-animacao]] — o creme que tinge o personagem inteiro na captura
   headless não é bug de blend: é o clarão de dano preso em 1 porque o relógio virtual parou o
   decaimento por `dt`.
+- [[legibilidade-em-40px]] — a cimitarra do goblin foi construída **fiel à referência** e por
+  isso mesmo ficou errada: no tamanho do jogo virou uma tábua cinza sem dono. Leia antes de
+  copiar qualquer pose de uma ilustração — e antes de aceitar um traço por área medida.
 
 ## Olhar para o resultado
 
