@@ -24,6 +24,9 @@ o guerreiro — e os três monstros — viram 72 quadros de pixel art forjados s
 
 Leia nesta ordem: a decisão, o modelo, a fábrica.
 
+- [[como-construir-um-personagem]] — **comece por aqui se for fazer o quinto bicho.** O passo
+  a passo completo, do intake ao gate: onde o pixel art nasce (a ordem da rasterização), os
+  truques de modelar curva e disco com caixas, e as quatro armadilhas que já custaram caro.
 - [[ADR-004-personagem-por-codigo]] — por que reconstruir o guerreiro como primitivas
   determinísticas em vez de voxelizar, extrudar ou importar malha. O método vem do
   img2threejs, adaptado — e sem Three.js, que é dependência.

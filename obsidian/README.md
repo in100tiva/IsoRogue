@@ -45,6 +45,9 @@ sintaxe própria são os links por nome de arquivo entre colchetes duplos, como
 
 ## Atalhos
 
+- [[estado-atual-e-proximos-passos]] — **ponto de retomada**: onde o projeto está, o que vem
+  a seguir e as pendências conhecidas. Leia primeiro se voltou depois de um tempo.
+- [[como-construir-um-personagem]] — o passo a passo para fazer um personagem novo.
 - [[visao-geral]] — o jogo e suas quatro restrições, em uma página.
 - [[rodar-e-buildar]] — do `npm ci` ao `dist/index.html`.
 - [[golden-test]] — o teste que autoriza dizer que a migração não mudou o jogo.
