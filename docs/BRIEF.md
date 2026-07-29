@@ -51,6 +51,9 @@ Cada item é verificável. O entregável é **um único arquivo HTML** (`index.h
 - R36 — Feridos podem fugir pelo gradiente invertido (valores maiores).
 - R37 — Arquétipo Perseguidor: avança sempre, ataca corpo a corpo.
 - R38 — Arquétipo Sentinela: mantém distância, recua, ataca à distância com linha de visão.
+  - *Emenda 2026-07-29: o arquétipo `sentinel` foi redefinido — agora é o **Brutamontes**,
+    corpo a corpo (alcance 1, ideal 1), sem recuo nem ataque à distância. R38 passa a ler:
+    "avança sempre, esmaga corpo a corpo".*
 - R39 — Arquétipo Vinculador: só ataca com outro aliado adjacente ao jogador.
 - R40 — Inimigos nunca ocupam o mesmo tile.
 - R41 — Conflitos de movimento resolvidos de forma determinística.

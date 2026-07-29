@@ -507,17 +507,26 @@ function criarCabeca(): No {
  * `model3d` uma caixa `acoBase` cai em acoLuz (topo) / acoBase (frente) /
  * acoSombra (lado) — os TRÊS tons de aço da §2. Declarada `acoLuz`, topo e
  * frente colapsariam no mesmo branco e o volume da lâmina sumiria.
+ *
+ * As quatro peças moram em `caixasDaEspada()` porque a espada tem DOIS donos de
+ * montagem: o nó pendurado na mão (`criarEspada`, logo abaixo) e o mini-rig
+ * solto de `criarModeloEspada`, forjado num atlas próprio para a cinemática de
+ * morte do guerreiro. Uma fonte só — as duas montagens nunca divergem.
  */
+function caixasDaEspada(): Caixa[] {
+  return [
+    detalhe('ouroLuz', [1.6, 1.6, 0.9], [0, 0, 0.1]), //  pomo
+    detalhe('couro', [1.4, 1.4, 2.6], [0, 0, 1.6]), //  punho   (§8: cz −8.4)
+    detalhe('ouroLuz', [4.2, 2.4, 1.2], [0, 0, 3.0]), //  guarda  (§8: cz −9.8)
+    detalhe('acoBase', [2.2, 1.8, 11.0], [0, 0, 9.0]) //  lâmina  (§8: cz −15.0)
+  ];
+}
+
 function criarEspada(): No {
   return {
     nome: NOS_GUERREIRO.espada,
     pivo: [0, 0, AJUSTES_GUERREIRO.espadaPivoZ],
-    caixas: [
-      detalhe('ouroLuz', [1.6, 1.6, 0.9], [0, 0, 0.1]), //  pomo
-      detalhe('couro', [1.4, 1.4, 2.6], [0, 0, 1.6]), //  punho   (§8: cz −8.4)
-      detalhe('ouroLuz', [4.2, 2.4, 1.2], [0, 0, 3.0]), //  guarda  (§8: cz −9.8)
-      detalhe('acoBase', [2.2, 1.8, 11.0], [0, 0, 9.0]) //  lâmina  (§8: cz −15.0)
-    ]
+    caixas: caixasDaEspada()
   };
 }
 
@@ -730,6 +739,51 @@ export function criarModeloGuerreiro(): No {
 /** O rig canônico do Guerreiro, pronto para o sprite forge (§7). Não mute. */
 export const MODELO_GUERREIRO: No = criarModeloGuerreiro();
 
+/**
+ * Variante SEM a espada, para a cinemática de morte: `criarModeloGuerreiro()`
+ * (árvore NOVA — `MODELO_GUERREIRO` nunca é tocado) com o filho `espada` de
+ * `bracoDir` podado pelo nome. Os campos de `No` são readonly, então a poda
+ * reconstrói os dois nós do caminho em vez de mutar — mesmo espírito do
+ * "árvore nova a cada chamada" do cabeçalho.
+ *
+ * Por que podar e não autorar um segundo rig: o corpo é o mesmo, e duas
+ * declarações do mesmo corpo divergem no primeiro ajuste visual.
+ */
+export function criarModeloGuerreiroSemEspada(): No {
+  const modelo = criarModeloGuerreiro();
+  const filhos = modelo.filhos ?? [];
+  return {
+    ...modelo,
+    filhos: filhos.map((no) =>
+      no.nome === NOS_GUERREIRO.bracoDir
+        ? {
+          ...no,
+          filhos: (no.filhos ?? []).filter((f) => f.nome !== NOS_GUERREIRO.espada)
+        }
+        : no
+    )
+  };
+}
+
+/**
+ * A espada SOZINHA, como mini-rig: um nó raiz com as quatro caixas de
+ * `caixasDaEspada()` em pé a partir da origem (a base do punho em z ≈ 0 — a
+ * âncora do atlas é o pomo, que é por onde a cinemática de morte a faz girar).
+ * Forjada com repouso neutro e lida na coluna ('parado', 0): a rotação da queda
+ * é de TELA (`ctx.rotate` no renderer), não de pose.
+ */
+export function criarModeloEspada(): No {
+  return {
+    nome: NOS_GUERREIRO.raiz,
+    pivo: [0, 0, 0],
+    caixas: caixasDaEspada()
+  };
+}
+
+/** Mesmo padrão de `MODELO_GUERREIRO`: constantes de módulo, não mutar. */
+export const MODELO_GUERREIRO_SEM_ESPADA: No = criarModeloGuerreiroSemEspada();
+export const MODELO_ESPADA: No = criarModeloEspada();
+
 /* ------------------------------------------------------------------ *
  * 7. Pose de repouso (§6, estado `parado`)
  * ------------------------------------------------------------------ */
@@ -769,4 +823,65 @@ export const POSE_PARADA: Pose = {
     rx: grausParaRad(A.escudoRx),
     rz: grausParaRad(A.escudoRz)
   }
+};
+
+/* ------------------------------------------------------------------ *
+ * 8. Poses da cinemática de morte (repousos de forja, não animação)
+ *
+ * Estas duas poses NÃO passam pela animação de §6: elas são passadas como
+ * `opts.repouso` ao sprite forge, que as congela na coluna ('parado', 0) de um
+ * atlas secundário — o IsoRenderer lê só essa coluna, na direção do facing.
+ *
+ * Convenção de sinal: a MESMA de `POSE_PARADA` (valores crus no espaço do
+ * modelo — o `ESPELHO` de `../spriteForge` só multiplica os deltas da animação
+ * genérica, nunca o repouso: ver `clonarPose` lá). Membros se estendem em −Z
+ * local: `rx > 0` leva a extremidade para +Y (a frente), `ry > 0` para −X.
+ * `Pose` não translada: "descer" o corpo se faz girando as pernas.
+ * ------------------------------------------------------------------ */
+
+/**
+ * POSE_AJOELHADA — um joelho no chão (fase 3 da morte, ~0,9 s).
+ *
+ * `pernaDir` dobrada para trás (rx −80°: a canela vai quase à horizontal para
+ * −Y, a leitura do joelho que tocou o chão) e `pernaEsq` à frente (rx +28°, o
+ * pé plantado adiante). Como a pose não baixa o quadril, é o par de pernas
+ * aberto em tesoura que vende a queda de altura — o tronco "pende" sobre o
+ * joelho. Torso +25° para a frente, cabeça caída +22° e os dois braços
+ * pendentes (rx perto de zero = mãos para baixo, com ry só para não fundirem
+ * no tronco; base nos valores de `POSE_PARADA`). O escudo perde parte da
+ * contra-inclinação de guarda porque o braço já não sobe. Sem `espada`: esta
+ * pose é forjada sobre `MODELO_GUERREIRO_SEM_ESPADA`.
+ */
+export const POSE_AJOELHADA: Pose = {
+  [NOS_GUERREIRO.pernaDir]: { rx: grausParaRad(-80) },
+  [NOS_GUERREIRO.pernaEsq]: { rx: grausParaRad(28) },
+  [NOS_GUERREIRO.torso]: { rx: grausParaRad(25) },
+  [NOS_GUERREIRO.cabeca]: { rx: grausParaRad(22) },
+  [NOS_GUERREIRO.bracoDir]: { rx: grausParaRad(8), ry: grausParaRad(18) },
+  [NOS_GUERREIRO.bracoEsq]: { rx: grausParaRad(10), ry: grausParaRad(-22) },
+  [NOS_GUERREIRO.escudo]: { rx: grausParaRad(-30), rz: grausParaRad(A.escudoRz) }
+};
+
+/**
+ * POSE_CAIDA — deitado no chão (fase 4 da morte, ~1,7 s).
+ *
+ * A via simples: girar a `raiz` em rx +85° tomba o corpo INTEIRO para a frente
+ * — na direção do olhar, já que o giro de facing do forge aponta +Y para cada
+ * direção do atlas. O corpo se estende a partir da âncora (os pés ficam na
+ * origem): aceitável e desejado, é o cadáver deitado no tile. Braços abertos
+ * (ry ±45°, a mesma convenção de abdução de `POSE_PARADA`), pernas levemente
+ * dobradas e assimétricas (cadáver simétrico lê como manequim), torso −8° e
+ * cabeça −12° compensando para o peito e o rosto não mergulharem no plano do
+ * chão, com rz +20° na cabeça — o elmo tombado de lado é o que separa
+ * "deitado" de "agachado" na ordem do pintor.
+ */
+export const POSE_CAIDA: Pose = {
+  [NOS_GUERREIRO.raiz]: { rx: grausParaRad(85) },
+  [NOS_GUERREIRO.torso]: { rx: grausParaRad(-8) },
+  [NOS_GUERREIRO.cabeca]: { rx: grausParaRad(-12), rz: grausParaRad(20) },
+  [NOS_GUERREIRO.bracoDir]: { rx: grausParaRad(10), ry: grausParaRad(45) },
+  [NOS_GUERREIRO.bracoEsq]: { rx: grausParaRad(10), ry: grausParaRad(-45) },
+  [NOS_GUERREIRO.escudo]: { rx: grausParaRad(A.escudoRx), rz: grausParaRad(A.escudoRz) },
+  [NOS_GUERREIRO.pernaDir]: { rx: grausParaRad(18) },
+  [NOS_GUERREIRO.pernaEsq]: { rx: grausParaRad(-12) }
 };

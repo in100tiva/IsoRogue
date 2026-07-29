@@ -236,6 +236,10 @@ R.Ent.ARCH = {
 }
 ```
 
+> **Emenda 2026-07-29:** `sentinel` passa a `nome:'Brutamontes', range:1, ideal:1, fem:false`
+> e peso de spawn 1 (`chaser` 10, `linker` 100). hp/atk/xp inalterados. O texto acima é o
+> contrato original, preservado como registro.
+
 Comportamento (todos usam **o mesmo `game.dmap`**):
 
 - **Perseguidor** — avança sempre pelo gradiente descendente; ataca corpo a corpo quando
@@ -243,6 +247,11 @@ Comportamento (todos usam **o mesmo `game.dmap`**):
 - **Sentinela** — mantém distância ideal 4: se `dist < 3` recua pelo gradiente de fuga;
   se `dist > 5` aproxima; ataca à distância quando tem linha de visão para o jogador e
   `dist <= range`. Sem LOS, aproxima.
+
+> **Emenda 2026-07-29:** o comportamento acima foi abolido. O **Brutamontes** tem a mesma
+> estrutura do Perseguidor: desce o gradiente e ataca corpo a corpo (alcance 1). Não há
+> mais recuo tático, faixa morta, tiro à distância nem teste de LOS na IA — nenhum
+> arquétipo atual tem `range > 1`.
 - **Vinculador** — só ataca (e só avança para o corpo a corpo) se **outro** inimigo vivo
   estiver adjacente ao jogador neste instante; caso contrário circula mantendo distância 2–3
   aguardando um aliado.

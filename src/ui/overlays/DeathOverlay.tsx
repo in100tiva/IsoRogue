@@ -16,10 +16,11 @@
  * casa) e o número exibido tem de bater com o do original.
  */
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { store } from '../../engine/store';
 import { CONFIG, newSeedString } from '../../engine/core';
 import { useGameVersion } from '../hooks/useGameStore';
+import { faseAtual, subscribeCinematics } from '../cinematics';
 import type { Game } from '../../engine/types';
 
 function num(v: unknown): number {
@@ -66,13 +67,21 @@ export function DeathOverlay() {
   const g = store.getGame();
   const botaoRef = useRef<HTMLButtonElement>(null);
   const over = !!g.over;
+  /*
+   * Gate da cinemática de morte: o modal SÓ abre quando a sequência termina
+   * (fade completo → fase 'concluida'). Sem renderer (ou com a cinemática
+   * pulada por prefers-reduced-motion) a fase chega a 'concluida' do mesmo
+   * jeito — o resumo nunca fica refém da animação.
+   */
+  const fase = useSyncExternalStore(subscribeCinematics, faseAtual, faseAtual);
+  const aberto = over && fase === 'concluida';
 
   // O vanilla dava foco ao botão ao abrir o resumo — teclado continua útil.
   useEffect(() => {
-    if (!over) return;
+    if (!aberto) return;
     const b = botaoRef.current;
     if (b && typeof b.focus === 'function') b.focus();
-  }, [over]);
+  }, [aberto]);
 
   /*
    * O corpo do resumo só é montado na morte — é o que o vanilla faz: em
@@ -107,7 +116,7 @@ export function DeathOverlay() {
   };
 
   return (
-    <div id="morte" className="morte" hidden={!over}>
+    <div id="morte" className="morte" hidden={!aberto}>
       <div
         className="morte-caixa"
         role="dialog"

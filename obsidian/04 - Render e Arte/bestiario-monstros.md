@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [render, bestiario, monstros, sprite, emissivo]
 ---
 
@@ -24,6 +24,12 @@ Então o Goblin não é uma criatura: é o **rosto** do `chaser` que já existia
 do `linker`, o Ogro é o do `sentinel`. Hp, atk, alcance, IA, peso de spawn e ordem de `KINDS`
 continuam byte a byte o que eram antes da fase. A decisão e o preço dela estão em
 [[ADR-007-monstro-e-aparencia-nao-arquetipo]].
+
+*(2026-07-29: o "byte a byte" acima vale para a fase de arte. A fase seguinte mexeu no
+`sentinel` de verdade — alcance 6→1, ideal 4→1, IA reescrita como corpo a corpo, pesos de
+spawn 5/2/1 → 10/1/100 — e o oracle foi regenerado de propósito. O encaixe forçado do Ogro
+acabou: o Brutamontes agora **é** corpo a corpo. Ver
+[[2026-07-29-brutamontes-e-a-masmorra-de-slimes]].)*
 
 A segunda proibição é gêmea: **o `facing` do inimigo não entra no engine**. Ele é derivado por
 observação da mudança de tile entre turnos, em `orientarInimigo`

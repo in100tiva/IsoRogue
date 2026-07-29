@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [turnos, progressao, morte-permanente, engine, estado]
 ---
 
@@ -114,8 +114,8 @@ Duas alavancas, ambas em função de `depth`:
 
 **Quantidade e força dos inimigos** — `min(22, 4 + depth*2)` criaturas,
 `hp = base + floor(base * 0.15 * (depth-1))`, `atk = base + floor((depth-1)/2)`, e pesos de
-sorteio que favorecem Sentinela e Vinculador conforme desce
-(`src/engine/entities.ts:513-528`). Detalhes em [[arquetipos-de-inimigo]].
+sorteio que reforçam Brutamontes e Vinculador conforme desce
+(`src/engine/entities.ts:516-531`). Detalhes em [[arquetipos-de-inimigo]].
 
 **Recursos** — poções no chão `max(1, 3 + ((depth*7) % 3) - floor(depth/4))`: a fórmula
 oscila e depois seca.

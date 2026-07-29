@@ -21,6 +21,7 @@
 import { useEffect, useRef } from 'react';
 import { store } from '../engine/store';
 import { IsoRenderer } from '../render/IsoRenderer';
+import { sincronizar } from './cinematics';
 import { attachPointer, reprojectPointer } from './hooks/usePointer';
 import { reportFrame, resetFps } from './hooks/useFps';
 
@@ -65,6 +66,10 @@ export function GameCanvas() {
       try {
         const g = store.getGame();
         renderer.update(g, dt); // SÓ animação (R54)
+        // A ponte das cinemáticas: a fase calculada pelo renderer vai ao
+        // micro-store da UI, que emite só na MUDANÇA (gate do modal de morte
+        // e trava de input). Uma chamada por quadro, custo de um `===`.
+        sincronizar(renderer.faseCinematica());
         reportFrame(dt);
         // A câmera anda sozinha a cada passo (R09): o tile sob um ponteiro
         // PARADO muda de quadro em quadro. Reprojetamos com a câmera já lerpada

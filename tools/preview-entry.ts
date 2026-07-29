@@ -139,6 +139,14 @@ const NOMES_DIR: readonly string[] = [
  * bancada sobreviver a um rename sem virar tela de erro.
  */
 interface NomesDeExport {
+  /**
+   * Nomes do RIG PRINCIPAL do módulo, em ordem de preferência. Obrigatório
+   * desde que o guerreiro passou a exportar TRÊS rigs (corpo inteiro, corpo
+   * sem espada e a espada solta): a busca por forma pega o primeiro `ehRig`
+   * de `Object.values`, cuja ordem é ALFABÉTICA — `MODELO_ESPADA` viria antes
+   * de `MODELO_GUERREIRO` e a folha inteira seria forjada da espada.
+   */
+  readonly modelo: readonly string[];
   readonly paleta: readonly string[];
   readonly rampas: readonly string[];
   readonly rampaDaCor: readonly string[];
@@ -267,6 +275,7 @@ const FICHA_GUERREIRO: Ficha = {
   docGate: '§10',
   referencia: 'docs/ref/guerreiro-referencia.png',
   nomes: {
+    modelo: ['MODELO_GUERREIRO'],
     paleta: ['PALETA_GUERREIRO', 'PALETA'],
     rampas: ['RAMPAS_GUERREIRO', 'RAMPAS'],
     rampaDaCor: ['RAMPA_DA_COR_GUERREIRO', 'RAMPA_DA_COR'],
@@ -303,6 +312,7 @@ const FICHA_GOBLIN: Ficha = {
   docGate: '§8 e §13 do BESTIARIO.md',
   referencia: 'docs/ref/goblin-referencia.jpg',
   nomes: {
+    modelo: ['MODELO_GOBLIN'],
     paleta: ['PALETA_GOBLIN', 'PALETA'],
     rampas: ['RAMPAS_GOBLIN', 'RAMPAS'],
     rampaDaCor: ['RAMPA_DA_COR_GOBLIN', 'RAMPA_DA_COR'],
@@ -342,6 +352,7 @@ const FICHA_SLIME: Ficha = {
   docGate: '§13 do BESTIARIO.md',
   referencia: 'docs/ref/slime-referencia.jpg',
   nomes: {
+    modelo: ['MODELO_SLIME'],
     paleta: ['PALETA_SLIME', 'PALETA'],
     rampas: ['RAMPAS_SLIME', 'RAMPAS'],
     rampaDaCor: ['RAMPA_DA_COR_SLIME', 'RAMPA_DA_COR'],
@@ -397,6 +408,7 @@ const FICHA_OGRO: Ficha = {
   docGate: '§13 do BESTIARIO.md',
   referencia: 'docs/ref/ogro-referencia.png',
   nomes: {
+    modelo: ['MODELO_OGRO'],
     paleta: ['PALETA_OGRO', 'PALETA'],
     rampas: ['RAMPAS_OGRO', 'RAMPAS'],
     rampaDaCor: ['RAMPA_DA_COR_OGRO', 'RAMPA_DA_COR'],
@@ -464,6 +476,7 @@ const FICHA_ELENCO: Ficha = {
   docGate: '§13 do BESTIARIO.md',
   referencia: 'docs/ref/{slime,goblin,guerreiro,ogro}-referencia.*',
   nomes: {
+    modelo: [],
     paleta: [],
     rampas: [],
     rampaDaCor: [],
@@ -591,6 +604,12 @@ function resolverModulo(ficha: Ficha): Registro {
 
 /** Acha o rig do personagem: um `No` exportado direto ou devolvido por uma fábrica. */
 function resolverRig(mod: Registro, ficha: Ficha): RigLike {
+  // Nome canônico primeiro: com mais de um rig no módulo (o guerreiro tem
+  // três), a ordem alfabética de `Object.values` escolheria o errado.
+  for (const n of ficha.nomes.modelo) {
+    const v = mod[n];
+    if (ehRig(v)) return v;
+  }
   for (const valor of Object.values(mod)) {
     if (ehRig(valor)) return valor;
   }
@@ -2095,6 +2114,52 @@ function subtituloElenco(faltando: readonly string[]): string {
   return `${base} · ATENÇÃO: faltou forjar ${faltando.join(', ')} — a tira está incompleta`;
 }
 
+/**
+ * As poses da cinemática de morte do guerreiro (ajoelhada e caída), forjadas
+ * como REPUSOS sobre o modelo sem espada e lidas na coluna ('parado', 0) —
+ * exatamente o que o IsoRenderer desenha nas fases 3 e 4 da morte.
+ *
+ * A faixa só existe quando o módulo exporta as três peças pelo NOME
+ * (`MODELO_GUERREIRO_SEM_ESPADA`, `POSE_AJOELHADA`, `POSE_CAIDA`): os outros
+ * personagens não as têm e a folha de nenhum deles muda por causa desta seção.
+ * Busca por nome, sem fallback de forma — `ehPose` casaria com `POSE_PARADA` e
+ * a faixa mentiria. Erro de forja sobe: a folha principal falha alto (o
+ * capturador publica `data-erro`), como em qualquer seção dela.
+ */
+function secaoPosesCinematicas(alvo: Preparado, zAnim: number, n: () => string): HTMLElement | null {
+  const mod = alvo.mod;
+  const modelo = mod['MODELO_GUERREIRO_SEM_ESPADA'];
+  const ajoelhada = mod['POSE_AJOELHADA'];
+  const caida = mod['POSE_CAIDA'];
+  if (!ehRig(modelo) || !ehPose(ajoelhada) || !ehPose(caida)) return null;
+
+  const { opts } = montarOpcoes(mod, alvo.ficha);
+  const s = secao(
+    `${n()} · cinemática de morte — poses ajoelhada e caída (dir ${DIR_ANIMACAO})`,
+    'forjadas como repouso sobre o modelo SEM espada e lidas na coluna parado/0, ' +
+      'como o IsoRenderer faz nas fases 3 e 4 da morte · a espada solta, o sangue ' +
+      'e o fade são desenho de tela do renderer, não desta folha'
+  );
+  const f = el('div', 'faixa');
+  const pares: readonly (readonly [string, unknown])[] = [
+    ['ajoelhada (~0,9 s)', ajoelhada],
+    ['caída (~1,7 s)', caida]
+  ];
+  for (const [rotulo, pose] of pares) {
+    const forjar = resolverForja(modForge as unknown as Registro, { ...opts, repouso: pose });
+    const atlas = exigirPixels(forjar(modelo));
+    f.append(
+      cartao(
+        celulaQuadro(atlas, DIR_ANIMACAO, 'parado', 0, zAnim),
+        rotulo,
+        `repouso forjado · parado/0 · dir ${DIR_ANIMACAO}`
+      )
+    );
+  }
+  s.append(f);
+  return s;
+}
+
 function montar(
   raiz: HTMLElement,
   alvo: Preparado,
@@ -2199,6 +2264,10 @@ function montar(
     s.append(f);
     colsAnim.append(s);
   }
+
+  /* --- poses da cinemática de morte (só entra quem as exporta: o guerreiro) --- */
+  const sCine = secaoPosesCinematicas(alvo, zAnim, n);
+  if (sCine) colsAnim.append(sCine);
 
   /* --- 4, 5 e 6. tamanho de jogo, paleta e gates --- */
   const colsBaixo = el('div', 'colunas');

@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [arquitetura, teste, oracle, migracao, regressao]
 ---
 
@@ -70,6 +70,14 @@ Não regere o `snapshots.json` para "resolver" uma falha. Não afrouxe uma compa
 caso. O comentário de cabeçalho do arquivo diz isso em letras maiúsculas
 (`test/golden.test.ts:22-23`), e é a única postura que faz o teste valer alguma coisa: um
 oracle que se ajusta ao código sob teste não é oracle, é espelho.
+
+A exceção que confirma a regra aconteceu em **2026-07-29**: a primeira regeneração
+**deliberada** do oracle. O comportamento mudou de propósito — a Sentinela virou o
+Brutamontes e os pesos de spawn passaram a 10/1/100 —, o vanilla legacy recebeu as mesmas
+edições **antes**, e só então `node tools/gen-golden.mjs` rodou: vanilla espelhado →
+gen-golden → `npm run check` 73/73. Não foi "o teste ficou vermelho e eu regenerei"; foi o
+procedimento de [[ADR-003-golden-test-como-oracle-da-migracao]] para mudança intencional,
+executado pela primeira vez. Ver [[2026-07-29-brutamontes-e-a-masmorra-de-slimes]].
 
 O relatório de falha foi construído para essa postura. A comparação é feita em **ordem
 cronológica do jogo** — mapa → população → estado inicial → comando a comando → marcos de 10

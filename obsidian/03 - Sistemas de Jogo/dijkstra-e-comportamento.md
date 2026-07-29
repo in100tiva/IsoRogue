@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [dijkstra, ia, pathfinding, determinismo, engine]
 ---
 
@@ -32,8 +32,8 @@ Três razões, nesta ordem de importância:
 2. **Determinismo.** Um campo escalar único tem *uma* resposta por tile. N buscas
    independentes têm N heurísticas, N filas de prioridade e N critérios de desempate, tudo
    candidato a divergir entre plataformas. Ver [[determinismo]].
-3. **Comportamento emergente barato.** Fuga, cerco e recuo tático saem de *transformações
-   do mesmo campo*, sem escrever pathfinding novo.
+3. **Comportamento emergente barato.** Fuga por ferimento, cerco e a órbita do
+   Vinculador saem de *transformações do mesmo campo*, sem escrever pathfinding novo.
 
 O buffer é ainda reservado: `computeDmap` mantém um `game.dbuf` próprio
 (`src/engine/game.ts:211-212`) porque `computeDijkstra` recicla um `Int32Array` por objeto

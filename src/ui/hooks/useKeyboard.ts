@@ -32,6 +32,7 @@ import { useEffect } from 'react';
 import { store } from '../../engine/store';
 import { CONFIG, clamp } from '../../engine/core';
 import { getRenderer } from '../GameCanvas';
+import { inputBloqueado } from '../cinematics';
 
 const ZOOM_STEP = 1.12;
 
@@ -188,6 +189,9 @@ function executar(acao: Acao): void {
 
 export function handleKey(ev: KeyboardEvent): void {
   if (!ev) return;
+  // Cinemática em curso (intro da descida ou morte): o jogador não comanda
+  // nada até a fase liberar — nem movimento, nem os atalhos de interface.
+  if (inputBloqueado()) return;
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
   if (ehCampoDeTexto(ev.target) || ehCampoDeTexto(elementoFocado())) return;
 

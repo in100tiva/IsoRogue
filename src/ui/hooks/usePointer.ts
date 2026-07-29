@@ -26,6 +26,7 @@ import { useSyncExternalStore } from 'react';
 import { store } from '../../engine/store';
 import { CONFIG, idx } from '../../engine/core';
 import { inBounds } from '../../engine/mapgen';
+import { inputBloqueado } from '../cinematics';
 import type { Game, Point } from '../../engine/types';
 
 /** Posição do ponteiro em coordenadas de cliente (as que o balão usa). */
@@ -157,6 +158,8 @@ export function attachPointer(
   // Clique em tile adjacente move/ataca; clique sobre a própria escada desce.
   // (Porte de `onClick` do vanilla — é comportamento existente, não feature nova.)
   const onMouseDown = (ev: MouseEvent): void => {
+    // Cinemática em curso (intro da descida ou morte): clique não comanda nada.
+    if (inputBloqueado()) return;
     const g = store.getGame();
     if (g.over) return;
     const pos = posNoCanvas(cv, ev);

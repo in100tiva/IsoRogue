@@ -58,10 +58,10 @@ const HP_POR_DESCIDA = 2;  // §7: maxHp += 2 ao descer
 
 const NOMES: Record<string, string> = {
   chaser: 'Perseguidor',
-  sentinel: 'Sentinela',
+  sentinel: 'Brutamontes',
   linker: 'Vinculador'
 };
-const FEMININO: Record<string, boolean> = { chaser: false, sentinel: true, linker: false };
+const FEMININO: Record<string, boolean> = { chaser: false, sentinel: false, linker: false };
 const ESTADOS: Record<string, string> = {
   idle: 'ocioso',
   hunt: 'caçando',
