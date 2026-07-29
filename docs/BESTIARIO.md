@@ -283,6 +283,14 @@ Uma consequência de produto que vale notar: com peso 5/2/1, o jogador vê **Gob
 Ogro 25%, Slime 13%** no nível 1. O Slime é o mais raro justamente por ser o de encaixe mais
 natural; o balanceamento também vai querer olhar isso.
 
+> **Emenda 2026-07-29:** o encaixe forçado acabou e a distribuição virou. O `sentinel` foi
+> redefinido como **Brutamontes** — range 1, ideal 1, IA corpo a corpo no molde do `chaser`
+> — e os pesos passaram de 5/2/1 para **10/1/100** (chaser/sentinel/linker): no nível 1,
+> Slime ~90%, Goblin ~9%, Ogro ~1%. O oracle foi regenerado de propósito no mesmo dia
+> (vanilla espelhado → `tools/gen-golden.mjs` → 73/73). Todo o §10 fica como registro do
+> estado de 2026-07-28. Pendência nova: a animação de ataque do Ogro continua sendo um
+> arremesso, concebida para um ataque à distância que não existe mais.
+
 ## 11. Slime — o arquétipo `linker`
 
 ### 11.1 Intake

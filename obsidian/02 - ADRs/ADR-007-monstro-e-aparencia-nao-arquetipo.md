@@ -1,6 +1,6 @@
 ---
 tipo: adr
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [bestiario, arquetipos, golden, render, decisao]
 ---
 
@@ -128,3 +128,12 @@ não que ela mudou o jogo de propósito.
 Relacionadas: [[bestiario-monstros]] · [[arquetipos-de-inimigo]] · [[golden-test]] ·
 [[ADR-003-golden-test-como-oracle-da-migracao]] ·
 [[ADR-005-facing-cosmetico-invisivel-ao-oracle]] · [[ADR-006-atlas-forjado-em-runtime]]
+
+---
+
+*(2026-07-29: resolvido — a revisão marcada neste ADR aconteceu. O `sentinel` deixou de ser
+atirador e virou o **Brutamontes** corpo a corpo (alcance 1, ideal 1, `aiSentinel` reescrita
+no molde de `aiChaser`), os pesos passaram de 5/2/1 para 10/1/100 e o oracle foi regenerado
+de propósito, com o vanilla espelhado antes — ver
+[[2026-07-29-brutamontes-e-a-masmorra-de-slimes]]. O encaixe do Ogro deixou de ser forçado.
+O texto acima permanece como registro da decisão de 2026-07-28.)*

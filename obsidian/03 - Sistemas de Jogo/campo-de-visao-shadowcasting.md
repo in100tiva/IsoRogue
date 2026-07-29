@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [fov, shadowcasting, simetria, engine, render]
 ---
 
@@ -17,10 +17,12 @@ de duas maneiras que o jogo sente:
 - **Buracos e artefatos de amostragem.** Com raios discretos, tiles distantes ficam entre
   dois raios e somem; aumentar N esconde o sintoma e custa caro.
 - **Assimetria.** O raio A→B e o raio B→A percorrem sequências de arredondamento
-  diferentes. O resultado é um inimigo que atira em você de um lugar de onde você não o
-  vê. Como a Sentinela decide atacar exatamente por linha de visão
-  (`src/engine/entities.ts:698`, ver [[arquetipos-de-inimigo]]), a assimetria vira uma
-  regra de jogo injusta e não um detalhe gráfico.
+  diferentes. O resultado, com um atirador em cena, é um inimigo que atira em você de um
+  lugar de onde você não o vê. Foi o caso da Sentinela antiga, que decidia atacar
+  exatamente por linha de visão (ver [[arquetipos-de-inimigo]]): a assimetria virava uma
+  regra de jogo injusta e não um detalhe gráfico. Desde 2026-07-29 nenhum arquétipo tem
+  alcance > 1, mas a simetria continua contrato (R27) — se um atirador voltar, ela já
+  está garantida.
 
 O contrato então fixa **shadowcasting recursivo por quadrantes** (variante simétrica de
 Albert Ford). O comentário de cabeça do arquivo (`src/engine/fov.ts:1-30`) documenta que
@@ -80,7 +82,9 @@ corte por Chebyshev com arredondamento faria.
 
 `isVisibleFrom` reusa o mesmo `scan`, mas só varre os quadrantes que cobrem o alvo
 (`quadrantCovers`, `src/engine/fov.ts:186`). Mesmo algoritmo, mesmo resultado, um quarto
-do trabalho — a Sentinela chama isso todo turno.
+do trabalho. Era a Sentinela quem chamava isso todo turno; hoje o predicado só entra na
+revide de um ferido encurralado com alcance > 1 — caso que nenhum arquétipo atual
+exercita, mas que o engine continua sabendo resolver.
 
 ## A sonda da tecla V
 

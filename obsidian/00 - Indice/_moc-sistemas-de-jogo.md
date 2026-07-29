@@ -1,6 +1,6 @@
 ---
 tipo: indice
-atualizado: 2026-07-28
+atualizado: 2026-07-29
 tags: [indice, engine, jogo, moc]
 ---
 
@@ -30,7 +30,7 @@ por número, não por interface: um limiar alterado aqui reprova o golden lá.
 
 ## Quem se move e como
 
-- [[arquetipos-de-inimigo]] — Perseguidor, Sentinela e Vinculador numa tabela, sem herança.
+- [[arquetipos-de-inimigo]] — Perseguidor, Brutamontes e Vinculador numa tabela, sem herança.
   Tem a resolução determinística de conflito de movimento e o spawn proporcional à área por
   *largest remainder*.
 - [[turnos-e-progressao]] — o que consome turno (e o que só escreve no registro sem

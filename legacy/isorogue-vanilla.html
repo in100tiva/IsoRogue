@@ -2513,7 +2513,7 @@ kbd {
   /* `cor`/`corDetalhe`/`forma` são dicas para o render; `xp` para a progressão;
    * `peso` é o peso base de sorteio no spawn; `ideal` é a distância preferida;
    * `fem` é o gênero gramatical do nome, usado para concordar artigo e particípio
-   * nas mensagens do registro ('A Sentinela foge ferida'). */
+   * nas mensagens do registro ('foge ferida' × 'foge ferido'). */
   var ARCH = {
     chaser: {
       key: 'chaser',
@@ -2527,23 +2527,23 @@ kbd {
       corDetalhe: '#f2a6a3',
       forma: 'triangulo',
       xp: 3,
-      peso: 5,
+      peso: 10,
       desc: 'Avança sem hesitar pelo caminho mais curto e golpeia corpo a corpo.'
     },
     sentinel: {
       key: 'sentinel',
-      nome: 'Sentinela',
-      fem: true,
+      nome: 'Brutamontes',
+      fem: false,
       hp: 9,
       atk: 3,
-      range: 6,
-      ideal: 4,
+      range: 1,
+      ideal: 1,
       cor: '#4a90d9',
       corDetalhe: '#a9cbef',
       forma: 'hexagono',
       xp: 4,
-      peso: 2,
-      desc: 'Mantém quatro passos de distância e dispara quando tem linha de visão.'
+      peso: 1,
+      desc: 'Avança sem hesitar e esmaga corpo a corpo com a marreta.'
     },
     linker: {
       key: 'linker',
@@ -2557,7 +2557,7 @@ kbd {
       corDetalhe: '#ddb8ec',
       forma: 'duplo-losango',
       xp: 6,
-      peso: 1,
+      peso: 100,
       desc: 'Só parte para o ataque quando outro inimigo já está colado no jogador.'
     }
   };
@@ -2593,7 +2593,8 @@ kbd {
     return ARCH[kind] || ARCH.chaser;
   }
 
-  /* Concordância de gênero: 'Sentinela' é feminino, os demais masculinos.
+  /* Concordância de gênero: hoje os três arquétipos são masculinos; o mecanismo
+   * fica de pé para futuros arquétipos femininos.
    * `art` devolve a vogal do artigo ('o'/'a') — serve tanto para o artigo solto
    * quanto para contrações ('d' + art, 'pel' + art) e para o particípio
    * ('ferid' + art). `Art` é o artigo inicial de frase, maiúsculo. */
@@ -2920,8 +2921,10 @@ kbd {
     return placed;
   }
 
-  /* Sorteio do arquétipo: pesos fixos com leve reforço de Sentinela/Vinculador
-   * conforme a profundidade. Determinístico (consome o rng de população). */
+  /* Sorteio do arquétipo: pesos base 10/1/100 (a cada 10 Vinculadores, 1
+   * Perseguidor; a cada 10 Perseguidores, 1 Brutamontes), com leve reforço de
+   * Brutamontes/Vinculador conforme a profundidade. Determinístico (consome o
+   * rng de população). */
   function pickKind(rng, depth) {
     var weights = [
       ARCH.chaser.peso,
@@ -3091,64 +3094,21 @@ kbd {
     }
   };
 
-  /* R38 — Sentinela: distância ideal 4. Recua abaixo de 3, aproxima acima de 5,
-   * atira com linha de visão dentro do alcance. */
+  /* R38 — Brutamontes: desce o gradiente e esmaga corpo a corpo com a marreta.
+   * Mesma estrutura do Perseguidor — sem recuo tático, sem tiro à distância. */
   Ent.aiSentinel = function (game, ent, ctx) {
     ctx = ctx || Ent.makeContext(game);
     if (isWounded(ent)) return fleeBehaviour(game, ent, ctx);
     var p = game.player;
-    var map = ctx.map;
-    var arch = archOf(ent.kind);
     var dist = R.cheb(ent.x, ent.y, p.x, p.y);
-    var losR = Math.max(ent.range, R.C.FOV_RADIUS);
-    var los = hasLOS(map, ent.x, ent.y, p.x, p.y, losR);
-
-    if (dist < 3) {
-      var back = gradientStep(game, ent, ctx, fleeMapOf(game, ctx));
-      if (back) {
-        /* Recuo TÁTICO (mantém a distância ideal), não fuga: a criatura segue
-         * caçando. O estado 'flee' fica reservado à fuga por ferimento (§6),
-         * senão o tooltip rotularia de 'em fuga' uma Sentinela com vida cheia.
-         * A mensagem sai só na primeira vez da sequência de recuo. */
-        if (String(ent.plan || '').indexOf('recua') !== 0) {
-          say(game, Art(arch) + ' ' + arch.nome + ' recua.', 'aviso');
-        }
-        ent.state = 'hunt';
-        ent.plan = 'recua para (' + back.x + ',' + back.y + ')';
-        return;
-      }
-      if (los && dist <= ent.range) {
-        attackPlayer(game, ent, true);
-        return;
-      }
-      ent.state = 'wait';
-      ent.plan = 'sem recuo possível';
+    if (dist <= Math.max(1, ent.range)) {
+      attackPlayer(game, ent, false);
       return;
     }
-
-    if (dist > 5 || !los) {
-      setState(game, ent, 'hunt', null);
-      var step = gradientStep(game, ent, ctx, ctx.dmap);
-      if (step) {
-        ent.plan = los
-          ? 'aproxima-se para (' + step.x + ',' + step.y + ')'
-          : 'procura linha de tiro';
-      } else {
-        ent.state = 'wait';
-        ent.plan = 'aguarda passagem';
-      }
-      return;
-    }
-
-    if (dist <= ent.range) {
-      attackPlayer(game, ent, true);
-      return;
-    }
-
     setState(game, ent, 'hunt', null);
-    var s2 = gradientStep(game, ent, ctx, ctx.dmap);
-    if (s2) {
-      ent.plan = 'aproxima-se para (' + s2.x + ',' + s2.y + ')';
+    var step = gradientStep(game, ent, ctx, ctx.dmap);
+    if (step) {
+      ent.plan = 'avança para (' + step.x + ',' + step.y + ')';
     } else {
       ent.state = 'wait';
       ent.plan = 'aguarda passagem';
@@ -5329,8 +5289,8 @@ kbd {
   var HP_POR_DESCIDA = 2;    // §7: maxHp += 2 ao descer
   var ZOOM_STEP = 1.12;
 
-  var NOMES = { chaser: 'Perseguidor', sentinel: 'Sentinela', linker: 'Vinculador' };
-  var FEMININO = { chaser: false, sentinel: true, linker: false };
+  var NOMES = { chaser: 'Perseguidor', sentinel: 'Brutamontes', linker: 'Vinculador' };
+  var FEMININO = { chaser: false, sentinel: false, linker: false };
   var ESTADOS = {
     idle: 'ocioso',
     hunt: 'caçando',
