@@ -132,6 +132,14 @@
         margin: 2px 0 12px;
         color: var(--fraco);
         font-size: 11px;
+        /* O <body> é `max-content`, então um parágrafo longo NÃO quebra sozinho:
+           ele estica a página inteira e o capturador fotografa uma folha de
+           10000px de largura por causa de uma legenda. O teto força a quebra.
+           1000px cabe as legendas que já existiam (a mais longa da folha do
+           guerreiro tem ~130 caracteres, ~860px), então nenhuma folha anterior
+           muda de layout — só as legendas novas, mais compridas, passam a
+           quebrar em vez de mandar na largura da página. */
+        max-width: 1000px;
       }
 
       /* stretch: os painéis de uma mesma faixa terminam na mesma altura. A sobra

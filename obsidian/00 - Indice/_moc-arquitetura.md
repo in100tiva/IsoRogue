@@ -54,14 +54,20 @@ se paga por isso.
   feature cosmética ao engine sem invalidar o oracle. Leia antes de propor o próximo campo
   novo no `Player`.
 
-Os ADRs de arte — [[ADR-004-personagem-por-codigo]] e [[ADR-006-atlas-forjado-em-runtime]] —
-estão indexados em [[_moc-render-e-arte]], mas são consequência direta do ADR-001.
+Os ADRs de arte — [[ADR-004-personagem-por-codigo]], [[ADR-006-atlas-forjado-em-runtime]] e
+[[ADR-007-monstro-e-aparencia-nao-arquetipo]] — estão indexados em [[_moc-render-e-arte]], mas
+são consequência direta do ADR-001 (o primeiro e o segundo) e do ADR-003 (o terceiro: dar cara
+aos inimigos sem invalidar o oracle).
 
 ## Histórico
 
 - [[2026-07-28-nascimento-migracao-e-guerreiro]] — o dia inteiro em três atos: nasceu em
   vanilla, migrou para React 19 + TypeScript, ganhou o guerreiro. Termina com a lista honesta
   do que ficou pendente.
+- [[2026-07-28-o-bestiario-goblin-slime-ogro]] — o quarto ato do mesmo dia: os três
+  arquétipos ganharam rosto e a modulação do sprite pela luz do tile foi implementada, sem
+  uma linha de engine. Fecha a pendência de escopo da entrada anterior e abre uma dívida de
+  design nomeada ([[ADR-007-monstro-e-aparencia-nao-arquetipo]]).
 
 ---
 

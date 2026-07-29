@@ -113,5 +113,11 @@ sem invalidar o oracle, seguindo o precedente do `bump` dos inimigos. Ver
 
 ---
 
+**Continua no mesmo dia:** [[2026-07-28-o-bestiario-goblin-slime-ogro]] fecha a pendência de
+escopo acima — os três arquétipos ganharam rosto e a modulação do sprite pela luz do tile foi
+implementada, sem tocar no engine.
+
+---
+
 Ver [[visao-geral]], [[camadas-e-fronteiras]], [[golden-test]], [[personagem-rig-3d]],
 [[sprite-forge]] e [[como-usar-este-cofre]].

@@ -122,9 +122,9 @@ Registradas para que ninguém "descubra" de novo:
 - Inverter a ordem "rasteriza em baixa resolução → amplia com
   `imageSmoothingEnabled = false`" transforma o guerreiro em 3D liso. A ordem **é** o
   estilo — [[pixel-art-nasce-da-rasterizacao]].
-- Migrar os inimigos para o atlas agora: eles continuam em formas geométricas de
-  propósito, porque falta modulação do quadro pela luz do tile — coisa que o jogador
-  não precisa por ser a fonte de luz. Está marcado como `TODO(inimigos-no-atlas)`.
+- Apagar o desenho geométrico dos inimigos "porque agora todo mundo tem sprite". Ele deixou
+  de ser o caminho normal e virou a rede de segurança de quem não consegue forjar atlas
+  (jsdom, Node, qualquer ambiente sem contexto 2D) — ver [[bestiario-monstros]].
 - Fazer o turno esperar animação. A animação é ilustração; o estado já mudou.
 
 ---

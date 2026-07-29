@@ -1,0 +1,21 @@
+/*
+  Typecheck da BANCADA de revisão (tools/preview-entry.ts).
+
+  Por que um arquivo separado: o `include` do tsconfig.json é
+  ["src", "test", "vite.config.ts"] — `tools/` fica de fora, e o build da
+  bancada (vite.preview.config.ts, sobre Rolldown) só TRANSPILA, sem checar
+  tipos. Resultado: até aqui `tools/preview-entry.ts` era o único TypeScript do
+  projeto que ninguém verificava, apesar de a regra do projeto ser strict sem
+  `any` e sem `@ts-ignore`. Um erro de tipo lá só aparecia como pixel errado na
+  folha, ou não aparecia.
+
+  `src` entra junto porque a bancada importa de `src/engine` e `src/render`; sem
+  ele o compilador não resolveria os módulos. As opções são as mesmas do projeto
+  — este arquivo só amplia o alcance, nunca afrouxa uma regra.
+
+  Rodado por `npm run typecheck:tools`, e por `npm run check` junto dos demais.
+*/
+{
+  "extends": "./tsconfig.json",
+  "include": ["tools/preview-entry.ts", "src"]
+}

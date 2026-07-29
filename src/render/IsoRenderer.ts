@@ -33,10 +33,15 @@
  *     jamais espera por ela (R54, §6 do PERSONAGEM.md).
  *
  * O QUE MUDOU NA FASE DO BESTIÁRIO (docs/BESTIARIO.md §0, §1 e §7):
- *   - O arquétipo `chaser` ganhou rosto: ele é o GOBLIN, desenhado com um quadro
- *     do atlas de `./characters/goblin`. `sentinel` e `linker` continuam em
- *     formas geométricas — os dois caminhos convivem, e o ponto de extensão por
- *     onde os próximos dois monstros entram é `RETRATOS` (logo abaixo).
+ *   - Os TRÊS arquétipos ganharam rosto: `chaser` é o GOBLIN, `linker` é o
+ *     SLIME (§11) e `sentinel` é o OGRO (§12), cada um desenhado com um quadro
+ *     do atlas do seu rig em `./characters/`. Quem faz o encaixe é a tabela
+ *     `RETRATOS` (logo abaixo) — uma linha por bicho, e nada mais neste arquivo
+ *     sabe qual monstro está desenhando.
+ *   - O desenho geométrico NÃO saiu: ele deixou de ser o caminho normal de
+ *     `sentinel`/`linker` e virou a rede de segurança de quem não conseguiu
+ *     forjar atlas (jsdom, sem contexto 2D). Os dois caminhos continuam
+ *     convivendo, e é o que mantém o jogo desenhável em ambiente sem Canvas.
  *   - O quadro do inimigo é MODULADO pela luz do tile (`lvl`) via
  *     `quadroModulado()` do sprite forge, com os olhos emissivos preservados em
  *     brilho pleno (§1.1). O jogador continua em brilho pleno: ele é a fonte de
@@ -88,6 +93,24 @@ import {
   RAMPAS_GOBLIN,
   RAMPA_DA_COR_GOBLIN
 } from './characters/goblin';
+import {
+  ARCO_GOLPE_SLIME,
+  CORES_EMISSIVAS_SLIME,
+  MODELO_SLIME,
+  PALETA_SLIME,
+  POSE_PARADA_SLIME,
+  RAMPAS_SLIME,
+  RAMPA_DA_COR_SLIME
+} from './characters/slime';
+import {
+  ARCO_GOLPE_OGRO,
+  CORES_EMISSIVAS_OGRO,
+  MODELO_OGRO,
+  PALETA_OGRO,
+  POSE_PARADA_OGRO,
+  RAMPAS_OGRO,
+  RAMPA_DA_COR_OGRO
+} from './characters/ogre';
 import { forjarAtlas, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -143,6 +166,59 @@ const FORJA_GOBLIN: OpcoesForja = {
   arcoGolpe: ARCO_GOLPE_GOBLIN
 };
 
+/**
+ * Opções da forja do Slime (§11 do BESTIARIO). Mesma forma da do Goblin — este
+ * arquivo continua sem saber o que é uma antena ou um olho em `+`.
+ *
+ * Duas coisas do rig do Slime que valem a linha, porque quem ler só esta
+ * constante não as veria:
+ *
+ * - `emissivas: CORES_EMISSIVAS_SLIME` é `['luzAmbar']`, e ela pinta os olhos
+ *   (S4) E a bolinha da antena (S5) — as duas peças que a §11.1 nomeia como a
+ *   leitura à distância do bicho. É o mesmo mecanismo dos olhos do Goblin, com
+ *   um pixel a mais em jogo: no escuro o slime vira dois `+` âmbar e um ponto
+ *   flutuante acima deles;
+ * - `arcoGolpe: ARCO_GOLPE_SLIME` NÃO move um braço, porque o slime não tem
+ *   braço nenhum: o rig pendura a antena num nó chamado `bracoDir` de propósito
+ *   (leia `NOS_SLIME` em `./characters/slime` antes de renomear qualquer coisa
+ *   lá), e é por esse canal que o chicote da antena no bote entra. Renomear o nó
+ *   sem ler aquele bloco quebra o chicote EM SILÊNCIO — o forge não reclama de
+ *   nome de nó que não existe.
+ */
+const FORJA_SLIME: OpcoesForja = {
+  paleta: PALETA_SLIME,
+  rampas: RAMPAS_SLIME,
+  rampaDaCor: RAMPA_DA_COR_SLIME,
+  repouso: POSE_PARADA_SLIME,
+  emissivas: CORES_EMISSIVAS_SLIME,
+  arcoGolpe: ARCO_GOLPE_SLIME
+};
+
+/**
+ * Opções da forja do Ogro (§12 do BESTIARIO). Idem, com uma diferença que é
+ * decisão do personagem e não omissão desta constante:
+ *
+ * `CORES_EMISSIVAS_OGRO` é a lista VAZIA — a §12.2 não declara cor emissiva e
+ * inventar uma reprovaria o gate G5. O forge trata vazio como ausente (nenhuma
+ * camada extra é alocada e `quadroModulado()` cai no tingimento simples), então
+ * passar a constante aqui custa zero e evita um `if` por personagem numa tabela
+ * que existe justamente para não ter nenhum. No escuro o Ogro não acende: ele é
+ * grande demais para caber no tile, e é ASSIM que se lê ogro a três tiles (G9).
+ *
+ * `arcoGolpe: ARCO_GOLPE_OGRO` é o ARREMESSO da §10 — a marreta fica apoiada na
+ * mão esquerda e quem trabalha nos 3 quadros de `atacando` é o braço direito. O
+ * arco genérico de §6 desferiria uma martelada que o `sentinel`, que ataca a 6
+ * tiles, nunca poderia estar dando.
+ */
+const FORJA_OGRO: OpcoesForja = {
+  paleta: PALETA_OGRO,
+  rampas: RAMPAS_OGRO,
+  rampaDaCor: RAMPA_DA_COR_OGRO,
+  repouso: POSE_PARADA_OGRO,
+  emissivas: CORES_EMISSIVAS_OGRO,
+  arcoGolpe: ARCO_GOLPE_OGRO
+};
+
 /** O rig e o material de um monstro — tudo o que a forja precisa saber dele. */
 interface FichaDeSprite {
   modelo: No;
@@ -155,7 +231,7 @@ interface FichaDeSprite {
  * Arquétipo → ficha do personagem. Quem tem ficha é desenhado com um quadro do
  * atlas (`desenharSpriteInimigo`); quem NÃO tem cai no desenho geométrico
  * (`desenharInimigoGeometrico`). Os dois caminhos convivem de propósito — é a
- * §7.3 do BESTIARIO, e é por aqui que os próximos dois monstros entram:
+ * §7.3 do BESTIARIO, e foi por aqui que os monstros 2 e 3 entraram:
  *
  *   1. escreva `./characters/<bicho>.ts` no molde de `./characters/goblin.ts`
  *      (modelo, paleta, rampas, rampa-da-cor, pose de repouso e — se ele tiver
@@ -164,17 +240,32 @@ interface FichaDeSprite {
  *   3. acrescente UMA linha nesta tabela.
  *
  * Nada mais neste arquivo muda: a orientação (§0.2), a modulação por luz (§1), a
- * sombra elíptica, a barra de vida e o clarão de dano já são genéricos.
+ * sombra elíptica, a barra de vida e o clarão de dano já são genéricos. Foi o
+ * que o Slime e o Ogro comprovaram — os dois entraram com três edições deste
+ * arquivo (dois imports, duas constantes, duas linhas aqui) e ZERO mudança em
+ * `drawEnemy`, em `desenharSpriteInimigo`, em `quadroDoInimigo` ou na âncora.
+ *
+ * A tabela agora está COMPLETA: os três arquétipos do jogo têm rosto, e o
+ * caminho geométrico deixou de ser o normal de dois deles para ser só a rede de
+ * segurança de quem não conseguiu forjar (jsdom, sem contexto 2D). Ele continua
+ * vivo e testado por isso — não é código morto, e apagá-lo tiraria os inimigos
+ * da tela em qualquer ambiente sem Canvas.
  *
  * O que NÃO se faz por aqui: arquétipo novo. A tabela é indexada por
  * `ArchetypeKey`, e essa união vem do engine — acrescentar um bicho de
  * COMPORTAMENTO novo é mudança de `populate()` e regeneração deliberada do
- * oracle (§0.1 do BESTIARIO), não é sprite.
+ * oracle (§0.1 do BESTIARIO), não é sprite. Um quarto MONSTRO, por outro lado,
+ * não cabe aqui de jeito nenhum: as três linhas abaixo esgotam `ArchetypeKey`, e
+ * é isso que a §10 chama de encaixe forçado do Ogro — resolver isso é a fase de
+ * balanceamento, com o oracle regenerado de propósito.
  */
 const RETRATOS: Readonly<Partial<Record<ArchetypeKey, FichaDeSprite>>> = {
   /** §7.2 — o Goblin é a APARÊNCIA do `chaser` que já existe. */
-  chaser: { modelo: MODELO_GOBLIN, forja: FORJA_GOBLIN }
-  // sentinel e linker: sem ficha, portanto geométricos nesta fase (§7.3).
+  chaser: { modelo: MODELO_GOBLIN, forja: FORJA_GOBLIN },
+  /** §11 — o Slime é a APARÊNCIA do `linker` (encaixe natural, §10). */
+  linker: { modelo: MODELO_SLIME, forja: FORJA_SLIME },
+  /** §12 — o Ogro é a APARÊNCIA do `sentinel` (encaixe forçado e assumido, §10). */
+  sentinel: { modelo: MODELO_OGRO, forja: FORJA_OGRO }
 };
 
 /**

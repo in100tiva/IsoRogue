@@ -105,9 +105,9 @@ espera pela animação. O `facing` só pôde entrar por ser cosmético — ver
 - O quadro é bem mais largo que os 64 px do losango, então o sprite invade os tiles
   vizinhos na mesma antidiagonal e passa por cima de paredes já desenhadas. Corrigir exige
   z-buffer — ver [[projecao-isometrica]].
-- Os inimigos **não** migraram para o atlas: continuam em formas geométricas
-  (`TODO(inimigos-no-atlas)`, `src/render/IsoRenderer.ts:922`). Faltaria modulação do quadro
-  pela luz do tile, coisa que o jogador não precisa por ser a fonte de luz.
+- ~~Os inimigos não migraram para o atlas.~~ **Fechada.** Os três arquétipos têm rig e atlas
+  próprios, e a modulação do quadro pela luz do tile que faltava está em `quadroModulado()`
+  (`src/render/spriteForge.ts:1423`). Ver [[bestiario-monstros]].
 
 Ver também: [[personagem-rig-3d]], [[paleta-e-estilo]], [[revisar-o-personagem]],
-[[inspecao-visual-headless]], [[_moc-render-e-arte]].
+[[inspecao-visual-headless]], [[bestiario-monstros]], [[_moc-render-e-arte]].

@@ -84,14 +84,15 @@ e projetam um losango escuro no tile a sudeste — sombra falsa e barata (`:810`
 ## O jogador é a fonte de luz
 
 Por isso o sprite dele sai com **brilho pleno**, sem modulação pelo `lvl` do tile: ele não
-está iluminado, ele ilumina. Os inimigos, esses sim, têm cor modulada pelo nível
-(`sh.main[lvl]` em `:947`).
+está iluminado, ele ilumina. Os inimigos, esses sim, têm cor modulada pelo nível — no desenho
+geométrico via `sh.main[lvl]`, e no sprite via `quadroModulado()`.
 
-É exatamente esse o buraco que sobra para quando os inimigos migrarem para o atlas de
-[[sprite-forge]]: faltaria um caminho de modulação do quadro pela luz do tile. Está
-registrado como `TODO(inimigos-no-atlas)` em `src/render/IsoRenderer.ts:922`, com a instrução
-de **não** implementar por antecipação — sem consumidor, o caminho nasceria sem revisão
-visual.
+Esse caminho de modulação era o buraco aberto enquanto os inimigos não tinham atlas
+(`TODO(inimigos-no-atlas)`), e ele **está fechado**: o atlas continua sendo forjado uma vez em
+brilho pleno e o escurecimento entra no desenho, com o `lvl` quantizado em 8 degraus e um
+cache por (quadro, degrau). As cores emissivas — os olhos do goblin, os do slime e a bolinha
+da antena — atravessam a modulação intactas, que é o que faz um inimigo no escuro continuar
+sendo dois pontos acesos. Ver [[bestiario-monstros]].
 
 **O que quebra se mudar:** desenhar entidade em tile apenas explorado entrega posição de
 inimigo de graça; usar `explored` no lugar de `visible` no realce da sonda de FOV mascara

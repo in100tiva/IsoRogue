@@ -12,11 +12,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
     "lint": "node tools/check-boundaries.mjs",
     "golden": "node tools/gen-golden.mjs",
     "preview:personagem": "node tools/preview-personagem.mjs",
     "preview:goblin": "node tools/preview-personagem.mjs goblin",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "preview:slime": "node tools/preview-personagem.mjs slime",
+    "preview:ogro": "node tools/preview-personagem.mjs ogro",
+    "preview:elenco": "node tools/preview-personagem.mjs elenco",
+    "check": "npm run lint && npm run typecheck && npm run typecheck:tools && npm run test"
   },
   "keywords": [],
   "author": "",
