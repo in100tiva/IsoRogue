@@ -1,0 +1,69 @@
+---
+tipo: indice
+atualizado: 2026-07-28
+tags: [indice, render, arte, personagem, moc]
+---
+
+# 🎨 MOC — Render e arte
+
+Canvas 2D escrito à mão, sem WebGL, sem biblioteca de matriz e sem um único arquivo de
+imagem: a arte é código que desenha. Esta pasta cobre de como um tile vira losango até como
+o guerreiro vira 72 quadros de pixel art forjados no boot.
+
+## O mundo na tela
+
+- [[projecao-isometrica]] — quatro linhas de aritmética, e a inversa exata delas. Vale a
+  leitura pela ordem do pintor por antidiagonal, que é o que substitui o z-buffer que o
+  projeto não tem.
+- [[fog-of-war-e-iluminacao]] — os três estados de cada tile e o corte que impede o vazamento
+  de informação. Inimigo nunca é desenhado por estar explorado; só por estar visível.
+- [[paleta-e-estilo]] — as duas paletas que não se misturam (mundo e personagem), as LUTs
+  montadas uma vez por renderer, e as duas quantizações — por face e por pixel.
+
+## O personagem
+
+Leia nesta ordem: a decisão, o modelo, a fábrica.
+
+- [[ADR-004-personagem-por-codigo]] — por que reconstruir o guerreiro como primitivas
+  determinísticas em vez de voxelizar, extrudar ou importar malha. O método vem do
+  img2threejs, adaptado — e sem Three.js, que é dependência.
+- [[personagem-rig-3d]] — a árvore de nós, o espaço destro (`+Y` é a frente), o culling por
+  normal e o sombreamento interpolado. Traz duas armadilhas que já custaram rodada de
+  revisão: a bota afunda de propósito, e nome de nó errado falha em silêncio.
+- [[sprite-forge]] — 8 direções × 9 quadros = 72, medidos com uma âncora só, snapados para a
+  paleta e ampliados sem suavização. Termina com as pendências visuais em aberto.
+- [[ADR-006-atlas-forjado-em-runtime]] — por que forjar o atlas no boot (~37 ms) em vez de
+  rasterizar o rig a cada frame ou embutir um PNG.
+
+## As armadilhas desta pasta
+
+Três erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando
+alguma coisa parece "bug de cor" ou "bug de conversão".
+
+- [[armadilha-do-yaw-isometrico]] — a spec prescrevia `atan2(dy, dx)` e estava **errada**: o
+  guerreiro andava certo e olhava 90° fora. O correto é `atan2(-dx, dy)`.
+- [[pixel-art-nasce-da-rasterizacao]] — o estilo visual não é um filtro aplicado no fim; é a
+  ordem entre rasterizar em baixa resolução e ampliar sem suavização. Inverter a ordem devolve
+  3D liso.
+- [[mouse-no-vertice-do-losango]] — `clientX` é inteiro, e o vértice do losango é a fronteira
+  de quatro tiles. Mire no centro da célula antes de acusar `screenToTile`.
+- [[virtual-time-congela-animacao]] — o creme que tinge o personagem inteiro na captura
+  headless não é bug de blend: é o clarão de dano preso em 1 porque o relógio virtual parou o
+  decaimento por `dt`.
+
+## Olhar para o resultado
+
+- [[revisar-o-personagem]] — a bancada que fotografa o atlas inteiro e os seis gates que um
+  humano responde por escrito. Não existe assert para "parece o desenho".
+- [[inspecao-visual-headless]] — como tirar foto do jogo rodando nesta máquina, e por que o
+  caminho óbvio (automação de navegador) não alcança nem `file://` nem `localhost`.
+
+## De onde vêm os dados
+
+O renderer só lê: as posições, o conjunto de visíveis e o mapa explorado são produzidos pelo
+engine — ver [[_moc-sistemas-de-jogo]]. A fronteira que impede o render de importar React
+está em [[camadas-e-fronteiras]].
+
+---
+
+Vizinhos: [[_moc-arquitetura]] · [[_moc-sistemas-de-jogo]] · [[como-usar-este-cofre]]
