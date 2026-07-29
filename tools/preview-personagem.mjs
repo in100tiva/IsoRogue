@@ -1,18 +1,25 @@
 #!/usr/bin/env node
 /**
- * ISOROGUE — capturador da bancada de revisão do guerreiro (docs/PERSONAGEM.md §10).
+ * ISOROGUE — capturador da bancada de revisão dos personagens.
  *
- *   node tools/preview-personagem.mjs        → docs/ref/preview-atlas.png
- *   npm run preview:personagem               → idem
+ *   node tools/preview-personagem.mjs                → docs/ref/preview-atlas.png  (guerreiro)
+ *   npm run preview:personagem                       → idem
+ *   npm run preview:personagem -- goblin             → docs/ref/preview-goblin.png
+ *   node tools/preview-personagem.mjs --personagem=goblin --sem-build
+ *
+ * Sem argumento nada muda em relação a antes desta fase: mesma página, mesmo
+ * PNG, mesmo nome de arquivo. O personagem é escolhido pelo FRAGMENTO da URL
+ * (`#personagem=goblin`), que tools/preview-entry.ts lê — uma página buildada
+ * serve a todos os personagens, sem um build por bicho.
  *
  * O que ele faz, em ordem:
- *   0. confere que os módulos do personagem existem (erro legível se a fase ainda
- *      não os escreveu — melhor que um stack trace do bundler);
+ *   0. confere que os módulos daquele personagem existem (erro legível se a fase
+ *      ainda não os escreveu — melhor que um stack trace do bundler);
  *   1. builda tools/preview.html com vite.preview.config.ts → .preview/preview.html,
  *      um HTML auto-contido (vite-plugin-singlefile);
  *   2. abre esse HTML no Chrome headless com --dump-dom, SEM relógio virtual, para
- *      ler dois números que só a página sabe: o tamanho exato do conteúdo e o tempo
- *      real de forja do atlas;
+ *      ler três coisas que só a página sabe: o tamanho exato do conteúdo, o tempo
+ *      real de forja do atlas e qual personagem ela de fato desenhou;
  *   3. reabre com --screenshot usando exatamente aquele tamanho de janela, passando
  *      o tempo de forja pelo fragmento da URL.
  *
@@ -31,18 +38,53 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const RAIZ = fileURLToPath(new URL('..', import.meta.url));
-const SAIDA_PADRAO = join(RAIZ, 'docs', 'ref', 'preview-atlas.png');
 const HTML_BUILDADO = join(RAIZ, '.preview', 'preview.html');
 
-/** Módulos que a bancada importa. Sem eles o build falha com erro obscuro. */
-const FONTES_EXIGIDAS = [
+/** Módulos da bancada em si. Sem eles o build falha com erro obscuro. */
+const FONTES_COMUNS = [
   'src/render/model3d.ts',
   'src/render/spriteForge.ts',
-  'src/render/characters/warrior.ts',
   'tools/preview.html',
   'tools/preview-entry.ts',
   'vite.preview.config.ts'
 ];
+
+/**
+ * Os personagens que a bancada sabe fotografar. `chave` é o que se passa na
+ * linha de comando e no fragmento da URL — tem de bater com a ficha de mesmo
+ * nome em tools/preview-entry.ts, senão a página desenha o guerreiro e a
+ * conferência da passada 1 acusa (ver `medirPagina`).
+ *
+ * O guerreiro mantém `preview-atlas.png` de propósito: é o nome que a §10 do
+ * PERSONAGEM.md documenta e que a revisão anterior já usou.
+ */
+const PERSONAGENS = [
+  {
+    chave: 'guerreiro',
+    apelidos: ['warrior'],
+    saida: join('docs', 'ref', 'preview-atlas.png'),
+    fonte: 'src/render/characters/warrior.ts',
+    referencia: 'docs/ref/guerreiro-referencia.png',
+    gates: 'G1..G6',
+    doc: 'docs/PERSONAGEM.md §10',
+    dicaFalta: 'esta fase ainda não terminou de escrever o personagem — veja docs/PERSONAGEM.md §4, §7 e §8.'
+  },
+  {
+    chave: 'goblin',
+    apelidos: ['gob'],
+    saida: join('docs', 'ref', 'preview-goblin.png'),
+    fonte: 'src/render/characters/goblin.ts',
+    referencia: 'docs/ref/goblin-referencia.jpg',
+    gates: 'G1..G8',
+    doc: 'docs/BESTIARIO.md §8',
+    // G7 põe o guerreiro ao lado do goblin: sem o rig dele a folha sai com um
+    // aviso vermelho no lugar da tira de escala.
+    exigeTambem: ['src/render/characters/warrior.ts'],
+    dicaFalta: 'o rig do goblin ainda não foi escrito — veja docs/BESTIARIO.md §5 e §7.'
+  }
+];
+
+const PADRAO = PERSONAGENS[0];
 
 const CANDIDATOS_CHROME = [
   process.env['CHROME_BIN'],
@@ -80,20 +122,53 @@ function morrer(msg, dica) {
   process.exit(1);
 }
 
+function acharPersonagem(nome) {
+  const alvo = String(nome).trim().toLowerCase();
+  return (
+    PERSONAGENS.find((p) => p.chave === alvo || p.apelidos.includes(alvo)) ?? null
+  );
+}
+
+function listaDePersonagens() {
+  return PERSONAGENS.map((p) => p.chave).join(' | ');
+}
+
+function ajuda() {
+  console.log(
+    `uso: node tools/preview-personagem.mjs [personagem] [--sem-build] [--saida=caminho.png]\n` +
+      `  personagem    ${listaDePersonagens()} (padrão: ${PADRAO.chave})\n` +
+      '  --sem-build   reaproveita .preview/preview.html (iteração rápida na página)\n' +
+      '  --saida=      destino do PNG (padrão: o da ficha do personagem)\n\n' +
+      'exemplos:\n' +
+      `  npm run preview:personagem              → ${PERSONAGENS[0].saida}\n` +
+      `  npm run preview:personagem -- goblin    → ${PERSONAGENS[1].saida}`
+  );
+}
+
+/**
+ * O personagem pode vir posicional (`-- goblin`, que é como o npm repassa) ou
+ * nomeado (`--personagem=goblin`). Aceitar os dois evita a pegadinha clássica de
+ * `npm run` engolir a flag.
+ */
 function lerArgs(argv) {
-  const opcoes = { saida: SAIDA_PADRAO, build: true };
+  const opcoes = { personagem: PADRAO, saida: null, build: true };
   for (const arg of argv) {
     if (arg === '--sem-build') opcoes.build = false;
     else if (arg.startsWith('--saida=')) opcoes.saida = resolve(RAIZ, arg.slice('--saida='.length));
-    else if (arg === '--ajuda' || arg === '-h') {
-      console.log(
-        'uso: node tools/preview-personagem.mjs [--sem-build] [--saida=caminho.png]\n' +
-          '  --sem-build   reaproveita .preview/preview.html (iteração rápida na página)\n' +
-          `  --saida=      destino do PNG (padrão: ${curto(SAIDA_PADRAO)})`
-      );
+    else if (arg.startsWith('--personagem=')) {
+      const p = acharPersonagem(arg.slice('--personagem='.length));
+      if (!p) morrer(`personagem desconhecido: ${arg}`, `conhecidos: ${listaDePersonagens()}`);
+      opcoes.personagem = p;
+    } else if (arg === '--ajuda' || arg === '-h') {
+      ajuda();
       process.exit(0);
+    } else if (!arg.startsWith('-')) {
+      const p = acharPersonagem(arg);
+      if (!p) morrer(`personagem desconhecido: ${arg}`, `conhecidos: ${listaDePersonagens()}`);
+      opcoes.personagem = p;
     } else morrer(`argumento desconhecido: ${arg}`, 'use --ajuda');
   }
+  if (!opcoes.saida) opcoes.saida = join(RAIZ, opcoes.personagem.saida);
   return opcoes;
 }
 
@@ -109,12 +184,17 @@ function acharChrome() {
  * 1. Build da página
  * ------------------------------------------------------------------ */
 
-function conferirFontes() {
-  const faltando = FONTES_EXIGIDAS.filter((f) => !existsSync(join(RAIZ, f)));
+function conferirFontes(personagem) {
+  const exigidas = [
+    ...FONTES_COMUNS,
+    personagem.fonte,
+    ...(personagem.exigeTambem ?? [])
+  ];
+  const faltando = exigidas.filter((f) => !existsSync(join(RAIZ, f)));
   if (faltando.length > 0) {
     morrer(
-      `a bancada depende de arquivo(s) que ainda não existem:\n    ${faltando.join('\n    ')}`,
-      'esta fase ainda não terminou de escrever o personagem — veja docs/PERSONAGEM.md §4, §7 e §8.'
+      `a bancada de "${personagem.chave}" depende de arquivo(s) que ainda não existem:\n    ${faltando.join('\n    ')}`,
+      personagem.dicaFalta
     );
   }
 }
@@ -183,10 +263,10 @@ function flagsBase(perfil, largura, altura) {
  * real para o tempo de forja significar alguma coisa. A página é 100% síncrona
  * (o módulo roda antes do evento load), então o --dump-dom nunca chega adiantado.
  */
-function medirPagina(chrome, perfil, urlBase) {
+function medirPagina(chrome, perfil, url) {
   const r = spawnSync(
     chrome,
-    [...flagsBase(perfil, TAMANHO_RESERVA.largura, TAMANHO_RESERVA.altura), '--dump-dom', urlBase],
+    [...flagsBase(perfil, TAMANHO_RESERVA.largura, TAMANHO_RESERVA.altura), '--dump-dom', url],
     { encoding: 'utf8', timeout: 120_000, maxBuffer: 64 * 1024 * 1024 }
   );
   const dom = r.stdout || '';
@@ -194,6 +274,7 @@ function medirPagina(chrome, perfil, urlBase) {
   const forja = /data-forja="([\d.]+)"/.exec(dom);
   const quadros = /data-quadros="(\d+)"/.exec(dom);
   const erro = /data-erro="([^"]*)"/.exec(dom);
+  const personagem = /data-personagem="([^"]*)"/.exec(dom);
 
   if (!tamanho) {
     return {
@@ -202,6 +283,7 @@ function medirPagina(chrome, perfil, urlBase) {
       altura: TAMANHO_RESERVA.altura,
       forjaMs: null,
       quadros: null,
+      personagem: personagem ? personagem[1] : null,
       erroPagina: erro ? erro[1] : null,
       pista: dom.length === 0 ? '(o Chrome não devolveu DOM nenhum)' : null
     };
@@ -213,6 +295,7 @@ function medirPagina(chrome, perfil, urlBase) {
     altura: clamp(Number(tamanho[2]), LIMITES.alturaMin, LIMITES.alturaMax),
     forjaMs: forja ? Number(forja[1]) : null,
     quadros: quadros ? Number(quadros[1]) : null,
+    personagem: personagem ? personagem[1] : null,
     erroPagina: erro ? erro[1] : null,
     pista: null
   };
@@ -244,8 +327,9 @@ function fotografar(chrome, perfil, url, destino, largura, altura) {
 
 function principal() {
   const opcoes = lerArgs(process.argv.slice(2));
+  const personagem = opcoes.personagem;
 
-  conferirFontes();
+  conferirFontes(personagem);
   if (opcoes.build) buildar();
   else if (!existsSync(HTML_BUILDADO)) morrer('--sem-build, mas .preview/preview.html não existe.');
 
@@ -257,10 +341,15 @@ function principal() {
     );
   }
   console.log(cor.fraco(`· ${chrome.versao}`));
+  console.log(cor.fraco(`· personagem: ${personagem.chave} (${personagem.doc})`));
 
   mkdirSync(dirname(opcoes.saida), { recursive: true });
   const perfil = mkdtempSync(join(tmpdir(), 'isorogue-preview-'));
-  const urlBase = pathToFileURL(HTML_BUILDADO).href;
+  const arquivo = pathToFileURL(HTML_BUILDADO).href;
+  // O guerreiro continua sendo fotografado SEM fragmento nenhum: é o caminho de
+  // antes desta fase, e ele não pode depender de código novo para funcionar.
+  const urlBase =
+    personagem === PADRAO ? arquivo : `${arquivo}#personagem=${personagem.chave}`;
 
   try {
     const medida = medirPagina(chrome.bin, perfil, urlBase);
@@ -270,9 +359,19 @@ function principal() {
           (medida.pista ? ` ${cor.fraco(medida.pista)}` : '')
       );
     }
+    // A página diz qual ficha ela usou. Divergência aqui significa fragmento
+    // ignorado ou chave sem ficha correspondente — fotografar assim mesmo
+    // produziria um PNG do personagem errado com o nome do certo.
+    if (medida.personagem && medida.personagem !== personagem.chave) {
+      morrer(
+        `a página desenhou "${medida.personagem}", não "${personagem.chave}".`,
+        'a chave da ficha em tools/preview-entry.ts precisa bater com a daqui.'
+      );
+    }
 
+    const sep = urlBase.includes('#') ? '&' : '#';
     const url =
-      medida.forjaMs !== null ? `${urlBase}#forja=${medida.forjaMs.toFixed(2)}` : urlBase;
+      medida.forjaMs !== null ? `${urlBase}${sep}forja=${medida.forjaMs.toFixed(2)}` : urlBase;
     fotografar(chrome.bin, perfil, url, opcoes.saida, medida.largura, medida.altura);
 
     const bytes = statSync(opcoes.saida).size;
@@ -301,7 +400,7 @@ function principal() {
     console.log(
       '\n' +
         cor.fraco(
-          'Abra lado a lado com docs/ref/guerreiro-referencia.png e responda G1..G6 (§10 do PERSONAGEM.md).'
+          `Abra lado a lado com ${personagem.referencia} e responda ${personagem.gates} (${personagem.doc}).`
         )
     );
   } finally {

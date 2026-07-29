@@ -406,6 +406,31 @@ function normalizarPaleta(
   return mapa;
 }
 
+/**
+ * Todos os hexes que a quantização de §4.3 pode produzir para uma cor da paleta:
+ * a rampa DECLARADA do material quando existe, ou a rampa derivada
+ * (`RAMPA_DERIVADA`) quando o material não declara a sua. Ordenados do mais
+ * escuro ao mais claro, deduplicados.
+ *
+ * Existe para quem precisa saber, de fora, em que cores uma peça pode terminar
+ * sem reimplementar a derivação — hoje o único chamador é a extração da camada
+ * EMISSIVA do sprite forge (§1.1 do docs/BESTIARIO.md), que precisa reconhecer
+ * os pixels do olho do goblin depois da rasterização, quando o nome da cor já
+ * não existe mais e só sobrou RGB. Ter duas cópias da derivação é exatamente
+ * como uma cor emissiva deixaria de ser reconhecida em silêncio.
+ *
+ * Nome ausente da paleta devolve lista vazia — nunca lança.
+ */
+export function rampaEfetiva(
+  paleta: Paleta3D,
+  nome: string,
+  rampas?: RampasPorMaterial,
+  rampaDaCor?: MaterialPorCor
+): readonly string[] {
+  const tom = normalizarPaleta(paleta, rampas, rampaDaCor).get(nome);
+  return tom ? tom.hex : [];
+}
+
 /** Cor desconhecida: se parecer hex, usa-se ela mesma; senão, cinza médio. */
 function tomDeFallback(cor: string): TomNormalizado {
   const hex = typeof cor === 'string' && cor.charAt(0) === '#' ? cor : '#808080';

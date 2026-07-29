@@ -12,6 +12,71 @@
  *      resolução (§3 do contrato).
  *   3. Guarda o atlas em cache por modelo (forja sob demanda, uma vez só) e mede
  *      o tempo de forja para o painel de debug. Alvo: < 40ms.
+ *   4. MODULA o quadro pela luz do tile (§1 do docs/BESTIARIO.md) — ver o bloco
+ *      logo abaixo, que é a técnica exigida por aquela seção.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * MODULAÇÃO POR LUZ E OLHOS EMISSIVOS (§1 e §1.1 do docs/BESTIARIO.md)
+ *
+ * O jogador é a fonte de luz e sai com brilho pleno (§7.1 do PERSONAGEM.md). Um
+ * inimigo no limite do campo de visão, não: sair com o mesmo brilho o deixaria
+ * chapado, colado na frente do cenário, e destruiria a leitura de profundidade
+ * que o fog of war constrói. `quadroModulado()` é a resposta.
+ *
+ * A técnica, em três decisões, e o porquê de cada uma:
+ *
+ *   1. UM atlas só, com brilho pleno. Forjar um atlas por nível de luz
+ *      multiplicaria o custo de forja (§7 pede < 40ms) e a memória por nada — o
+ *      escurecimento é uma operação de composição, não de geometria.
+ *
+ *   2. Escurecer com `globalCompositeOperation = 'source-atop'` sobre uma cópia
+ *      do quadro, exatamente como `IsoRenderer.tingirQuadro` já faz para o
+ *      clarão de dano. `atop` é o único operador que respeita o alfa do sprite:
+ *      pela fórmula de Porter-Duff `Co = αs·Cs + (1−αs)·Cb` com `αo = αb`, os
+ *      pixels do sprite viram uma mistura linear com a cor de sombra e os
+ *      pixels VAZIOS continuam vazios. Um `fillRect` normal (`source-over`)
+ *      pintaria o retângulo inteiro e o inimigo viraria um bloco.
+ *      Consequência útil e não óbvia: como fora do retângulo do `fillRect` o
+ *      alfa da fonte é 0, `atop` também não toca os quadros VIZINHOS na mesma
+ *      folha — é o que permite escurecer um quadro de cada vez dentro de uma
+ *      cópia do atlas inteiro (item 3).
+ *
+ *   3. Os olhos NÃO escurecem (§1.1). A cor emissiva não sobrevive à
+ *      rasterização como nome — depois do atlas só existe RGB —, então a forja
+ *      extrai UMA VEZ uma CAMADA EMISSIVA: uma folha do tamanho do atlas onde
+ *      só ficam os pixels cuja cor está na rampa efetiva das cores marcadas em
+ *      `opts.emissivas`, tudo o mais transparente. O escurecimento é aplicado e
+ *      a camada emissiva é recolada por cima com `source-over`, em brilho
+ *      pleno. Um goblin no escuro vira dois pontos vermelhos encarando você.
+ *
+ *      A alternativa considerada e descartada: recortar o olho por retângulo
+ *      conhecido do rig. Depende do facing, da pose e da projeção — 72 casos e
+ *      quebra a cada ajuste visual. A camada emissiva é indiferente a tudo isso.
+ *
+ * CACHE. `nivelLuz` é quantizado em `DEGRAUS_LUZ` (8) degraus e o par
+ * (quadro, degrau) é a CHAVE do cache: 72 quadros × 7 degraus escuros = 504
+ * pares possíveis. Sem cache, cada inimigo visível refaria o tingimento a cada
+ * frame — três operações de composição por inimigo por quadro de animação.
+ *
+ * Guardar os 504 custaria ~12 MiB de canvas por personagem para um conjunto de
+ * trabalho que, na prática, tem o tamanho do número de inimigos na tela. Então
+ * o cache é uma FOLHA DE SLOTS de tamanho fixo (`CAPACIDADE_CACHE` = 64 células
+ * do tamanho de um quadro, ~1,4 MiB) com despejo LRU. 64 cobre com folga um
+ * andar cheio de `chaser` visíveis, e a memória para de depender do tamanho do
+ * bestiário. Depois do cache quente: zero pixel novo por frame, um `drawImage`
+ * por inimigo. `estatisticasModulacao().despejos` é o sensor — se ele crescer
+ * a cada frame, o conjunto de trabalho passou de 64 e é hora de subir a
+ * capacidade, não de culpar o cache.
+ *
+ * CONTRATO COM O AUTOR DO PERSONAGEM. Marcar a cor emissiva é passar o NOME dela
+ * na paleta em `opts.emissivas` (para o Goblin: `emissivas: ['olhoBrasa']`).
+ * Duas armadilhas que valem a linha de documentação:
+ *   - dê à cor emissiva uma rampa PRÓPRIA em `rampas`/`rampaDaCor` (ou nenhuma,
+ *     e ela deriva a sua). Se ela dividir rampa com o couro, o couro inteiro
+ *     fica aceso no escuro;
+ *   - declare as caixas do olho com `contorno: false`. O contorno de silhueta de
+ *     §4.5 é traçado por cima da peça, e um olho de 2×2px de arte pode ser
+ *     inteiramente coberto por ele — aí não sobra pixel emissivo nenhum.
  *
  * O que este módulo NÃO faz: projeção, faces, sombreamento, contorno e a
  * matemática de matriz — tudo isso é de `./model3d`. Aqui não há um único
@@ -37,7 +102,14 @@
  */
 
 import { DIRS8 } from '../engine/core';
-import { ART_POR_U, PIXEL, desenharModelo, giroParaFrente, medirModelo } from './model3d';
+import {
+  ART_POR_U,
+  PIXEL,
+  desenharModelo,
+  giroParaFrente,
+  medirModelo,
+  rampaEfetiva
+} from './model3d';
 import type {
   EntradaPaleta,
   Limites,
@@ -255,6 +327,44 @@ const ARCO_GOLPE: readonly number[] = [25 * G, -25 * G, -5 * G];
  * `ESPELHO` na aplicação — é canal `ry`.
  */
 const ARCO_GOLPE_RY: readonly number[] = [-25 * G, 40 * G, 15 * G];
+
+/**
+ * Arco do golpe DECLARADO PELO PERSONAGEM, em radianos, quadro a quadro.
+ *
+ * Por que este canal existe. Os dois arcos acima são genéricos e servem a
+ * qualquer humanoide que empunhe a arma alinhada com o braço — o Guerreiro, que
+ * segura a espada apontando para +Z a partir da mão. O Goblin apoia a cimitarra
+ * DEITADA sobre o ombro, e nesse arranjo o vetor punho→ponta ganha uma
+ * componente −Y grande: o sinal de `rx` se INVERTE (positivo passa a baixar a
+ * ponta). Aplicado cru, o arco genérico fazia o goblin erguer a cimitarra e
+ * parar — o bicho ameaçava e não batia (medido: 2px de arte de percurso da
+ * lâmina nos três quadros, com o ponto mais alto no quadro do meio).
+ *
+ * A alternativa considerada e recusada: um `if` por personagem aqui dentro. O
+ * forge é agnóstico de personagem por contrato — ele já recebe paleta, rampas,
+ * repouso e emissivas de fora, e o arco do golpe é a mesma espécie de
+ * conhecimento. Quem sabe como a arma está empunhada é quem a empunhou.
+ *
+ * Contrato: RADIANOS, três valores (um por quadro de `atacando`), na MESMA
+ * convenção de sinal dos arcos genéricos — `ry` é multiplicado por `ESPELHO` na
+ * aplicação, `rx` não. Lista de tamanho errado é ignorada em silêncio e o arco
+ * genérico continua valendo: um personagem meio-configurado desenha o golpe
+ * padrão em vez de um braço parado.
+ *
+ * Ausente, nada muda: `poseDoQuadro` produz exatamente os mesmos números de
+ * antes deste canal existir, e o atlas do Guerreiro sai byte a byte igual.
+ */
+export interface ArcoGolpe {
+  readonly rx: readonly number[];
+  readonly ry: readonly number[];
+}
+
+/** O arco declarado, se ele estiver completo; senão o genérico. */
+function arcoValido(arco: ArcoGolpe | undefined): ArcoGolpe {
+  const n = QUADROS_POR_ESTADO.atacando;
+  if (arco && arco.rx.length === n && arco.ry.length === n) return arco;
+  return { rx: ARCO_GOLPE, ry: ARCO_GOLPE_RY };
+}
 /** "torso acompanha 8°" — torção em Z, agora na ordem armar → desferir → assentar. */
 const TORCAO_GOLPE: readonly number[] = [8 * G, -8 * G, -2 * G];
 const ESCUDO_GOLPE: readonly number[] = [-8 * G, 8 * G, 2 * G];
@@ -352,7 +462,8 @@ export function giroDaDirecao(dir: number): number {
 export function poseDoQuadro(
   estado: Estado,
   quadro: number,
-  repouso: Readonly<Pose> = POSE_NEUTRA
+  repouso: Readonly<Pose> = POSE_NEUTRA,
+  arcoGolpe?: ArcoGolpe
 ): PoseQuadro {
   const f = normalizarQuadro(estado, quadro);
   const pose = clonarPose(repouso);
@@ -389,8 +500,10 @@ export function poseDoQuadro(
 
   if (estado === 'atacando') {
     // O quadro de IMPACTO é o **1** — quem sincroniza o flash de dano com o
-    // golpe (`IsoRenderer`) depende disso, e continua valendo com o arco lateral.
-    somar(pose, NOS_HUMANOIDE.bracoDir, ARCO_GOLPE[f], ESPELHO * ARCO_GOLPE_RY[f], 0);
+    // golpe (`IsoRenderer`) depende disso, e continua valendo com o arco lateral
+    // e com o arco declarado pelo personagem (ver `ArcoGolpe`).
+    const arco = arcoValido(arcoGolpe);
+    somar(pose, NOS_HUMANOIDE.bracoDir, arco.rx[f], ESPELHO * arco.ry[f], 0);
     somar(pose, NOS_HUMANOIDE.bracoEsq, ESCUDO_GOLPE[f], 0, 0);
     somar(pose, NOS_HUMANOIDE.torso, INCLINA_GOLPE[f], 0, ESPELHO * TORCAO_GOLPE[f]);
     somar(pose, NOS_HUMANOIDE.quadril, 0, 0, ESPELHO * TORCAO_GOLPE[f] * 0.4);
@@ -680,6 +793,18 @@ export interface OpcoesForja {
   larguraContorno?: number;
   /** `false` desliga a quantização — só para preview de iluminação contínua. */
   quantizar?: boolean;
+  /**
+   * §1.1 do docs/BESTIARIO.md — nomes de cor da paleta que são EMISSIVAS: elas
+   * ignoram a modulação de luz de `quadroModulado()` e saem sempre em brilho
+   * pleno. Para o Goblin: `['olhoBrasa']`.
+   *
+   * Custo quando ausente ou vazio: zero. Nenhuma camada extra é alocada e
+   * `quadroModulado()` cai no caminho de tingimento simples.
+   *
+   * Ver as duas armadilhas no cabeçalho deste arquivo (rampa própria; caixas do
+   * olho com `contorno: false`).
+   */
+  emissivas?: readonly string[];
 
   /* ---- escala e enquadramento ---- */
   /** px de arte por unidade `u` (§3). Padrão: `ART_POR_U`. */
@@ -692,6 +817,12 @@ export interface OpcoesForja {
   /* ---- animação ---- */
   /** Pose de repouso do personagem (para o Guerreiro: `POSE_PARADA`). */
   repouso?: Readonly<Pose>;
+  /**
+   * §6 — arco do golpe declarado pelo personagem, em radianos (para o Goblin:
+   * `ARCO_GOLPE_GOBLIN`). Ausente ou malformado usa o arco genérico. Ver
+   * `ArcoGolpe`, que explica por que este canal não podia ser um `if` aqui.
+   */
+  arcoGolpe?: ArcoGolpe;
 
   /* ---- injeção (preview de §10, testes). Fornecer qualquer uma ignora o cache. ---- */
   desenhar?: DesenhaModelo;
@@ -709,6 +840,17 @@ export interface OpcoesForja {
  */
 export interface AtlasPersonagem {
   canvas: HTMLCanvasElement | null;
+  /**
+   * §1.1 do docs/BESTIARIO.md — camada EMISSIVA: uma folha do mesmo tamanho e
+   * do mesmo retículo de `canvas` onde só existem os pixels das cores marcadas
+   * em `opts.emissivas` (tudo o mais transparente). `null` quando o personagem
+   * não declara cor emissiva ou quando nenhum pixel dela sobreviveu ao sprite.
+   *
+   * Quem desenha não precisa tocar nisto: `quadroModulado()` já recola a camada
+   * por cima do quadro escurecido. Está exposto para o painel de debug e para a
+   * bancada de revisão do gate G8.
+   */
+  emissivo: HTMLCanvasElement | null;
   /** Falso quando não há DOM ou contexto 2D: o atlas existe, mas está vazio. */
   disponivel: boolean;
   larguraFrame: number;
@@ -733,6 +875,10 @@ export interface AtlasPersonagem {
   totalQuadros: number;
   colunas: number;
   linhas: number;
+  /** Dimensões da FOLHA inteira (`larguraFrame × colunas`). */
+  larguraFolha: number;
+  /** Dimensões da FOLHA inteira (`alturaFrame × linhas`). */
+  alturaFolha: number;
   larguraArte: number;
   alturaArte: number;
   pixel: number;
@@ -827,11 +973,11 @@ function limitar(v: number, lo: number, hi: number): number {
 }
 
 /** Monta a lista das 9 poses do atlas, na ordem das colunas. */
-function posesDoAtlas(repouso: Readonly<Pose>): PoseQuadro[] {
+function posesDoAtlas(repouso: Readonly<Pose>, arcoGolpe?: ArcoGolpe): PoseQuadro[] {
   const saida: PoseQuadro[] = [];
   for (const estado of ORDEM_ESTADOS) {
     const n = QUADROS_POR_ESTADO[estado];
-    for (let f = 0; f < n; f++) saida.push(poseDoQuadro(estado, f, repouso));
+    for (let f = 0; f < n; f++) saida.push(poseDoQuadro(estado, f, repouso, arcoGolpe));
   }
   return saida;
 }
@@ -861,6 +1007,8 @@ export function forjarAtlas(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     '|' +
     chaveEstavel(opts.repouso) +
     '|' +
+    chaveEstavel(opts.arcoGolpe) +
+    '|' +
     chaveEstavel(opts.paleta) +
     '|' +
     chaveEstavel(opts.rampas) +
@@ -873,7 +1021,9 @@ export function forjarAtlas(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     '|' +
     chaveEstavel(opts.larguraContorno) +
     '|' +
-    chaveEstavel(opts.quantizar);
+    chaveEstavel(opts.quantizar) +
+    '|' +
+    chaveEstavel(opts.emissivas);
 
   const pronto = porModelo.get(chave);
   if (pronto) return pronto;
@@ -893,7 +1043,7 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
   const desenhar: DesenhaModelo = opts.desenhar ?? desenharModelo;
   const medir: MedeModelo = opts.medir ?? medirModelo;
 
-  const poses = posesDoAtlas(repouso);
+  const poses = posesDoAtlas(repouso, opts.arcoGolpe);
 
   // Deslocamento vertical de cada coluna, em px de ARTE INTEIROS. Arredondar é
   // obrigatório: meio pixel de arte tira o sprite da grade e desfia o pixel art.
@@ -952,6 +1102,7 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
 
   const atlas: AtlasPersonagem = {
     canvas: null,
+    emissivo: null,
     disponivel: false,
     larguraFrame: larguraFrame,
     alturaFrame: alturaFrame,
@@ -962,6 +1113,8 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     totalQuadros: TOTAL_QUADROS,
     colunas: COLUNAS,
     linhas: DIRECOES,
+    larguraFolha: larguraFrame * COLUNAS,
+    alturaFolha: alturaFrame * DIRECOES,
     larguraArte: larguraArte,
     alturaArte: alturaArte,
     pixel: pixel
@@ -1046,6 +1199,11 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     }
   }
 
+  // §1.1 — a camada emissiva sai de UMA varredura do atlas pronto, não de 72
+  // varreduras do buffer de arte: é a mesma informação por um custo de um
+  // `getImageData` só. Depois desta linha nada mais lê pixel do atlas.
+  atlas.emissivo = extrairEmissivo(canvas, atlas.larguraFolha, atlas.alturaFolha, coresEmissivas(opts));
+
   atlas.disponivel = true;
   atlas.msForja = Math.round((agora() - t0) * 10) / 10;
   return atlas;
@@ -1067,5 +1225,500 @@ function fazerQuadro(
       sx: col * larguraFrame,
       sy: normalizarDirecao(dir) * alturaFrame
     };
+  };
+}
+
+/* ================================================================== *
+ * 5. Modulação por luz (§1 do docs/BESTIARIO.md)
+ *
+ * A técnica está documentada no cabeçalho do arquivo — leia lá antes de mexer
+ * aqui. Este bloco é só a mecânica: quantizar o nível, achar/pintar o slot do
+ * par (quadro, degrau) e devolver uma fonte pronta para `drawImage`.
+ * ================================================================== */
+
+/**
+ * Degraus de luz. §1 pede "no máximo 8" — e 8 é o teto útil, não uma escolha
+ * tímida: o degrau 7 é brilho pleno (nenhum tingimento, devolve o próprio
+ * atlas), então sobram 7 níveis de sombra, um a cada ~7,4% de alfa. Abaixo
+ * disso a diferença entre dois degraus vizinhos some no ruído do pixel art;
+ * acima, o cache cresce sem ganho visível.
+ */
+export const DEGRAUS_LUZ = 8;
+
+/**
+ * Cor da sombra do tingimento, em componentes 0..255.
+ *
+ * É `RGB_COLD` de `./palette` dividido por dois — a mesma névoa fria que
+ * `litColor` mistura no chão e nas paredes conforme a luz cai (§12 do
+ * CONTRACTS.md), só que mais escura porque aqui ela entra como TINTA por cima
+ * do sprite, não como mistura da cor base. Duplicada como número em vez de
+ * importada de `./palette` de propósito: o forge não conhece as LUTs do
+ * renderizador e não deve passar a conhecer por causa de três bytes.
+ */
+const SOMBRA_LUZ: readonly [number, number, number] = [13, 17, 24];
+
+/**
+ * Alfa da sombra no degrau 0 (a escuridão máxima que um inimigo visível pode
+ * receber).
+ *
+ * Calibrado contra o que os inimigos GEOMÉTRICOS já fazem hoje: `litEntity` de
+ * `./palette` multiplica a cor por `0.5 + 0.5·b`, ou seja, no nível 0 uma
+ * entidade sai com metade do brilho. Com `Co = αs·Cs + (1−αs)·Cb` e uma sombra
+ * quase preta, `αs = 0.52` reproduz esse mesmo meio-brilho. Isso importa porque
+ * `sentinel` e `linker` continuam geométricos nesta fase (§7.3 do BESTIARIO):
+ * o goblin em sprite e o sentinela em losango têm de escurecer JUNTOS, senão a
+ * leitura de distância mente para o jogador.
+ */
+const ALFA_SOMBRA_MAX = 0.52;
+
+/**
+ * Slots do cache de tingimento — pares (quadro, degrau) vivos ao mesmo tempo.
+ *
+ * O universo de pares é 72 quadros × 7 degraus escuros = 504. Guardar os 504
+ * seria uma folha de 504 quadros: ~12 MiB por personagem, para um conjunto de
+ * trabalho que na prática tem o tamanho do número de inimigos na tela. 64 slots
+ * cobrem esse conjunto com folga (um andar cheio de `chaser` visíveis é ~10) e
+ * fixam a memória em ~1,4 MiB, independentemente do tamanho do bestiário.
+ *
+ * 64 = 8×8: o slot é endereçado como uma célula de uma folha quadrada, e o
+ * `sx`/`sy` devolvido é o dessa célula. Mudar este número exige manter a
+ * fatoração (ver `SLOTS_POR_LINHA`).
+ */
+const CAPACIDADE_CACHE = 64;
+const SLOTS_POR_LINHA = 8;
+
+/**
+ * O cache de luz de um atlas: uma folha de slots + a contabilidade de LRU.
+ *
+ * Por que LRU e não FIFO: a rotação natural do jogo (o inimigo vira, anda, o
+ * jogador se aproxima e o degrau muda) faz o conjunto de trabalho migrar aos
+ * poucos. Um FIFO despejaria o quadro `parado` do inimigo que está imóvel na
+ * porta só porque ele entrou primeiro; o LRU despeja o que ninguém pediu.
+ *
+ * Por que relógio lógico em `Float64Array` e não a ordem de inserção de um
+ * `Map`: promover uma entrada num `Map` custa `delete` + `set` A CADA DESENHO
+ * de cada inimigo — o caminho quente. Aqui o acerto é um `get` e uma escrita em
+ * array tipado; a varredura dos 64 slots só acontece no despejo, que é o
+ * caminho frio.
+ */
+interface CacheLuz {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  larguraSlot: number;
+  alturaSlot: number;
+  /** chave do par (quadro, degrau) → índice do slot. */
+  porChave: Map<number, number>;
+  /** slot → chave que ele guarda (−1 = livre). Necessário para despejar. */
+  chaveDoSlot: Int32Array;
+  /** slot → instante lógico do último uso. */
+  usoDoSlot: Float64Array;
+  relogio: number;
+  ocupados: number;
+  /* ---- diagnóstico ---- */
+  tingimentos: number;
+  despejos: number;
+  /** Custo do PRIMEIRO tingimento (alocação da folha + 1 quadro), em ms. */
+  msPrimeiro: number;
+}
+
+/**
+ * Cache por atlas. `WeakMap`: reforjar o personagem cria um `AtlasPersonagem`
+ * novo e a folha do antigo vira lixo coletável sem ninguém precisar avisar.
+ */
+let cacheLuz = new WeakMap<AtlasPersonagem, CacheLuz>();
+
+/**
+ * Descarta as folhas de luz em cache. Serve ao preview e aos testes; o jogo
+ * nunca precisa chamar — o cache é limitado por construção.
+ */
+export function limparCacheLuz(): void {
+  cacheLuz = new WeakMap<AtlasPersonagem, CacheLuz>();
+}
+
+/**
+ * Quantiza o nível de luz em `DEGRAUS_LUZ` degraus.
+ *
+ * `nivelLuz` é NORMALIZADO em 0..1 — 0 = escuridão, 1 = brilho pleno. Quem tem
+ * o `lvl` inteiro do renderizador (0..`LEVELS−1`) converte na chamada:
+ * `quadroModulado(atlas, dir, estado, frame, lvl / (LEVELS - 1))`. Manter a
+ * normalização do lado de fora é o que impede este módulo de importar as LUTs
+ * do `IsoRenderer` e virar refém do número de níveis dele.
+ *
+ * Valor não finito cai em brilho pleno: um `NaN` vindo de uma divisão por zero
+ * mostra o inimigo iluminado, não invisível.
+ */
+export function degrauDeLuz(nivelLuz: number): number {
+  if (!Number.isFinite(nivelLuz)) return DEGRAUS_LUZ - 1;
+  const d = Math.round(nivelLuz * (DEGRAUS_LUZ - 1));
+  if (d <= 0) return 0;
+  return d >= DEGRAUS_LUZ - 1 ? DEGRAUS_LUZ - 1 : d;
+}
+
+/** Cor de tingimento do degrau, já em `rgba()`. Só no caminho frio. */
+function corDoDegrau(degrau: number): string {
+  const a = ALFA_SOMBRA_MAX * (1 - degrau / (DEGRAUS_LUZ - 1));
+  return (
+    'rgba(' + SOMBRA_LUZ[0] + ',' + SOMBRA_LUZ[1] + ',' + SOMBRA_LUZ[2] + ',' +
+    Math.round(a * 1000) / 1000 + ')'
+  );
+}
+
+/**
+ * Onde desenhar um quadro modulado.
+ *
+ * Mesmo formato de `atlas.canvas` + `atlas.quadro()`, de propósito: o
+ * `IsoRenderer` troca uma chamada pela outra sem mudar o `drawImage`. A ÂNCORA
+ * continua sendo a do atlas (`ancoraX`/`ancoraY`) — o slot tem exatamente o
+ * tamanho do quadro, então nada se desloca.
+ *
+ *   const f = quadroModulado(atlas, dir, estado, frame, lvl / (LEVELS - 1));
+ *   if (f.fonte) {
+ *     const suave = ctx.imageSmoothingEnabled;
+ *     ctx.imageSmoothingEnabled = false;
+ *     ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura,
+ *                   Math.round(cx - atlas.ancoraX * z), Math.round(cy - atlas.ancoraY * z),
+ *                   f.largura * z, f.altura * z);
+ *     ctx.imageSmoothingEnabled = suave;
+ *   }
+ *
+ * O objeto é NOVO a cada chamada (5 números e uma referência — o motor de JS
+ * costuma nem alocar), mas o CANVAS por trás dele não é: nenhum pixel novo é
+ * produzido enquanto o par (quadro, degrau) estiver no cache.
+ */
+export interface FonteQuadro {
+  /** Folha de onde recortar. `null` só quando o atlas não pôde ser forjado. */
+  fonte: HTMLCanvasElement | null;
+  sx: number;
+  sy: number;
+  largura: number;
+  altura: number;
+  /** Degrau efetivamente aplicado (0..`DEGRAUS_LUZ−1`; o máximo é brilho pleno). */
+  degrau: number;
+  /**
+   * `false` quando o quadro saiu em brilho pleno — degrau máximo, ou degradação
+   * por falta de contexto 2D. Diagnóstico; o `drawImage` é o mesmo nos dois casos.
+   */
+  modulado: boolean;
+}
+
+/**
+ * §1 — o quadro `(dir, estado, frame)` escurecido para `nivelLuz`, com as cores
+ * emissivas preservadas em brilho pleno (§1.1).
+ *
+ * Nunca lança e nunca devolve `null`: sem contexto 2D (jsdom) devolve o quadro
+ * cru, que é exatamente o que o chamador teria com `atlas.quadro()`. Degradar
+ * para "claro demais" é o modo de falha certo — o inimigo continua na tela.
+ *
+ * Custo depois do cache quente: um `Map.get` com chave numérica, uma escrita em
+ * `Float64Array` e a montagem do retorno. Nenhum canvas, nenhum `getImageData`,
+ * nenhuma string, nenhum pixel.
+ */
+export function quadroModulado(
+  atlas: AtlasPersonagem,
+  dir: number,
+  estado: Estado,
+  frame: number,
+  nivelLuz: number
+): FonteQuadro {
+  const q = atlas.quadro(dir, estado, frame);
+  const lw = atlas.larguraFrame;
+  const lh = atlas.alturaFrame;
+  const degrau = degrauDeLuz(nivelLuz);
+
+  // Brilho pleno, atlas indisponível ou quadro degenerado: o atlas cru serve.
+  if (!atlas.canvas || !atlas.disponivel || degrau >= DEGRAUS_LUZ - 1 || lw <= 0 || lh <= 0) {
+    return semModulacao(atlas, q.sx, q.sy, lw, lh, degrau);
+  }
+
+  const cache = obterCacheLuz(atlas, lw, lh);
+  if (!cache) return semModulacao(atlas, q.sx, q.sy, lw, lh, degrau);
+
+  // Chave do par: o índice do quadro no retículo do atlas (derivado do próprio
+  // `sx`/`sy`, para não haver uma segunda fórmula que possa divergir de
+  // `quadro()`) combinado com o degrau.
+  const idxQuadro = (q.sy / lh) * atlas.colunas + q.sx / lw;
+  const chave = idxQuadro * DEGRAUS_LUZ + degrau;
+
+  let slot = cache.porChave.get(chave);
+  if (slot === undefined) {
+    const t0 = cache.msPrimeiro < 0 ? agora() : 0;
+    slot = reservarSlot(cache, chave);
+    pintarSlot(atlas, cache, slot, degrau, q.sx, q.sy, lw, lh);
+    cache.tingimentos++;
+    if (cache.msPrimeiro < 0) cache.msPrimeiro = Math.round((agora() - t0) * 1000) / 1000;
+  }
+  cache.usoDoSlot[slot] = ++cache.relogio;
+
+  return {
+    fonte: cache.canvas,
+    sx: (slot % SLOTS_POR_LINHA) * lw,
+    sy: Math.floor(slot / SLOTS_POR_LINHA) * lh,
+    largura: lw,
+    altura: lh,
+    degrau: degrau,
+    modulado: true
+  };
+}
+
+function semModulacao(
+  atlas: AtlasPersonagem, sx: number, sy: number, lw: number, lh: number, degrau: number
+): FonteQuadro {
+  return {
+    fonte: atlas.canvas,
+    sx: sx,
+    sy: sy,
+    largura: lw,
+    altura: lh,
+    degrau: degrau,
+    modulado: false
+  };
+}
+
+/**
+ * A folha de slots do atlas, alocada na primeira vez que um quadro escuro é
+ * pedido — um personagem que nunca aparece no escuro não custa um byte.
+ *
+ * Uma falha de contexto 2D (jsdom) NÃO é memorizada aqui, e não precisa ser: o
+ * caminho só chega neste ponto quando `atlas.canvas` existe, e um atlas com
+ * canvas veio de um ambiente que sabe criar contexto. Se ainda assim falhar, o
+ * custo do erro é uma tentativa de `createElement` por desenho — nunca um
+ * lançamento.
+ */
+function obterCacheLuz(atlas: AtlasPersonagem, lw: number, lh: number): CacheLuz | null {
+  const pronto = cacheLuz.get(atlas);
+  // Um zoom novo não muda `larguraFrame` (o atlas é reforjado, e o cache segue
+  // o objeto), mas a checagem é barata e transforma um bug de aliasing em
+  // realocação silenciosa em vez de sprite recortado errado.
+  if (pronto && pronto.larguraSlot === lw && pronto.alturaSlot === lh) return pronto;
+
+  const linhas = Math.ceil(CAPACIDADE_CACHE / SLOTS_POR_LINHA);
+  const cv = criarCanvas(SLOTS_POR_LINHA * lw, linhas * lh);
+  const ctx = contexto(cv);
+  if (!cv || !ctx) return null;
+  ctx.imageSmoothingEnabled = false;
+
+  const chaveDoSlot = new Int32Array(CAPACIDADE_CACHE);
+  chaveDoSlot.fill(-1);
+  const cache: CacheLuz = {
+    canvas: cv,
+    ctx: ctx,
+    larguraSlot: lw,
+    alturaSlot: lh,
+    porChave: new Map<number, number>(),
+    chaveDoSlot: chaveDoSlot,
+    usoDoSlot: new Float64Array(CAPACIDADE_CACHE),
+    relogio: 0,
+    ocupados: 0,
+    tingimentos: 0,
+    despejos: 0,
+    msPrimeiro: -1
+  };
+  cacheLuz.set(atlas, cache);
+  return cache;
+}
+
+/**
+ * Slot livre, ou o menos recentemente usado. A varredura dos 64 slots roda só
+ * quando o cache está cheio E o par pedido é novo — o caminho frio, que já vai
+ * pagar três `drawImage`.
+ */
+function reservarSlot(cache: CacheLuz, chave: number): number {
+  if (cache.ocupados < CAPACIDADE_CACHE) {
+    const slot = cache.ocupados++;
+    cache.chaveDoSlot[slot] = chave;
+    cache.porChave.set(chave, slot);
+    return slot;
+  }
+  let vitima = 0;
+  let menor = Infinity;
+  for (let i = 0; i < CAPACIDADE_CACHE; i++) {
+    if (cache.usoDoSlot[i] < menor) {
+      menor = cache.usoDoSlot[i];
+      vitima = i;
+    }
+  }
+  const antiga = cache.chaveDoSlot[vitima];
+  if (antiga >= 0) cache.porChave.delete(antiga);
+  cache.chaveDoSlot[vitima] = chave;
+  cache.porChave.set(chave, vitima);
+  cache.despejos++;
+  return vitima;
+}
+
+/**
+ * Pinta um slot: cópia do quadro → sombra com `source-atop` → camada emissiva
+ * por cima.
+ *
+ * O `fillRect` limitado ao retângulo do slot é o que mantém os slots vizinhos
+ * intactos: em `source-atop`, onde o alfa da FONTE é zero o destino não é
+ * tocado (a fórmula está no cabeçalho do arquivo). É essa propriedade que
+ * permite empilhar 64 quadros independentes numa folha só.
+ *
+ * O `clearRect` antes da cópia não é zelo: o slot pode estar sendo REUSADO
+ * depois de um despejo, e `drawImage` compõe sobre o que havia ali.
+ */
+function pintarSlot(
+  atlas: AtlasPersonagem,
+  cache: CacheLuz,
+  slot: number,
+  degrau: number,
+  sx: number,
+  sy: number,
+  lw: number,
+  lh: number
+): void {
+  const fonte = atlas.canvas;
+  if (!fonte) return;
+  const dx = (slot % SLOTS_POR_LINHA) * lw;
+  const dy = Math.floor(slot / SLOTS_POR_LINHA) * lh;
+  const ctx = cache.ctx;
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.clearRect(dx, dy, lw, lh);
+  ctx.drawImage(fonte, sx, sy, lw, lh, dx, dy, lw, lh);
+  ctx.globalCompositeOperation = 'source-atop';
+  ctx.fillStyle = corDoDegrau(degrau);
+  ctx.fillRect(dx, dy, lw, lh);
+  ctx.globalCompositeOperation = 'source-over';
+  // §1.1 — os olhos voltam ao brilho pleno DEPOIS da sombra, nunca antes.
+  if (atlas.emissivo) ctx.drawImage(atlas.emissivo, sx, sy, lw, lh, dx, dy, lw, lh);
+}
+
+/* ------------------------------------------------------------------ *
+ * 5.1 Camada emissiva (§1.1)
+ * ------------------------------------------------------------------ */
+
+/**
+ * As cores que não escurecem, empacotadas em `0xRRGGBB` para comparação sem
+ * alocação.
+ *
+ * Reúne a RAMPA EFETIVA de cada nome marcado (via `rampaEfetiva` de
+ * `./model3d`), não só o tom declarado: a quantização de §4.3 manda cada face
+ * do olho para um degrau da rampa conforme a orientação, então casar só com o
+ * tom declarado deixaria as faces laterais do olho escurecendo enquanto a de
+ * frente fica acesa — meio olho apagado, que é pior que olho nenhum.
+ */
+function coresEmissivas(opts: OpcoesForja): Set<number> | null {
+  const nomes = opts.emissivas;
+  if (!nomes || nomes.length === 0) return null;
+  const saida = new Set<number>();
+  for (let i = 0; i < nomes.length; i++) {
+    const nome = nomes[i];
+    const rampa = rampaEfetiva(opts.paleta, nome, opts.rampas, opts.rampaDaCor);
+    for (let k = 0; k < rampa.length; k++) {
+      const c = lerHexRgb(rampa[k]);
+      if (c) saida.add((c[0] << 16) | (c[1] << 8) | c[2]);
+    }
+    // A rampa efetiva já cobre o tom declarado; esta linha só socorre o caso de
+    // um nome que não está na paleta e chegou como hex literal.
+    if (rampa.length === 0) {
+      const direto = lerHexRgb(nome);
+      if (direto) saida.add((direto[0] << 16) | (direto[1] << 8) | direto[2]);
+    }
+  }
+  return saida.size > 0 ? saida : null;
+}
+
+/**
+ * Extrai a camada emissiva do atlas pronto: mesma folha, mesmo retículo, só os
+ * pixels cuja cor está em `emissivos`; todo o resto transparente.
+ *
+ * Por que sobre o ATLAS e não sobre cada buffer de arte: é uma varredura em vez
+ * de 72, e o snap de paleta de §2.1 já garantiu que cada pixel tem exatamente
+ * uma das cores declaradas — a comparação é de igualdade, não de proximidade.
+ * (Com `quantizar: false` ou sem `getImageData` o snap não roda e a camada sai
+ * vazia; o preview de iluminação contínua perde os olhos acesos e nada mais.)
+ *
+ * Devolve `null` quando não há cor emissiva, quando o ambiente não expõe
+ * `getImageData` (jsdom) ou quando nenhum pixel casou — e `null` custa zero no
+ * caminho de desenho.
+ */
+function extrairEmissivo(
+  fonte: HTMLCanvasElement,
+  largura: number,
+  altura: number,
+  emissivos: Set<number> | null
+): HTMLCanvasElement | null {
+  if (!emissivos || largura <= 0 || altura <= 0) return null;
+  const ctxFonte = contexto(fonte);
+  if (!ctxFonte || typeof ctxFonte.getImageData !== 'function') return null;
+  let img: ImageData;
+  try {
+    img = ctxFonte.getImageData(0, 0, largura, altura);
+  } catch {
+    return null;
+  }
+  const d = img.data;
+  if (!d || d.length < largura * altura * 4) return null;
+
+  let vivos = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] !== 0 && emissivos.has((d[i] << 16) | (d[i + 1] << 8) | d[i + 2])) {
+      vivos++;
+      continue;
+    }
+    d[i] = 0;
+    d[i + 1] = 0;
+    d[i + 2] = 0;
+    d[i + 3] = 0;
+  }
+  if (vivos === 0) return null;
+
+  const cv = criarCanvas(largura, altura);
+  const ctx = contexto(cv);
+  if (!cv || !ctx) return null;
+  try {
+    ctx.putImageData(img, 0, 0);
+  } catch {
+    return null;
+  }
+  return cv;
+}
+
+/* ------------------------------------------------------------------ *
+ * 5.2 Diagnóstico (painel de debug e bancada do gate G8)
+ * ------------------------------------------------------------------ */
+
+/** O que o cache de luz de um atlas está custando agora. */
+export interface EstatisticasLuz {
+  /** Slots ocupados (0..`CAPACIDADE_CACHE`). */
+  slots: number;
+  /** Teto de slots — a memória do cache não passa disto. */
+  capacidade: number;
+  /** Quantos tingimentos foram feitos ao todo (inclui os refeitos após despejo). */
+  tingimentos: number;
+  /**
+   * Quantas vezes um par vivo foi despejado. Zero é o esperado no jogo; um
+   * número que cresce a cada frame significa conjunto de trabalho maior que
+   * `CAPACIDADE_CACHE` — o único cenário em que o cache voltaria a alocar
+   * pixels todo frame.
+   */
+  despejos: number;
+  /** Memória das folhas (slots + camada emissiva), em bytes. */
+  bytes: number;
+  /** Custo do primeiro tingimento em ms (alocação da folha + 1 quadro). −1 = ainda não houve. */
+  msPrimeiro: number;
+  /** Há camada emissiva neste atlas? */
+  emissivo: boolean;
+}
+
+/**
+ * Leitura do cache de luz. Pura: não aloca folha nenhuma, não muda o cache.
+ *
+ * Teto de memória por atlas:
+ *   `CAPACIDADE_CACHE × larguraFrame × alturaFrame × 4` (folha de slots)
+ * mais `larguraFolha × alturaFolha × 4` quando há camada emissiva.
+ */
+export function estatisticasModulacao(atlas: AtlasPersonagem): EstatisticasLuz {
+  const cache = cacheLuz.get(atlas);
+  const bytesEmissivo = atlas.emissivo ? atlas.larguraFolha * atlas.alturaFolha * 4 : 0;
+  const bytesSlots = cache ? cache.canvas.width * cache.canvas.height * 4 : 0;
+  return {
+    slots: cache ? cache.ocupados : 0,
+    capacidade: CAPACIDADE_CACHE,
+    tingimentos: cache ? cache.tingimentos : 0,
+    despejos: cache ? cache.despejos : 0,
+    bytes: bytesSlots + bytesEmissivo,
+    msPrimeiro: cache ? cache.msPrimeiro : -1,
+    emissivo: atlas.emissivo !== null
   };
 }

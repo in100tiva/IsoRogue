@@ -31,13 +31,25 @@
  *     por `dt` e pela OBSERVAÇÃO do estado (tile do jogador, `stats.dmgDealt`,
  *     `player.facing`). Ela não escreve uma única letra no engine, e o turno
  *     jamais espera por ela (R54, §6 do PERSONAGEM.md).
- *   - Os INIMIGOS não mudaram. A migração deles é fase futura (§9.5).
+ *
+ * O QUE MUDOU NA FASE DO BESTIÁRIO (docs/BESTIARIO.md §0, §1 e §7):
+ *   - O arquétipo `chaser` ganhou rosto: ele é o GOBLIN, desenhado com um quadro
+ *     do atlas de `./characters/goblin`. `sentinel` e `linker` continuam em
+ *     formas geométricas — os dois caminhos convivem, e o ponto de extensão por
+ *     onde os próximos dois monstros entram é `RETRATOS` (logo abaixo).
+ *   - O quadro do inimigo é MODULADO pela luz do tile (`lvl`) via
+ *     `quadroModulado()` do sprite forge, com os olhos emissivos preservados em
+ *     brilho pleno (§1.1). O jogador continua em brilho pleno: ele é a fonte de
+ *     luz (§7.1 do PERSONAGEM.md).
+ *   - O `facing` do inimigo é DERIVADO aqui, por observação da mudança de tile
+ *     entre turnos (§0.2), e mora no `Vfx` desta classe. Nenhum campo novo em
+ *     `Enemy`, em `snapshot()`, no save ou no oracle — ver `orientarInimigo`.
  */
 
-import { CONFIG, normalizeFacing } from '../engine/core';
+import { CONFIG, DEFAULT_FACING, cheb, dirIndex, normalizeFacing } from '../engine/core';
 import { DIJKSTRA_INF } from '../engine/dijkstra';
 import { checkSymmetry, computeFov } from '../engine/fov';
-import type { Enemy, Game, GameMap, Item, Player } from '../engine/types';
+import type { ArchetypeKey, Enemy, Game, GameMap, Item, Player } from '../engine/types';
 import {
   buildLuts,
   COL_BG,
@@ -67,8 +79,18 @@ import {
   RAMPAS_GUERREIRO,
   RAMPA_DA_COR
 } from './characters/warrior';
-import { forjarAtlas } from './spriteForge';
+import {
+  ARCO_GOLPE_GOBLIN,
+  CORES_EMISSIVAS_GOBLIN,
+  MODELO_GOBLIN,
+  PALETA_GOBLIN,
+  POSE_PARADA_GOBLIN,
+  RAMPAS_GOBLIN,
+  RAMPA_DA_COR_GOBLIN
+} from './characters/goblin';
+import { forjarAtlas, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
+import type { No } from './model3d';
 
 const TAU = Math.PI * 2;
 
@@ -93,6 +115,68 @@ const FORJA_GUERREIRO: OpcoesForja = {
   repouso: POSE_PARADA
 };
 
+/* ------------------------------------------------------------------ *
+ * O bestiário (docs/BESTIARIO.md §0.1, §1.1 e §7) — O PONTO DE EXTENSÃO
+ * ------------------------------------------------------------------ */
+
+/**
+ * Opções da forja do Goblin. Mesma constante de módulo, pelos mesmos dois
+ * motivos do Guerreiro (o forge memoiza por (modelo, opções); a cor é
+ * propriedade do personagem).
+ *
+ * `emissivas` é o que o Guerreiro não tem: `olhoBrasa` ignora a modulação de luz
+ * e sai sempre em brilho pleno (§1.1). Quem faz esse trabalho é o forge — ele
+ * extrai a camada emissiva UMA vez, na forja, e `quadroModulado()` a recola por
+ * cima do quadro escurecido. Este arquivo não conhece um único pixel disso.
+ *
+ * `arcoGolpe` é o segundo: o goblin apoia a cimitarra DEITADA sobre o ombro, e
+ * nesse arranjo o sinal do arco genérico de §6 se inverte — aplicado cru, ele
+ * erguia a arma e parava, sem impacto nenhum. O arco descendente vem do próprio
+ * personagem (`ARCO_GOLPE_GOBLIN`), como vem a paleta e a pose de repouso.
+ */
+const FORJA_GOBLIN: OpcoesForja = {
+  paleta: PALETA_GOBLIN,
+  rampas: RAMPAS_GOBLIN,
+  rampaDaCor: RAMPA_DA_COR_GOBLIN,
+  repouso: POSE_PARADA_GOBLIN,
+  emissivas: CORES_EMISSIVAS_GOBLIN,
+  arcoGolpe: ARCO_GOLPE_GOBLIN
+};
+
+/** O rig e o material de um monstro — tudo o que a forja precisa saber dele. */
+interface FichaDeSprite {
+  modelo: No;
+  forja: OpcoesForja;
+}
+
+/**
+ * ══ PONTO DE EXTENSÃO: como um monstro ganha rosto ══
+ *
+ * Arquétipo → ficha do personagem. Quem tem ficha é desenhado com um quadro do
+ * atlas (`desenharSpriteInimigo`); quem NÃO tem cai no desenho geométrico
+ * (`desenharInimigoGeometrico`). Os dois caminhos convivem de propósito — é a
+ * §7.3 do BESTIARIO, e é por aqui que os próximos dois monstros entram:
+ *
+ *   1. escreva `./characters/<bicho>.ts` no molde de `./characters/goblin.ts`
+ *      (modelo, paleta, rampas, rampa-da-cor, pose de repouso e — se ele tiver
+ *      parte que brilha no escuro — a lista de cores emissivas);
+ *   2. declare a constante `FORJA_<BICHO>` ao lado de `FORJA_GOBLIN`;
+ *   3. acrescente UMA linha nesta tabela.
+ *
+ * Nada mais neste arquivo muda: a orientação (§0.2), a modulação por luz (§1), a
+ * sombra elíptica, a barra de vida e o clarão de dano já são genéricos.
+ *
+ * O que NÃO se faz por aqui: arquétipo novo. A tabela é indexada por
+ * `ArchetypeKey`, e essa união vem do engine — acrescentar um bicho de
+ * COMPORTAMENTO novo é mudança de `populate()` e regeneração deliberada do
+ * oracle (§0.1 do BESTIARIO), não é sprite.
+ */
+const RETRATOS: Readonly<Partial<Record<ArchetypeKey, FichaDeSprite>>> = {
+  /** §7.2 — o Goblin é a APARÊNCIA do `chaser` que já existe. */
+  chaser: { modelo: MODELO_GOBLIN, forja: FORJA_GOBLIN }
+  // sentinel e linker: sem ficha, portanto geométricos nesta fase (§7.3).
+};
+
 /**
  * §6 — a troca de tile leva ~120 ms NA TELA. O estado lógico já mudou antes do
  * primeiro quadro desta interpolação: o turno não espera animação (R54).
@@ -107,6 +191,13 @@ const DUR_RESPIRO = 0.9;
 
 /** Folga em px de arte entre o topo do quadro e a barra de vida do jogador. */
 const FOLGA_BARRA = 6;
+
+/**
+ * Altura da barra de vida sobre o desenho GEOMÉTRICO de um inimigo, em px de
+ * tela a zoom 1 — o número do vanilla, preservado intacto. Quem tem sprite
+ * deriva a sua do atlas (`ancoraY − FOLGA_BARRA`), como o jogador.
+ */
+const TOPO_BARRA_INIMIGO = 33;
 
 /**
  * Estado de animação do jogador (§6). TUDO aqui é derivado por observação do
@@ -182,6 +273,20 @@ interface Vfx {
   hp: number;
   flash: number;
   bump: number;
+  /**
+   * §0.2 do BESTIARIO — a direção do olhar, 0..7 na ordem de `DIRS8`.
+   *
+   * Mora AQUI, e não em `Enemy`, porque dá para derivá-la de graça: o renderer
+   * já guarda o tile anterior de cada entidade neste mesmo objeto, e comparar
+   * `v.x/v.y` com `e.x/e.y` é toda a informação necessária (ver
+   * `orientarInimigo`). Um campo em `Enemy` entraria em `snapshot()`, no save e
+   * no oracle para não dizer nada que o render não saiba sozinho.
+   */
+  facing: number;
+  /** Segundos restantes do deslize entre tiles — alimenta o ciclo de marcha. */
+  passo: number;
+  /** 0/1 — qual metade do ciclo de 4 quadros o próximo passo usa. */
+  pe: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -326,6 +431,18 @@ export class IsoRenderer {
   private atlas: AtlasPersonagem | null = null;
   /** A forja é tentada UMA vez por instância; falhar não pode virar retentativa por quadro. */
   private atlasTentado = false;
+
+  /* --- o bestiário (docs/BESTIARIO.md §7) --- */
+  /**
+   * Atlas por arquétipo, forjado sob demanda no primeiro desenho daquele bicho.
+   * O `null` GUARDADO é significativo: distingue "já tentei e não deu" (jsdom,
+   * sem contexto 2D) de "ainda não tentei", e é o que impede a forja de virar
+   * retentativa por quadro. Arquétipo sem ficha em `RETRATOS` guarda `null` na
+   * primeira consulta e nunca mais é perguntado.
+   */
+  private readonly atlasInimigo = new Map<ArchetypeKey, AtlasPersonagem | null>();
+  /** Último `game.turn` em que as regras de §0.2 rodaram (−1 = nenhum ainda). */
+  private turnoOrientado = -1;
   /** Buffer de tingimento do clarão de dano (o sprite não é um caminho, não dá para preencher). */
   private tinta: HTMLCanvasElement | null = null;
   private tintaCtx: CanvasRenderingContext2D | null = null;
@@ -510,17 +627,60 @@ export class IsoRenderer {
 
     const en = game.enemies;
     if (en) {
+      // §0.2 — as regras de orientação falam em TURNO ("mudou de tile neste
+      // turno"), não em quadro. `game.turn` é a única leitura nova, e é leitura:
+      // sem ela a regra (b) reavaliaria a cada quadro e sobrescreveria a (a) no
+      // quadro seguinte ao passo, invertendo a precedência que o contrato fixa.
+      const turno = typeof game.turn === 'number' ? game.turn : 0;
+      const novoTurno = turno !== this.turnoOrientado;
       for (let i = 0; i < en.length; i++) {
         const e = en[i];
         if (!e) continue;
-        this.trackVfx(this.vfxOf('e' + e.id, e.x, e.y, e.hp), e.x, e.y, e.hp, d, decay);
+        const v = this.vfxOf('e' + e.id, e.x, e.y, e.hp);
+        // ANTES do trackVfx: é ele que sincroniza `v.x/v.y` com o tile novo, e a
+        // regra (a) precisa justamente do delta entre os dois.
+        if (novoTurno) this.orientarInimigo(v, e, p);
+        this.trackVfx(v, e.x, e.y, e.hp, d, decay);
         // ent.bump é campo puramente visual do contrato: só decai aqui
         if (typeof e.bump === 'number' && e.bump > 0) {
           e.bump -= d * 3.4;
           if (e.bump < 0) e.bump = 0;
         }
       }
+      this.turnoOrientado = turno;
     }
+  }
+
+  /**
+   * §0.2 do docs/BESTIARIO.md — de onde sai o `facing` do inimigo, na ordem
+   * exata que o contrato fixa:
+   *
+   *   (a) mudou de tile neste turno  → índice do delta em `DIRS8`;
+   *   (b) não mudou, mas está adjacente ao jogador (Chebyshev 1) → encara-o;
+   *   (c) nenhum dos dois            → mantém o último;
+   *   (d) entidade nunca vista antes → sul (`DEFAULT_FACING`, em `vfxOf`).
+   *
+   * Tudo derivado por OBSERVAÇÃO, na camada de apresentação: o parâmetro `e` é
+   * lido e nunca escrito, e `Enemy` continua com os mesmos 12 campos de sempre.
+   *
+   * `Math.sign` no delta é o que segura o caso raro de dois turnos caberem entre
+   * dois quadros (teclado em repetição rápida): o deslocamento vira 2 tiles,
+   * `dirIndex` de `(2,0)` devolveria −1 e o bicho ficaria olhando para o lugar
+   * errado. Normalizado pelo sinal, qualquer salto vira uma das oito direções.
+   */
+  private orientarInimigo(v: Vfx, e: Enemy, p: Player | null): void {
+    const dx = Math.sign(e.x - v.x);
+    const dy = Math.sign(e.y - v.y);
+    if (dx !== 0 || dy !== 0) {
+      const i = dirIndex(dx, dy);
+      if (i >= 0) v.facing = i; // (a)
+      return;
+    }
+    if (p && cheb(e.x, e.y, p.x, p.y) === 1) {
+      const i = dirIndex(Math.sign(p.x - e.x), Math.sign(p.y - e.y));
+      if (i >= 0) v.facing = i; // (b)
+    }
+    // (c) — silêncio de propósito: `v.facing` já é o último conhecido.
   }
 
   /* ------------------------------------------------------------------ *
@@ -682,6 +842,7 @@ export class IsoRenderer {
     // O atlas em si é memoizado pelo forge (por modelo): soltamos só a
     // referência desta instância e o buffer de tingimento, que é dela.
     this.atlas = null;
+    this.atlasInimigo.clear();
     this.tinta = null;
     this.tintaCtx = null;
     this.anim.pronta = false;
@@ -699,7 +860,12 @@ export class IsoRenderer {
   private vfxOf(key: string, x: number, y: number, hp: number): Vfx {
     let v = this.vfx.get(key);
     if (!v) {
-      v = { x: x, y: y, ox: 0, oy: 0, hp: hp, flash: 0, bump: 0 };
+      // §0.2 regra (d): entidade nunca vista antes nasce olhando para o sul do
+      // grid — o mesmo padrão do jogador (`DEFAULT_FACING`).
+      v = {
+        x: x, y: y, ox: 0, oy: 0, hp: hp, flash: 0, bump: 0,
+        facing: DEFAULT_FACING, passo: 0, pe: 0
+      };
       this.vfx.set(key, v);
     }
     return v;
@@ -716,6 +882,15 @@ export class IsoRenderer {
       v.x = x;
       v.y = y;
       v.bump = 1;
+      // Marcha: um tile = meio ciclo, e `pe` alterna a metade — dois passos
+      // seguidos percorrem os 4 quadros de §6 na ordem certa. Mesmo mecanismo do
+      // jogador (`AnimJogador.passo`/`pe`), aqui por entidade.
+      v.passo = DUR_PASSO;
+      v.pe = v.pe === 0 ? 1 : 0;
+    }
+    if (v.passo > 0) {
+      v.passo -= dt;
+      if (v.passo < 0) v.passo = 0;
     }
     v.ox *= decay;
     v.oy *= decay;
@@ -739,6 +914,10 @@ export class IsoRenderer {
     if (this.lastMap === game.map) return;
     this.lastMap = game.map;
     this.vfx = new Map<string, Vfx>();
+    // Mapa novo = bestiário novo. O relógio de orientação (§0.2) volta a zero
+    // para que a primeira leitura do andar já encare o jogador quem estiver
+    // colado nele, em vez de esperar o turno seguinte.
+    this.turnoOrientado = -1;
     // Mapa novo (nova expedição ou descida): o guerreiro reaparece parado no
     // ponto de partida. Sem isto ele deslizaria do tile do nível anterior e
     // `stats.dmgDealt` (que sobrevive à descida) dispararia um golpe fantasma.
@@ -920,27 +1099,156 @@ export class IsoRenderer {
   }
 
   /*
-   * TODO(inimigos-no-atlas): os inimigos continuam em formas geométricas por
-   * decisão de escopo (§9.5 e §11 do docs/PERSONAGEM.md). Quando migrarem para
-   * o sprite forge vai faltar UMA coisa que o jogador não precisa: modulação do
-   * quadro pela luz do tile (`lvl`). O jogador é a fonte de luz e sai com brilho
-   * pleno (§7.1); um inimigo no limite do FOV, não. Não implemente por
-   * antecipação — sem consumidor, o caminho de modulação nasce sem revisão visual.
+   * TODO(tempero-goblin): o Goblin já anda e respira com o ciclo GENÉRICO de
+   * `./spriteForge` — o mesmo do Guerreiro. O GOLPE já é dele (`arcoGolpe` em
+   * `FORJA_GOBLIN`, revisão §8 rodada 1: com o arco genérico a cimitarra subia
+   * em vez de descer e o bicho nunca batia). O que continua sem consumidor é o
+   * resto de `ANIMACAO_GOBLIN`: respiração 1,4× mais rápida, balanço de 5° nas
+   * orelhas, inclinação de 6° ao andar contra 2,5° e quique de 2,0u. Plugá-los
+   * abre mais canais em `OpcoesForja`, no mesmo molde do `arcoGolpe` — o forge é
+   * agnóstico de personagem por contrato e não pode ganhar um `if (goblin)`. É a
+   * fase da animação, e ela mexe em `spriteForge.ts`, não aqui.
+   *
+   * A dívida que este bloco registrava até a fase passada — "inimigos no atlas",
+   * ou seja, modulação do quadro pela luz do tile — está PAGA: ver
+   * `desenharSpriteInimigo` e `quadroModulado()`. O marcador saiu com ela; o que
+   * sobra acima é dívida NOVA e de outro dono.
    */
   private drawEnemy(
     ctx: CanvasRenderingContext2D, ent: Enemy, sx: number, cyBase: number, z: number,
     lvl: number, player: Player | null
   ): void {
     if (!ent) return;
-    const luts = this.luts;
     const v = this.vfxOf('e' + ent.id, ent.x, ent.y, ent.hp);
     const cx = sx + v.ox * z;
-    let cy = cyBase + v.oy * z;
-    const hop = hopOf(v, ent.bump) * 6 * z;
-    cy -= hop;
+    const cy = cyBase + v.oy * z;
 
+    // §7.4 — a sombra elíptica vem antes de tudo e continua no CHÃO: ela não
+    // sobe com o quique nem com o quadro da animação.
     fillEllipse(ctx, cx, cyBase + 2 * z, 11 * z, 4.6 * z, COL_SHADOW_ENT);
 
+    // ══ A BIFURCAÇÃO (§7.3): quem tem ficha em `RETRATOS` vira sprite; quem não
+    // tem, continua em forma geométrica. Nenhum dos dois caminhos sabe do outro.
+    // Os dois devolvem o Y DE TELA da barra de vida, porque só eles sabem onde
+    // termina o desenho que fizeram — o sprite tem a altura do rig, o geométrico
+    // tem os 33px do vanilla, e o quique entra só num deles.
+    const atlas = this.atlasDoInimigo(ent.kind);
+    const barraY = atlas
+      ? this.desenharSpriteInimigo(ctx, atlas, ent, v, cx, cy, z, lvl)
+      : this.desenharInimigoGeometrico(ctx, ent, v, cx, cy, z, lvl, player);
+
+    if (ent.maxHp > 0 && ent.hp < ent.maxHp) {
+      this.drawHpBar(ctx, cx, barraY, z, ent.hp / ent.maxHp);
+    }
+  }
+
+  /**
+   * §7 do BESTIARIO — o atlas de um arquétipo, forjado SOB DEMANDA e uma vez só,
+   * no primeiro desenho daquele bicho. Sem ficha em `RETRATOS` (ou sem canvas,
+   * em jsdom) devolve `null` e quem chamou cai no desenho geométrico: degradar
+   * sem lançar é requisito, não gambiarra.
+   */
+  private atlasDoInimigo(kind: ArchetypeKey): AtlasPersonagem | null {
+    const pronto = this.atlasInimigo.get(kind);
+    // `undefined` = nunca perguntado; `null` = já perguntado e não há atlas.
+    if (pronto !== undefined) return pronto;
+    const ficha = RETRATOS[kind];
+    const atlas = ficha ? this.forjarSeguro(ficha.modelo, ficha.forja) : null;
+    this.atlasInimigo.set(kind, atlas);
+    return atlas;
+  }
+
+  /**
+   * Estado e quadro de §6 para um inimigo, derivados por OBSERVAÇÃO — nenhum
+   * canal novo no engine, nem sequer um relógio por entidade:
+   *
+   *   - `ent.bump` é acesa pelo engine em UM lugar só, `attackPlayerInterno`
+   *     (`src/engine/entities.ts`), e decai aqui no `update()`. Ou seja: `bump`
+   *     positivo significa exatamente "este bicho atacou agora" — o gatilho do
+   *     estado `atacando`, de graça. (O `bump` de MOVIMENTO é outro campo, o
+   *     `v.bump` do `Vfx`, e não confunde os dois.)
+   *   - `v.passo` é o deslize entre tiles que o `trackVfx` já mantinha.
+   *   - a respiração sai do relógio visual da instância, defasada por `id` para
+   *     que dois goblins lado a lado não respirem em uníssono.
+   */
+  private quadroDoInimigo(ent: Enemy, v: Vfx): { estado: Estado; frame: number } {
+    if (typeof ent.bump === 'number' && ent.bump > 0) {
+      // bump 1 → 0 percorre os 3 quadros do golpe; o impacto é o quadro 1.
+      let f = Math.floor((1 - ent.bump) * 3);
+      if (f < 0) f = 0;
+      if (f > 2) f = 2;
+      return { estado: 'atacando', frame: f };
+    }
+    if (v.passo > 0) {
+      const t = 1 - v.passo / DUR_PASSO;
+      return { estado: 'andando', frame: v.pe * 2 + (t < 0.5 ? 0 : 1) };
+    }
+    const fase = this.t / DUR_RESPIRO + ent.id * 0.37;
+    return { estado: 'parado', frame: fase - Math.floor(fase / 2) * 2 < 1 ? 0 : 1 };
+  }
+
+  /**
+   * §1 e §7.2 do BESTIARIO — o inimigo como quadro do atlas, MODULADO pela luz
+   * do tile. Devolve o Y de tela da barra de vida, derivado da âncora do atlas
+   * pelo mesmo critério do jogador: um bicho de 13u e outro de 18u não podem
+   * pendurar a barra na mesma altura.
+   *
+   * A modulação inteira é uma linha: `quadroModulado()` cuida de quantizar `lvl`
+   * em 8 degraus, do cache por (quadro, degrau) e de recolar a camada emissiva —
+   * os olhos em brasa não escurecem (§1.1). Aqui só entra a conversão de
+   * unidade: `lvl` é o ÍNDICE inteiro 0..`LEVELS−1` das LUTs deste renderizador
+   * e o forge quer fração 0..1. Manter a divisão visível na chamada (e não
+   * escondida lá dentro) é o que impede o forge de virar refém do número de
+   * níveis de `./palette`.
+   *
+   * O quadro NÃO recebe o `hop` do desenho geométrico: o quique da marcha e o
+   * peso do golpe já estão dentro dos quadros de §6, e somar os dois faria o
+   * bicho saltar duas vezes por passo.
+   */
+  private desenharSpriteInimigo(
+    ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem, ent: Enemy, v: Vfx,
+    cx: number, cy: number, z: number, lvl: number
+  ): number {
+    const q = this.quadroDoInimigo(ent, v);
+    const f = quadroModulado(atlas, v.facing, q.estado, q.frame, lvl / (LEVELS - 1));
+    if (!f.fonte) return cy - TOPO_BARRA_INIMIGO * z;
+
+    const dx = Math.round(cx - atlas.ancoraX * z);
+    const dy = Math.round(cy - atlas.ancoraY * z);
+    const dw = f.largura * z;
+    const dh = f.altura * z;
+
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, dw, dh);
+    if (v.flash > 0) {
+      // §7.4 — o clarão de dano reusa o caminho de `source-atop` do jogador, mas
+      // tingindo o quadro JÁ ESCURECIDO: `FLASH_COL` tem alfa < 1, então a cor
+      // por baixo importa e um clarão sobre o quadro cru acenderia um inimigo
+      // que está no escuro.
+      const tinta = this.tingirQuadro(
+        f.fonte, f.sx, f.sy, f.largura, f.altura,
+        this.luts.FLASH_COL[Math.round(v.flash * (LEVELS - 1))]
+      );
+      if (tinta) ctx.drawImage(tinta, 0, 0, f.largura, f.altura, dx, dy, dw, dh);
+    }
+    ctx.imageSmoothingEnabled = suave;
+    return cy - (atlas.ancoraY - FOLGA_BARRA) * z;
+  }
+
+  /**
+   * Os inimigos em formas geométricas — o desenho do vanilla, intacto. É o
+   * caminho de `sentinel` e `linker` (§7.3) e também a rede de segurança de
+   * qualquer bicho cujo atlas não pôde ser forjado (jsdom, sem contexto 2D).
+   * Devolve o Y de tela da barra de vida, como o caminho de sprite — aqui ela
+   * acompanha o quique, exatamente como no vanilla.
+   */
+  private desenharInimigoGeometrico(
+    ctx: CanvasRenderingContext2D, ent: Enemy, v: Vfx, cx: number, cyBase: number,
+    z: number, lvl: number, player: Player | null
+  ): number {
+    const luts = this.luts;
+    const cy = cyBase - hopOf(v, ent.bump) * 6 * z;
     const sh = luts.SHADES[ent.kind] || luts.SHADES.chaser;
     if (ent.kind === 'sentinel') {
       pathSentinelBody(ctx, cx, cy, z);
@@ -1022,9 +1330,7 @@ export class IsoRenderer {
       ctx.fill();
     }
 
-    if (ent.maxHp > 0 && ent.hp < ent.maxHp) {
-      this.drawHpBar(ctx, cx, cy - 33 * z, z, ent.hp / ent.maxHp);
-    }
+    return cy - TOPO_BARRA_INIMIGO * z;
   }
 
   /* ------------------------------------------------------------------ *
@@ -1129,13 +1435,23 @@ export class IsoRenderer {
   private atlasDoGuerreiro(): AtlasPersonagem | null {
     if (this.atlasTentado) return this.atlas;
     this.atlasTentado = true;
-    try {
-      const forjado = forjarAtlas(MODELO_GUERREIRO, FORJA_GUERREIRO);
-      this.atlas = forjado.disponivel && forjado.canvas ? forjado : null;
-    } catch {
-      this.atlas = null;
-    }
+    this.atlas = this.forjarSeguro(MODELO_GUERREIRO, FORJA_GUERREIRO);
     return this.atlas;
+  }
+
+  /**
+   * Forja um atlas sem NUNCA lançar: sem DOM ou sem contexto 2D o forge devolve
+   * um atlas vazio (`disponivel: false`), e aqui isso vira `null` — o sinal de
+   * "desenhe do jeito antigo". Compartilhado pelo jogador e pelo bestiário para
+   * que os dois degradem exatamente igual.
+   */
+  private forjarSeguro(modelo: No, opcoes: OpcoesForja): AtlasPersonagem | null {
+    try {
+      const forjado = forjarAtlas(modelo, opcoes);
+      return forjado.disponivel && forjado.canvas ? forjado : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1143,22 +1459,31 @@ export class IsoRenderer {
    * caminho — não dá para `fill()` a silhueta dele —, então o tingimento sai de
    * um buffer próprio com `source-atop`, que respeita o alfa do quadro. O buffer
    * é da instância e reaproveitado: nada é alocado por quadro de animação.
+   *
+   * A FONTE é parâmetro (e não mais o atlas do jogador) porque o inimigo tinge o
+   * quadro já modulado pela luz, que mora na folha de slots do forge, não no
+   * atlas. Como o buffer serve a personagens de tamanhos diferentes, ele só
+   * CRESCE — encolher a cada troca de dono transformaria um clarão simultâneo de
+   * jogador e goblin em duas alocações de canvas por quadro de animação.
    */
   private tingirQuadro(
-    atlas: AtlasPersonagem, sx: number, sy: number, cor: string
+    fonte: HTMLCanvasElement, sx: number, sy: number, lw: number, lh: number, cor: string
   ): HTMLCanvasElement | null {
-    const fonte = atlas.canvas;
-    if (!fonte) return null;
-    const lw = atlas.larguraFrame;
-    const lh = atlas.alturaFrame;
-    if (!this.tinta || this.tinta.width !== lw || this.tinta.height !== lh) {
-      this.tinta = novoCanvas(lw, lh);
-      this.tintaCtx = contexto2d(this.tinta);
+    if (lw <= 0 || lh <= 0) return null;
+    const atual = this.tinta;
+    if (!atual || atual.width < lw || atual.height < lh) {
+      const novo = novoCanvas(
+        Math.max(lw, atual ? atual.width : 0),
+        Math.max(lh, atual ? atual.height : 0)
+      );
+      this.tinta = novo;
+      this.tintaCtx = contexto2d(novo);
     }
     const cv = this.tinta;
     const tctx = this.tintaCtx;
     if (!cv || !tctx) return null;
     tctx.globalCompositeOperation = 'source-over';
+    // Só o canto usado: quem lê a tinta lê exatamente este retângulo.
     tctx.clearRect(0, 0, lw, lh);
     tctx.imageSmoothingEnabled = false;
     tctx.drawImage(fonte, sx, sy, lw, lh, 0, 0, lw, lh);
@@ -1199,7 +1524,7 @@ export class IsoRenderer {
     ctx.drawImage(cv, alvo.sx, alvo.sy, lw, lh, dx, dy, dw, dh);
     if (flash > 0) {
       const tinta = this.tingirQuadro(
-        atlas, alvo.sx, alvo.sy, this.luts.FLASH_COL[Math.round(flash * (LEVELS - 1))]
+        cv, alvo.sx, alvo.sy, lw, lh, this.luts.FLASH_COL[Math.round(flash * (LEVELS - 1))]
       );
       if (tinta) ctx.drawImage(tinta, 0, 0, lw, lh, dx, dy, dw, dh);
     }
