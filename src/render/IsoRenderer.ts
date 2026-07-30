@@ -178,6 +178,14 @@ const FORJA_MORTE_AJOELHADO: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_A
 const FORJA_MORTE_CAIDO: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_CAIDA };
 /** Forja da espada solta — repouso neutro: a rotação da queda é de tela. */
 const FORJA_ESPADA: OpcoesForja = { ...FORJA_GUERREIRO, repouso: POSE_NEUTRA };
+/**
+ * Guerreiro em pé SEM a espada — o quadro que existe entre o instante em que a
+ * arma se solta (`MORTE_ESPADA_INICIO`) e a troca para o ajoelhado. Sem ele o
+ * corpo seguia sendo o atlas normal, com a espada na mão, enquanto a espada
+ * solta já caía: duas espadas na tela por 0,75 s. Mesmo repouso do atlas
+ * normal (`FORJA_GUERREIRO` já carrega `POSE_PARADA`); só o rig muda.
+ */
+const FORJA_MORTE_PARADO: OpcoesForja = { ...FORJA_GUERREIRO };
 
 /* --- tempos da INTRO (descendo as escadas) --- */
 /** Duração total da intro. */
@@ -2009,8 +2017,12 @@ export class IsoRenderer {
   /**
    * Atlas secundário da morte de um monstro, sob demanda e uma vez só — o
    * padrão de `atlasDeMorte` do Guerreiro, com a chave `kind:qual` porque aqui
-   * são três bichos. `qual`: 'agachado' | 'caido' | 'arma' (goblin/ogro),
-   * 'estagio1' | 'estagio2' | 'estagio3' (slime).
+   * são três bichos. `qual`: 'parado' | 'agachado' | 'caido' | 'arma'
+   * (goblin/ogro), 'estagio1' | 'estagio2' | 'estagio3' (slime).
+   *
+   * 'parado' é o bicho em pé SEM a arma — o quadro entre o instante em que ela
+   * se solta e a troca para o agachado; sem ele a arma aparece duas vezes (na
+   * mão e caindo), o mesmo defeito que o Guerreiro tinha.
    */
   private atlasMorteDe(kind: ArchetypeKey, qual: string): AtlasPersonagem | null {
     const chave = kind + ':' + qual;
@@ -2018,11 +2030,13 @@ export class IsoRenderer {
     if (pronto !== undefined) return pronto;
     let atlas: AtlasPersonagem | null = null;
     if (kind === 'chaser') {
-      if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_MORTE_GOBLIN_AGACHADO);
+      if (qual === 'parado') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_GOBLIN);
+      else if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_MORTE_GOBLIN_AGACHADO);
       else if (qual === 'caido') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_MORTE_GOBLIN_CAIDO);
       else if (qual === 'arma') atlas = this.forjarSeguro(MODELO_CIMITARRA, FORJA_CIMITARRA);
     } else if (kind === 'sentinel') {
-      if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_MORTE_OGRO_AGACHADO);
+      if (qual === 'parado') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_OGRO);
+      else if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_MORTE_OGRO_AGACHADO);
       else if (qual === 'caido') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_MORTE_OGRO_CAIDO);
       else if (qual === 'arma') atlas = this.forjarSeguro(MODELO_MARRETA, FORJA_MARRETA);
     } else if (kind === 'linker') {
@@ -2159,10 +2173,12 @@ export class IsoRenderer {
     // A sombra elíptica continua: o cadáver também está no chão.
     fillEllipse(ctx, cx, cy + 2 * z, 10 * z, 4.2 * z, COL_SHADOW_ENT);
 
-    // 2. CORPO — parado (até 0,3) → AGACHADO → CAÍDO (persiste: é o rastro).
+    // 2. CORPO — parado com cimitarra → parado SEM ela (no instante em que a
+    // arma se solta) → AGACHADO → CAÍDO (persiste: é o rastro).
     let corpo: AtlasPersonagem | null;
     if (t >= GOB_MORTE_CAIDO) corpo = this.atlasMorteDe('chaser', 'caido');
     else if (t >= GOB_MORTE_AGACHADO) corpo = this.atlasMorteDe('chaser', 'agachado');
+    else if (t >= GOB_MORTE_ARMA_INICIO) corpo = this.atlasMorteDe('chaser', 'parado');
     else corpo = this.atlasDoInimigo('chaser');
     if (corpo) this.desenharCorpoMorto(ctx, corpo, dir, cx, cy, z, lvl, 1);
 
@@ -2214,10 +2230,12 @@ export class IsoRenderer {
     if (t < OGRO_MORTE_CORPO_SOME_FIM) {
       fillEllipse(ctx, cx, cy + 2 * z, 13 * z, 5 * z, COL_SHADOW_ENT);
 
-      // 3. CORPO — parado → AGACHADO → CAÍDO → ESMAECE e some (o rastro é a ARMA).
+      // 3. CORPO — parado com marreta → parado SEM ela (no instante em que a
+      // arma se solta) → AGACHADO → CAÍDO → ESMAECE e some (o rastro é a ARMA).
       let corpo: AtlasPersonagem | null;
       if (t >= OGRO_MORTE_CAIDO) corpo = this.atlasMorteDe('sentinel', 'caido');
       else if (t >= OGRO_MORTE_AGACHADO) corpo = this.atlasMorteDe('sentinel', 'agachado');
+      else if (t >= OGRO_MORTE_ARMA_INICIO) corpo = this.atlasMorteDe('sentinel', 'parado');
       else corpo = this.atlasDoInimigo('sentinel');
       let alfa = 1;
       if (t >= OGRO_MORTE_CORPO_SOME_INICIO) {
@@ -2655,11 +2673,13 @@ export class IsoRenderer {
    * ------------------------------------------------------------------ */
 
   /** Atlas secundário da morte, sob demanda e uma vez só (ver `atlasMorte`). */
-  private atlasDeMorte(qual: 'ajoelhado' | 'caido' | 'espada'): AtlasPersonagem | null {
+  private atlasDeMorte(qual: 'parado' | 'ajoelhado' | 'caido' | 'espada'): AtlasPersonagem | null {
     const pronto = this.atlasMorte.get(qual);
     if (pronto !== undefined) return pronto;
     let atlas: AtlasPersonagem | null = null;
-    if (qual === 'ajoelhado') {
+    if (qual === 'parado') {
+      atlas = this.forjarSeguro(MODELO_GUERREIRO_SEM_ESPADA, FORJA_MORTE_PARADO);
+    } else if (qual === 'ajoelhado') {
       atlas = this.forjarSeguro(MODELO_GUERREIRO_SEM_ESPADA, FORJA_MORTE_AJOELHADO);
     } else if (qual === 'caido') {
       atlas = this.forjarSeguro(MODELO_GUERREIRO_SEM_ESPADA, FORJA_MORTE_CAIDO);
@@ -2780,10 +2800,16 @@ export class IsoRenderer {
     // A sombra elíptica continua: o cadáver também está no chão.
     fillEllipse(ctx, cx, cy + 2 * z, 12 * z, 5 * z, COL_SHADOW_ENT);
 
-    // 3/4. CORPO — parado (até 0,9) → AJOELHADO → CAÍDO (1,7). Trocas duras.
+    // 3/4. CORPO — parado COM espada (até ela se soltar) → parado SEM espada →
+    // AJOELHADO (0,9) → CAÍDO (1,7). Trocas duras.
+    //
+    // A troca para o atlas sem espada acontece no MESMO instante em que a
+    // espada solta começa a cair (`MORTE_ESPADA_INICIO`): é o que faz a arma
+    // "sair da mão" em vez de existir duas vezes na tela.
     let corpo: AtlasPersonagem | null;
     if (t >= MORTE_CAIDO) corpo = this.atlasDeMorte('caido');
     else if (t >= MORTE_AJOELHADO) corpo = this.atlasDeMorte('ajoelhado');
+    else if (t >= MORTE_ESPADA_INICIO) corpo = this.atlasDeMorte('parado');
     else corpo = this.atlasDoGuerreiro();
     if (corpo) {
       this.desenharQuadroExato(ctx, corpo, dir, cx, cy, z);

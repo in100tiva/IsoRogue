@@ -2138,15 +2138,18 @@ interface FaseMortePreview {
  */
 const MORTE_PREVIEW: Readonly<Record<string, readonly FaseMortePreview[]>> = {
   guerreiro: [
+    { rotulo: 'em pé, JÁ SEM a espada (0,15 s)', modelo: 'MODELO_GUERREIRO_SEM_ESPADA', repouso: 'POSE_PARADA' },
     { rotulo: 'ajoelhada (~0,9 s)', modelo: 'MODELO_GUERREIRO_SEM_ESPADA', repouso: 'POSE_AJOELHADA' },
     { rotulo: 'caída (~1,7 s)', modelo: 'MODELO_GUERREIRO_SEM_ESPADA', repouso: 'POSE_CAIDA' }
   ],
   goblin: [
+    { rotulo: 'em pé, JÁ SEM a cimitarra (0,1 s)', modelo: 'MODELO_GOBLIN_SEM_CIMITARRA', repouso: 'POSE_PARADA_GOBLIN' },
     { rotulo: 'agachado (~0,3 s)', modelo: 'MODELO_GOBLIN_SEM_CIMITARRA', repouso: 'POSE_MORTE_GOBLIN_AGACHADO' },
     { rotulo: 'caído — o RASTRO (~0,75 s)', modelo: 'MODELO_GOBLIN_SEM_CIMITARRA', repouso: 'POSE_MORTE_GOBLIN_CAIDO' },
     { rotulo: 'cimitarra solta (cai e some)', modelo: 'MODELO_CIMITARRA', repouso: null }
   ],
   ogro: [
+    { rotulo: 'em pé, JÁ SEM a marreta (0,2 s)', modelo: 'MODELO_OGRO_SEM_MARRETA', repouso: 'POSE_PARADA_OGRO' },
     { rotulo: 'agachado (~0,45 s)', modelo: 'MODELO_OGRO_SEM_MARRETA', repouso: 'POSE_MORTE_OGRO_AGACHADO' },
     { rotulo: 'caído, antes de esmaecer (~1,0 s)', modelo: 'MODELO_OGRO_SEM_MARRETA', repouso: 'POSE_MORTE_OGRO_CAIDO' },
     { rotulo: 'marreta pousada — o RASTRO', modelo: 'MODELO_MARRETA', repouso: null }
