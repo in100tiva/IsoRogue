@@ -11,10 +11,18 @@
  * silêncio na primeira refatoração.
  *
  * A fase 2 (economia) acrescentou um terceiro da mesma família: os PONTOS DE
- * PARADA. Desenhar o mercador e a bancada é trivial; o que não é são as três
- * regras em volta — o recorte por FOV, a ORIENTAÇÃO do mercador por observação
- * (ele encara quem chega, sem uma letra no `Game`) e o BRILHO DE CONVITE, que
- * existe enquanto o jogador está longe e apaga quando ele pisa no tile.
+ * PARADA. Desenhar o mercador e a estação de alquimia é trivial; o que não é
+ * são as regras em volta — o recorte por FOV, a ORIENTAÇÃO do mercador por
+ * observação (ele encara quem chega, sem uma letra no `Game`) e o BRILHO DE
+ * CONVITE, que existe enquanto o jogador está longe e apaga quando ele pisa no
+ * tile.
+ *
+ * A fase 2.1 partiu a oficina em TRÊS peças, uma por tile: o caldeirão em
+ * `game.bancada` (o tile de interação) e, em `game.alquimiaExtras`, a estante
+ * (primeiro extra) e a mesa (segundo). A lista de extras pode ser curta ou
+ * VAZIA num cômodo apertado — e "desenhar menos peças" é o comportamento
+ * correto, não uma exceção a tolerar. É o que os dois últimos casos deste
+ * arquivo fixam.
  *
  * O que este arquivo NÃO tenta ser: teste de pixel. Sem contexto 2D real não há
  * sprite nenhum — e é justamente esse o caminho exercitado aqui, o desenho de
@@ -181,11 +189,16 @@ function corDoItem(chave: 'linker' | 'chaser' | 'sentinel' | 'stone', lvl: numbe
 /* ------------------------------------------------------------------ *
  * Assinaturas do desenho de reserva dos PONTOS DE PARADA
  *
- * Sem contexto 2D não há atlas, então o mercador e a bancada saem pelo caminho
- * geométrico — e cada um tem uma elipse de corpo com raios próprios, que é o
- * que permite contá-los e localizá-los nas anotações do contexto falso. Os
- * números vivem em `IsoRenderer.desenharMercadorGeometrico` /
- * `desenharBancadaGeometrica`; se mudarem lá, mudam aqui.
+ * Sem contexto 2D não há atlas, então o mercador e as três peças da estação de
+ * alquimia saem pelo caminho geométrico — e cada um tem uma elipse de CORPO com
+ * raios próprios, que é o que permite contá-los e localizá-los nas anotações do
+ * contexto falso. Os números vivem em `IsoRenderer.desenharMercadorGeometrico`,
+ * `desenharCaldeiraoGeometrico`, `desenharEstanteGeometrica` e
+ * `desenharMesaGeometrica`; se mudarem lá, mudam aqui.
+ *
+ * As quatro assinaturas são distintas entre si E das sombras elípticas (que
+ * também passam pelo `ellipse` do contexto falso): é isso que faz contar peça
+ * ser contar peça, e não contar sombra.
  * ------------------------------------------------------------------ */
 
 /** O sino do manto do mercador: 6 × 9 px de tela a zoom 1. */
@@ -193,9 +206,30 @@ function corposDeMercador(elipses: Elipse[]): Elipse[] {
   return elipses.filter((e) => e.rx === 6 && e.ry === 9);
 }
 
-/** A laje da bancada: 13 × 6 px de tela a zoom 1. */
-function corposDeBancada(elipses: Elipse[]): Elipse[] {
-  return elipses.filter((e) => e.rx === 13 && e.ry === 6);
+/** O bojo do caldeirão — o tile de INTERAÇÃO: 9 × 6 px de tela a zoom 1. */
+function corposDeCaldeirao(elipses: Elipse[]): Elipse[] {
+  return elipses.filter((e) => e.rx === 9 && e.ry === 6);
+}
+
+/** A estante, a peça ALTA da estação: 6,5 × 13 px de tela a zoom 1. */
+function corposDeEstante(elipses: Elipse[]): Elipse[] {
+  return elipses.filter((e) => e.rx === 6.5 && e.ry === 13);
+}
+
+/** A mesa, a peça BAIXA da estação: 10 × 4,5 px de tela a zoom 1. */
+function corposDeMesa(elipses: Elipse[]): Elipse[] {
+  return elipses.filter((e) => e.rx === 10 && e.ry === 4.5);
+}
+
+/**
+ * Quantas peças da ESTAÇÃO foram desenhadas neste quadro — caldeirão, estante e
+ * mesa somados. É o número que a fase 2.1 fixa: três com dois extras, uma sem
+ * extra nenhum.
+ */
+function pecasDaEstacao(elipses: Elipse[]): number {
+  return corposDeCaldeirao(elipses).length
+    + corposDeEstante(elipses).length
+    + corposDeMesa(elipses).length;
 }
 
 /** A cor do pulso de convite: âmbar em brilho pleno, nunca no `lvl` do tile. */
@@ -221,6 +255,34 @@ function vizinhoLivre(px: number, py: number): Point {
     return { x: nx, y: ny };
   }
   throw new Error('o jogador nasceu sem vizinho caminhável');
+}
+
+/**
+ * `quantos` tiles DISTINTOS, caminháveis e dentro do campo de visão do jogador
+ * — a matéria-prima de todo caso que precisa espalhar peças pelo mapa.
+ *
+ * Sair de `game.visible` (e não de um raio em volta do herói) é o que garante
+ * que `seen` seja verdadeiro nos tiles escolhidos: o renderer recorta por FOV
+ * (R31), e um tile "perto" que a sombra de uma parede cortou não desenharia
+ * nada — o caso falharia pelo motivo errado.
+ *
+ * O tile do próprio jogador fica de fora: ele desenha o herói por cima, e o
+ * convite apaga sob os pés dele. Misturar as duas coisas num caso de contagem
+ * de peças só criaria ruído.
+ */
+function tilesVisiveisLivres(quantos: number): Point[] {
+  const g = store.getGame();
+  const map = g.map;
+  const saida: Point[] = [];
+  for (const i of g.visible) {
+    if (map.tiles[i] === CONFIG.TILE.WALL) continue;
+    const x = i % map.w;
+    const y = (i - x) / map.w;
+    if (x === g.player.x && y === g.player.y) continue;
+    saida.push({ x: x, y: y });
+    if (saida.length >= quantos) return saida;
+  }
+  throw new Error('o campo de visão inicial não ofereceu ' + quantos + ' tiles livres');
 }
 
 /**
@@ -387,10 +449,10 @@ describe('IsoRenderer — os despojos no chão', () => {
 });
 
 /* ================================================================== *
- * Os pontos de parada (fase 2 da economia)
+ * Os pontos de parada: o mercador e a estação de alquimia
  * ================================================================== */
 
-describe('IsoRenderer — o mercador e a bancada', () => {
+describe('IsoRenderer — o mercador e a estação de alquimia', () => {
   let falso: ContextoFalso;
   let renderer: IsoRenderer;
 
@@ -400,63 +462,137 @@ describe('IsoRenderer — o mercador e a bancada', () => {
     renderer = new IsoRenderer(criarCanvasFalso(falso.ctx));
   });
 
-  it('desenha os dois no tile de cada um, com a âncora do tile', () => {
+  it('desenha o mercador e as três peças da estação, cada uma no tile dela', () => {
     const g = store.getGame();
-    const merc = vizinhoLivre(g.player.x, g.player.y);
-    /* A bancada num tile diferente do mercador — no jogo eles nunca coincidem
-     * (`populate` reserva o tile do mercador antes de sortear a bancada). */
-    const banc = vizinhoLivre(merc.x, merc.y);
-    expect(banc.x !== merc.x || banc.y !== merc.y, 'os dois pontos caíram no mesmo tile')
-      .toBe(true);
+    /* Quatro tiles distintos e visíveis: mercador, caldeirão e os dois extras.
+     * No jogo eles nunca coincidem — `populate` reserva um a um em `taken`. */
+    const [merc, cald, ex1, ex2] = tilesVisiveisLivres(4);
     g.mercador = merc;
-    g.bancada = banc;
+    g.bancada = cald;
+    g.alquimiaExtras = [ex1, ex2];
 
     renderer.update(g, 0.016);
     renderer.draw(g);
 
     const mercs = corposDeMercador(falso.elipses);
-    const bancs = corposDeBancada(falso.elipses);
+    const calds = corposDeCaldeirao(falso.elipses);
+    const estantes = corposDeEstante(falso.elipses);
+    const mesas = corposDeMesa(falso.elipses);
     expect(mercs.length, 'o mercador não foi desenhado').toBe(1);
-    expect(bancs.length, 'a bancada não foi desenhada').toBe(1);
+    expect(calds.length, 'o caldeirão não foi desenhado').toBe(1);
+    expect(estantes.length, 'a estante não foi desenhada').toBe(1);
+    expect(mesas.length, 'a mesa não foi desenhada').toBe(1);
 
     /* A âncora é a mesma dos inimigos: o `sx` do losango do tile, sem leque e
-     * sem deslize — o ponto de parada não anda. */
-    expect(Math.round(mercs[0].cx), 'o mercador saiu do tile dele')
-      .toBe(Math.round(renderer.tileToScreen(g, merc.x, merc.y).sx));
-    expect(Math.round(bancs[0].cx), 'a bancada saiu do tile dela')
-      .toBe(Math.round(renderer.tileToScreen(g, banc.x, banc.y).sx));
+     * sem deslize — ponto de parada não anda. É esta asserção que prova o
+     * MAPEAMENTO extras → peça: o primeiro extra é a estante, o segundo é a
+     * mesa (`PECAS_EXTRAS_ALQUIMIA` no renderer). */
+    const ancora = (p: Point): number => Math.round(renderer.tileToScreen(g, p.x, p.y).sx);
+    expect(Math.round(mercs[0].cx), 'o mercador saiu do tile dele').toBe(ancora(merc));
+    expect(Math.round(calds[0].cx), 'o caldeirão saiu do tile dele').toBe(ancora(cald));
+    expect(Math.round(estantes[0].cx), 'a estante não foi para o PRIMEIRO extra')
+      .toBe(ancora(ex1));
+    expect(Math.round(mesas[0].cx), 'a mesa não foi para o SEGUNDO extra')
+      .toBe(ancora(ex2));
   });
 
-  it('andar sem mercador nem bancada não desenha ponto nenhum', () => {
+  it('com dois extras desenha três peças; com nenhum, só o caldeirão — e não quebra', () => {
+    /*
+     * O contrato da fase 2.1 em uma frase: `game.alquimiaExtras` é uma lista de
+     * ATÉ dois pontos, e lista curta é degradação legítima. Num cômodo apertado
+     * a estação perde a mesa, depois a estante; o caldeirão nunca cai, porque é
+     * ele o tile de interação. Nenhum desses casos pode lançar.
+     */
+    const g = store.getGame();
+    const [cald, ex1, ex2] = tilesVisiveisLivres(3);
+    g.mercador = null;
+    g.bancada = cald;
+
+    /* DOIS extras: a estação inteira, três peças. */
+    g.alquimiaExtras = [ex1, ex2];
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    expect(pecasDaEstacao(falso.elipses), 'com dois extras a estação não saiu com três peças')
+      .toBe(3);
+
+    /* UM extra: caldeirão + estante. A mesa é a primeira a cair. */
+    falso.elipses.length = 0;
+    g.alquimiaExtras = [ex1];
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    expect(pecasDaEstacao(falso.elipses), 'com um extra a estação não saiu com duas peças')
+      .toBe(2);
+    expect(corposDeEstante(falso.elipses).length, 'o extra único não virou a ESTANTE').toBe(1);
+    expect(corposDeMesa(falso.elipses).length, 'apareceu mesa sem segundo extra').toBe(0);
+
+    /* NENHUM extra: só o caldeirão, e nada explode. */
+    falso.elipses.length = 0;
+    g.alquimiaExtras = [];
+    expect(() => {
+      renderer.update(g, 0.016);
+      renderer.draw(g);
+    }, 'a estação sem extras quebrou o desenho').not.toThrow();
+    expect(pecasDaEstacao(falso.elipses), 'sem extras deveria sobrar só o caldeirão').toBe(1);
+    expect(corposDeCaldeirao(falso.elipses).length, 'o caldeirão sumiu junto com os extras')
+      .toBe(1);
+  });
+
+  it('os extras são CENÁRIO: só o mercador e o caldeirão convidam', () => {
+    /*
+     * O pulso âmbar diz "olhe para este tile, há algo a fazer aqui". A estante e
+     * a mesa não respondem a comando nenhum (`criar` só é aceito sobre
+     * `game.bancada`), e um losango piscando embaixo de coisa que não responde
+     * ensinaria o jogador a desconfiar do próprio convite.
+     */
+    const g = store.getGame();
+    const [merc, cald, ex1, ex2] = tilesVisiveisLivres(4);
+    g.mercador = merc;
+    g.bancada = cald;
+    g.alquimiaExtras = [ex1, ex2];
+
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+
+    expect(convites(falso.preenchimentos).length,
+      'o convite deveria sair uma vez para o mercador e uma para o caldeirão — e mais nenhuma')
+      .toBe(2);
+  });
+
+  it('andar sem mercador nem estação não desenha ponto nenhum', () => {
     /* `populate` devolve `null` quando o mapa não ofereceu tile elegível. Um
      * `null` lido como zero desenharia o mercador no canto (0,0) do mapa. */
     const g = store.getGame();
     g.mercador = null;
     g.bancada = null;
+    g.alquimiaExtras = [];
 
     renderer.update(g, 0.016);
     renderer.draw(g);
 
     expect(corposDeMercador(falso.elipses).length, 'apareceu mercador do nada').toBe(0);
-    expect(corposDeBancada(falso.elipses).length, 'apareceu bancada do nada').toBe(0);
+    expect(pecasDaEstacao(falso.elipses), 'apareceu peça de alquimia do nada').toBe(0);
     expect(convites(falso.preenchimentos).length, 'apareceu convite sem ponto de parada')
       .toBe(0);
   });
 
   it('fora do campo de visão não desenha nada — a regra dos inimigos (R31)', () => {
     const g = store.getGame();
-    const merc = vizinhoLivre(g.player.x, g.player.y);
+    const [merc, cald] = tilesVisiveisLivres(2);
     g.mercador = merc;
-    g.bancada = null;
+    g.bancada = cald;
+    g.alquimiaExtras = [];
 
-    /* O MESMO tile, no MESMO lugar da tela: só a visibilidade muda. Testar com
-     * um tile distante provaria o recorte de tela, não o recorte de FOV. */
+    /* Os MESMOS tiles, no MESMO lugar da tela: só a visibilidade muda. Testar
+     * com um tile distante provaria o recorte de tela, não o recorte de FOV. */
     renderer.update(g, 0.016);
     renderer.draw(g);
     expect(corposDeMercador(falso.elipses).length, 'o mercador visível não foi desenhado')
       .toBe(1);
+    expect(corposDeCaldeirao(falso.elipses).length, 'o caldeirão visível não foi desenhado')
+      .toBe(1);
 
     g.visible.delete(merc.y * g.map.w + merc.x);
+    g.visible.delete(cald.y * g.map.w + cald.x);
     falso.elipses.length = 0;
     falso.preenchimentos.length = 0;
     renderer.update(g, 0.016);
@@ -464,6 +600,7 @@ describe('IsoRenderer — o mercador e a bancada', () => {
 
     expect(corposDeMercador(falso.elipses).length, 'o mercador apareceu fora do FOV')
       .toBe(0);
+    expect(pecasDaEstacao(falso.elipses), 'o caldeirão apareceu fora do FOV').toBe(0);
     expect(convites(falso.preenchimentos).length, 'o convite piscou fora do FOV')
       .toBe(0);
   });
@@ -517,6 +654,7 @@ describe('IsoRenderer — o mercador e a bancada', () => {
     const merc = vizinhoLivre(g.player.x, g.player.y);
     g.mercador = merc;
     g.bancada = null;
+    g.alquimiaExtras = [];
 
     renderer.update(g, 0.016);
     renderer.draw(g);

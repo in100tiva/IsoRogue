@@ -319,9 +319,20 @@ export interface Population {
    * Os dois pontos de parada do andar (fase 2), ou `null` quando o mapa não
    * ofereceu tile elegível. Saem daqui, e não de `generate`, porque dependem de
    * onde inimigos e itens caíram — nenhum dos dois pode ficar embaixo deles.
+   *
+   * Desde a fase 2.1 os dois nascem no CÔMODO EM QUE O HERÓI COMEÇA (ver
+   * `populate`): o dono jogou e não achou o mercador, e ponto de parada que não
+   * se descobre é conteúdo que não existe.
    */
   mercador: Point | null;
   bancada: Point | null;
+  /**
+   * Os tiles de DECORAÇÃO da estação de alquimia (fase 2.1): até dois vizinhos
+   * ortogonais do caldeirão (`bancada`), na ordem canônica do índice linear.
+   * Ver `Game.alquimiaExtras` — aqui vale a mesma regra, inclusive a de que a
+   * lista pode ser mais curta (ou vazia) num cômodo apertado.
+   */
+  alquimiaExtras: Point[];
 }
 
 /**
@@ -438,6 +449,13 @@ export interface Game {
    * O MERCADOR do andar — onde `vender` e `comprar` são aceitos. `null` quando
    * o mapa não ofereceu tile elegível (ver `populate`).
    *
+   * ONDE ELE NASCE (fase 2.1): no CÔMODO EM QUE O HERÓI COMEÇA, a Chebyshev
+   * 2..4 do ponto de início. A regra antiga — perto da escada — era boa no
+   * papel e ruim na mão: o dono jogou uma expedição inteira sem achar o
+   * mercador, porque a escada é o fim do andar e não o começo. Dois é longe o
+   * bastante para ele não colar no herói; quatro é perto o bastante para caber
+   * no primeiro campo de visão.
+   *
    * DECISÃO DE MODELAGEM (fase 2): os dois pontos de parada são estado do
    * JOGO, não um valor novo em `Tile`. Três razões, nesta ordem:
    *   1. o mapa NÃO é serializado — ele é regerado por seed+depth no restore
@@ -455,8 +473,31 @@ export interface Game {
    * degradação tolerante (ver `SaveData`).
    */
   mercador: Point | null;
-  /** A BANCADA do andar (alquimia + refino no mesmo ponto). Ver `mercador`. */
+  /**
+   * O CALDEIRÃO da estação de alquimia — o tile de INTERAÇÃO da oficina, onde
+   * `criar` (alquimia e refino) é aceito. Ver `mercador`.
+   *
+   * O nome do campo é anterior à estação de três tiles da fase 2.1 e ficou como
+   * está de propósito: ele é contrato de `snapshot()`, do save, do render e da
+   * interface. Renomeá-lo para `caldeirao` custaria uma migração em quatro
+   * camadas para trocar a palavra que aparece na tela por outra que aparece na
+   * tela — e a peça continua sendo a mesma.
+   */
   bancada: Point | null;
+  /**
+   * Os tiles de DECORAÇÃO da estação de alquimia (fase 2.1): a estante e a mesa
+   * que ladeiam o caldeirão. No máximo dois, sempre ORTOGONALMENTE adjacentes a
+   * `bancada`, na ordem canônica do índice linear (linha a linha).
+   *
+   * O que eles são: cenário com TERRITÓRIO RESERVADO. Não têm interação nenhuma
+   * — `criar` só responde sobre `bancada` —, mas `populate` os marca como
+   * ocupados, então nenhum item e nenhum inimigo nasce em cima da instalação.
+   *
+   * Lista CURTA (ou vazia) é degradação legítima, não erro: num cômodo apertado
+   * a estação perde a mesa, depois a estante, e o caldeirão fica sozinho. O que
+   * nunca acontece é a estação existir sem caldeirão.
+   */
+  alquimiaExtras: Point[];
   enemies: Enemy[];
   items: Item[];
   /**
@@ -605,6 +646,18 @@ export interface SaveData {
    */
   mercador: Point | null;
   bancada: Point | null;
+  /**
+   * Os tiles de decoração da estação de alquimia (ver `Game.alquimiaExtras`).
+   *
+   * A degradação aqui é MAIS DURA do que a dos dois pontos, de propósito: um
+   * save que não traga a lista (todo save anterior à fase 2.1) retoma com a
+   * estação SEM decoração, e não com a decoração que `createState` acabou de
+   * calcular. O motivo é que os extras só fazem sentido colados no caldeirão, e
+   * o caldeirão que vale na retomada é o do save: herdar extras de outro
+   * cálculo poria estante e mesa flutuando longe da oficina. Cenário faltando é
+   * discreto; cenário no lugar errado é bug visível.
+   */
+  alquimiaExtras: Point[];
   /** Já decodificado por `read()`; base64 na forma gravada. */
   explored: Uint8Array | null;
   exploredB64?: string;

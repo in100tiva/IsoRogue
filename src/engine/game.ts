@@ -49,6 +49,7 @@ import { computeFov } from './fov';
 import { computeDijkstra } from './dijkstra';
 import type { ItemDef, ReceitaDef } from './entities';
 import {
+  ALQUIMIA_EXTRAS_MAX,
   ARCHETYPES,
   ARMA_NIVEL_MAX,
   ATK_POR_REFINO,
@@ -415,6 +416,9 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
     // inimigos e itens); podem ser `null` num mapa sem tile elegível.
     mercador: pop.mercador,
     bancada: pop.bancada,
+    // A decoração da estação de alquimia acompanha o caldeirão — ela sai do
+    // mesmo cálculo e nunca é recomposta em outro lugar.
+    alquimiaExtras: pop.alquimiaExtras,
     enemies: pop.enemies,
     items: pop.items,
     // Continua a numeração de `populate` (1..N) — o primeiro despojo é N+1.
@@ -1141,6 +1145,7 @@ export function descend(g: Game): void {
   // toca em `p.bag`, `p.moedas` ou `p.armaNivel`).
   g.mercador = pop.mercador;
   g.bancada = pop.bancada;
+  g.alquimiaExtras = pop.alquimiaExtras;
   // Andar novo, numeração de item nova: `populate` voltou a contar do 1.
   g.proxItemId = proximoIdDeItem(pop.items);
   g.rngCombat = makeRng(hash32(g.seedStr + '#combat' + depth));
@@ -1192,46 +1197,65 @@ function pontoEmTexto(p: Point | null): string {
 }
 
 /**
+ * A lista de pontos da decoração da estação: `'x,y;x,y'`, ou `'-'` quando não
+ * há nenhum. Mesmo traço, mesma razão — e o separador interno é `;` para não
+ * disputar com o `|` que separa os campos do snapshot.
+ *
+ * A ordem sai ESTÁVEL do próprio dado: `populate` guarda os extras em ordem de
+ * índice linear crescente, e `restore` preserva a ordem gravada. Ordenar de
+ * novo aqui só esconderia o dia em que alguém guardasse a lista embaralhada.
+ */
+function extrasEmTexto(lista: Point[] | null | undefined): string {
+  if (!lista || lista.length === 0) return '-';
+  const buf: string[] = [];
+  for (let i = 0; i < lista.length; i++) {
+    const p = lista[i];
+    if (p) buf.push(p.x + ',' + p.y);
+  }
+  return buf.length ? buf.join(';') : '-';
+}
+
+/**
  * Resumo textual determinístico do estado. O golden test compara string com
  * string: o formato tem de sair estável byte a byte.
  *
- * FORMATO v3 (a fase 2 — economia e oficina):
+ * FORMATO v4 (a fase 2.1 — a estação de alquimia com três tiles):
  *
- *   v3|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
+ *   v4|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
  *     |E[1:linker:9:14:20|2:chaser:12:18:9]
  *     |I[3:potion:11:7|7:orelhaGoblin:18:9|8:espadaGoblin:18:9]
  *     |B[gosma2|orelhaGoblin1]
  *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364
- *     |merc=24,9|banc=8,31|map=1f3ac2b9
+ *     |merc=24,9|banc=8,31|alq=8,30;9,31|map=1f3ac2b9
  *
- * O que mudou do v2, e por quê:
- *  · o bloco do jogador ganhou `,mo<moedas>` e `,arm<armaNivel>` NO FIM, para
- *    que a leitura da esquerda continue idêntica à do v2 — quem lê um snapshot
- *    a olho encontra hp, atk e nível no mesmo lugar de sempre;
- *  · `merc=` e `banc=` são os dois pontos de parada, no formato `x,y`, ou `-`
- *    quando o andar não tem aquele ponto. Entram porque são estado de jogo que
- *    o mapa NÃO carrega: o checksum de tiles em `map=` é cego a eles (é
- *    justamente por isso que os pontos moram no `Game` e não em `Tile`), e sem
- *    esta linha duas partidas com mercadores em lugares diferentes sairiam
- *    idênticas para o oracle;
- *  · a posição escolhida foi ANTES de `map=`: o checksum de tiles fecha o
- *    snapshot desde o v1 e é onde o olho vai procurar "que andar é este".
+ * O que mudou do v3, e por quê:
+ *  · nasceu `alq=`, a lista dos tiles de DECORAÇÃO da estação de alquimia
+ *    (estante e mesa), no formato `x,y;x,y` e com `-` para lista vazia. Ela
+ *    entra pelo mesmo motivo que `merc=` e `banc=` entraram: é estado de jogo
+ *    que o mapa não carrega — o checksum de `map=` é cego a ela —, e é
+ *    território RESERVADO, então duas partidas com a estação montada de lados
+ *    diferentes precisam sair diferentes para o oracle;
+ *  · o lugar é logo depois de `banc=`, porque o caldeirão e os extras são a
+ *    mesma instalação e se leem juntos;
+ *  · a etiqueta subiu de `v3` para `v4`: o golden gravado com o formato antigo
+ *    DEVE reprovar, e reprovar dizendo qual é o problema (formato novo) em vez
+ *    de fingir divergência de simulação.
  *
- * O que veio do v2 e continua valendo (herança dos despojos): `I[...]` traz
- * `id:kind:x:y` — sem o `kind` o oracle não distingue uma orelha de uma clava
- * caídas no mesmo tile; `B[...]` é a bolsa na ordem fixa de `ITEM_KINDS`, só
- * com contagem positiva (bolsa vazia sai `B[]`); e `rngL=` é o estado do
- * stream de despojos, que é divergência de estado como qualquer outra.
+ * O que veio do v3 e continua valendo: `,mo<moedas>` e `,arm<armaNivel>` no FIM
+ * do bloco do jogador, para que a leitura da esquerda continue idêntica à do
+ * v2; e `merc=`/`banc=`, os dois pontos de parada, no formato `x,y` ou `-`.
  *
- * A etiqueta subiu de `v2` para `v3` de propósito: o golden gravado com o
- * formato antigo DEVE reprovar, e reprovar dizendo qual é o problema (formato
- * novo) em vez de fingir divergência de simulação.
+ * O que veio do v2 (herança dos despojos): `I[...]` traz `id:kind:x:y` — sem o
+ * `kind` o oracle não distingue uma orelha de uma clava caídas no mesmo tile;
+ * `B[...]` é a bolsa na ordem fixa de `ITEM_KINDS`, só com contagem positiva
+ * (bolsa vazia sai `B[]`); e `rngL=` é o estado do stream de despojos, que é
+ * divergência de estado como qualquer outra.
  */
 export function snapshot(game: Game): string {
   if (!game) return '';
   const p = game.player;
   const partes: string[] = [];
-  partes.push('v3');
+  partes.push('v4');
   partes.push('seed=' + game.seedStr);
   partes.push('d=' + game.depth);
   partes.push('t=' + game.turn);
@@ -1277,6 +1301,7 @@ export function snapshot(game: Game): string {
   partes.push('rngL=' + (game.rngLoot && isNum(game.rngLoot.s) ? (game.rngLoot.s >>> 0) : 0));
   partes.push('merc=' + pontoEmTexto(game.mercador));
   partes.push('banc=' + pontoEmTexto(game.bancada));
+  partes.push('alq=' + extrasEmTexto(game.alquimiaExtras));
   partes.push('map=' + checksumTiles(game.map.tiles));
   return partes.join('|');
 }
@@ -1426,6 +1451,42 @@ function reconstruirPonto(bruto: unknown, map: GameMap): Point | null {
 }
 
 /**
+ * Reconstrói a decoração da estação de alquimia (`Game.alquimiaExtras`).
+ *
+ * Três filtros, e todos existem por um motivo concreto:
+ *   1. tile CAMINHÁVEL do mapa regerado — a mesma razão de `reconstruirPonto`:
+ *      cenário dentro de parede é cenário que some sem dizer por quê;
+ *   2. ORTOGONALMENTE ADJACENTE ao caldeirão restaurado — os extras são a
+ *      estante e a mesa DAQUELE caldeirão; sem caldeirão (ou longe dele) não há
+ *      estação, e a lista volta vazia em vez de flutuar pelo cômodo;
+ *   3. sem repetição e no máximo `ALQUIMIA_EXTRAS_MAX` — save adulterado não
+ *      mobília o andar inteiro.
+ *
+ * Save antigo (sem o campo) cai no caso vazio, que é a degradação escolhida:
+ * ver `SaveData.alquimiaExtras`. A ordem gravada é preservada; ela já sai
+ * canônica de `populate` e é o `snapshot()` que a lê de volta.
+ */
+function reconstruirExtras(bruto: unknown, map: GameMap, caldeirao: Point | null): Point[] {
+  const out: Point[] = [];
+  if (!caldeirao) return out;
+  const lista = listaDe(bruto);
+  if (!lista) return out;
+  const vistos = new Set<number>();
+  for (let i = 0; i < lista.length && out.length < ALQUIMIA_EXTRAS_MAX; i++) {
+    const p = reconstruirPonto(lista[i], map);
+    if (!p) continue;
+    const dx = Math.abs(p.x - caldeirao.x);
+    const dy = Math.abs(p.y - caldeirao.y);
+    if (dx + dy !== 1) continue; // ortogonal e colado: nada de diagonal, nada de longe
+    const k = idx(map.w, p.x, p.y);
+    if (vistos.has(k)) continue;
+    vistos.add(k);
+    out.push(p);
+  }
+  return out;
+}
+
+/**
  * Reconstrói um estado a partir do objeto lido do armazenamento.
  * O mapa NÃO vem do save: é regerado por seed+depth (determinismo garante que é
  * o mesmo mapa). Run morta não retoma — morte é permanente.
@@ -1547,6 +1608,12 @@ export function restore(dados: unknown): Game | null {
   if (mercadorSalvo) game.mercador = mercadorSalvo;
   const bancadaSalva = reconstruirPonto(obj.bancada, map);
   if (bancadaSalva) game.bancada = bancadaSalva;
+
+  /* A decoração da estação segue o caldeirão RESTAURADO, não o recém-calculado:
+   * é o único jeito de estante e mesa não amanhecerem em outro canto do cômodo
+   * quando o save traz um caldeirão diferente. Sem lista salva, a estação
+   * retoma sem decoração — o motivo por extenso está em `SaveData`. */
+  game.alquimiaExtras = reconstruirExtras(obj.alquimiaExtras, map, game.bancada);
 
   // Exploração
   decodificarExplored(game.explored, obj.explored);

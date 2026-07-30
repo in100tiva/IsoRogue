@@ -26,6 +26,7 @@ import { generate, isWalkable, roomAt } from '../src/engine/mapgen';
 import { checkSymmetry, computeFov, isVisibleFrom } from '../src/engine/fov';
 import { DIJKSTRA_INF, bestStep, computeDijkstra, fleeMap } from '../src/engine/dijkstra';
 import {
+  ALQUIMIA_EXTRAS_MAX,
   ARCHETYPES,
   ARMA_NIVEL_MAX,
   DROPS,
@@ -1035,7 +1036,7 @@ describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', ()
  *   · bolsa e `kind` sobrevivem ao save, e um save legado (sem nenhum dos dois)
  *     ainda carrega (T12.5);
  *   · o `snapshot()` expõe kind, bolsa (em ordem de TABELA) e rngLoot (T12.6) —
- *     garantias da fase 1 que a etiqueta v3 da fase 2 não pode ter perdido.
+ *     garantias da fase 1 que a etiqueta v4 da fase 2.1 não pode ter perdido.
  * ================================================================== */
 
 /** Armazenamento de memória: o save do teste não encosta em disco nem em DOM. */
@@ -1431,10 +1432,11 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
     const game = createState('T12-SNAP', 1);
     const inicial = String(snapshot(game));
 
-    /* A etiqueta subiu para v3 na fase 2 (economia). O que este teste guarda
-     * são as garantias que a fase 1 introduziu e que NÃO podem se perder na
-     * troca de versão — o formato do bloco de itens, da bolsa e do rngLoot. */
-    expect(inicial.indexOf('v3|'), 'T12.6: o snapshot não é v3').toBe(0);
+    /* A etiqueta subiu para v4 na fase 2.1 (a estação de alquimia). O que este
+     * teste guarda são as garantias que a fase 1 introduziu e que NÃO podem se
+     * perder na troca de versão — o formato do bloco de itens, da bolsa e do
+     * rngLoot. */
+    expect(inicial.indexOf('v4|'), 'T12.6: o snapshot não é v4').toBe(0);
     expect(inicial.indexOf('|B[]|') >= 0, 'T12.6: bolsa vazia devia sair como B[]').toBe(true);
     expect(
       /\|I\[\d+:potion:\d+:\d+(\|\d+:potion:\d+:\d+)*\]\|/.test(inicial),
@@ -1473,7 +1475,8 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
  * O que estes testes protegem, em uma frase cada:
  *   · as tabelas (preço, teto de refino, receitas) são as do contrato (T13.0);
  *   · os dois pontos de parada são determinísticos pela semente e nunca caem
- *     sobre início, escada, item ou inimigo (T13.1);
+ *     sobre início, escada, item ou inimigo (T13.1) — ONDE eles caem é assunto
+ *     do T14, que é quem guarda a regra do cômodo inicial;
  *   · negociar longe do balcão é RECUSA — sem turno e sem mexer no estado
  *     (T13.2);
  *   · vender troca material por moeda pelo valor da TABELA, com quantidade
@@ -1488,7 +1491,7 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
  *     ainda carrega (T13.8);
  *   · negociar e forjar não consomem sorteio nenhum (T13.9);
  *   · a forma textual dos três comandos é a do protocolo, ida e volta (T13.10);
- *   · o `snapshot()` v3 mostra moedas, refino e os dois pontos (T13.11);
+ *   · o `snapshot()` v4 mostra moedas, refino e os dois pontos (T13.11);
  *   · pisar no ponto anuncia o balcão no registro (T13.12).
  * ================================================================== */
 
@@ -1609,33 +1612,33 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
 
         if (a.mercador) {
           comMercador++;
-          const d = Math.max(Math.abs(a.mercador.x - map.stairs.x),
-            Math.abs(a.mercador.y - map.stairs.y));
+          const d = Math.max(Math.abs(a.mercador.x - map.start.x),
+            Math.abs(a.mercador.y - map.start.y));
           expect(d >= 2 && d <= 4,
-            'T13.1: mercador a Chebyshev ' + d + ' da escada (esperado 2..4) — ' + onde).toBe(true);
+            'T13.1: mercador a Chebyshev ' + d + ' do início (esperado 2..4) — ' + onde).toBe(true);
         }
         if (a.bancada) {
           comBancada++;
+          /* A oficina deixou de ser um desvio do caminho e virou instalação da
+           * entrada: mesma sala do herói. A geometria fina — anel, decoração,
+           * degradação — é o T14 que prova; aqui basta que ela esteja no cômodo
+           * certo, que é o que o dono não achava antes. */
           const salaBancada = roomAt(map, a.bancada.x, a.bancada.y);
-          expect(salaBancada, 'T13.1: bancada fora de sala — ' + onde).not.toBe(null);
           const salaInicio = roomAt(map, map.start.x, map.start.y);
-          const salaEscada = roomAt(map, map.stairs.x, map.stairs.y);
+          expect(salaBancada, 'T13.1: bancada fora de sala — ' + onde).not.toBe(null);
           if (salaBancada && salaInicio) {
-            expect(salaBancada.id, 'T13.1: bancada na sala do INÍCIO — ' + onde)
-              .not.toBe(salaInicio.id);
-          }
-          if (salaBancada && salaEscada) {
-            expect(salaBancada.id, 'T13.1: bancada na sala da ESCADA — ' + onde)
-              .not.toBe(salaEscada.id);
+            expect(salaBancada.id, 'T13.1: bancada FORA da sala do início — ' + onde)
+              .toBe(salaInicio.id);
           }
         }
       }
     }
 
     /* Contraprova: o laço acima só diz alguma coisa se os pontos existirem.
-     * 72 de 72 não é sorte — o gerador sempre deixa sala sobrando e anel livre
-     * ao redor da escada (medido: 800 andares, nenhum sem os dois pontos). O
-     * dia em que faltar é mudança de MAPA que merece decisão, não um teste que
+     * 72 de 72 não é sorte — o cômodo inicial é uma sala de verdade e o anel
+     * 2..4 do herói cai inteiro dentro do raio seguro, onde inimigo e item não
+     * nascem (medido em 600 andares no T14, nenhum sem os dois pontos). O dia
+     * em que faltar é mudança de MAPA que merece decisão, não um teste que
      * afrouxa o número. */
     expect(comMercador, 'T13.1: andar sem mercador — o gerador mudou').toBe(72);
     expect(comBancada, 'T13.1: andar sem bancada — o gerador mudou').toBe(72);
@@ -1982,12 +1985,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
     expect(parseCommand('descend'), 'T13.10: descend').toEqual({ kind: 'descend' });
   });
 
-  it('o snapshot v3 traz moedas, refino e os dois pontos de parada', () => {
+  it('o snapshot v4 traz moedas, refino e os dois pontos de parada', () => {
     const semente = sementeComParadas();
     const game = createState(semente, 1);
     const inicial = String(snapshot(game));
 
-    expect(inicial.indexOf('v3|'), 'T13.11: o snapshot não é v3').toBe(0);
+    expect(inicial.indexOf('v4|'), 'T13.11: o snapshot não é v4').toBe(0);
     expect(inicial.indexOf(',mo0,arm0|') >= 0,
       'T13.11: moedas e refino não aparecem no bloco do jogador — ' + inicial).toBe(true);
     expect(
@@ -1998,8 +2001,9 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       inicial.indexOf('|banc=' + (game.bancada ? game.bancada.x + ',' + game.bancada.y : '-') + '|') >= 0,
       'T13.11: a bancada não aparece — ' + inicial
     ).toBe(true);
-    /* Os dois pontos vêm ANTES do checksum de tiles, que fecha o snapshot. */
-    expect(/\|merc=[^|]+\|banc=[^|]+\|map=[0-9a-f]+$/.test(inicial),
+    /* Os dois pontos vêm ANTES do checksum de tiles, que fecha o snapshot — e
+     * a decoração da estação (`alq=`, do T14) entra entre eles e o checksum. */
+    expect(/\|merc=[^|]+\|banc=[^|]+\|alq=[^|]+\|map=[0-9a-f]+$/.test(inicial),
       'T13.11: merc/banc fora do lugar no formato — ' + inicial).toBe(true);
 
     /* O snapshot ACOMPANHA a economia: mudou moeda ou refino, mudou o resumo. */
@@ -2010,10 +2014,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       'T13.11: o snapshot não acompanhou moedas/refino — ' + depois).toBe(true);
     expect(depois, 'T13.11: mudar a economia tem de mudar o snapshot').not.toBe(inicial);
 
-    /* Andar sem ponto sai com traço, não com '0,0' — que é coordenada válida. */
+    /* Andar sem ponto sai com traço, não com '0,0' — que é coordenada válida.
+     * Sem caldeirão não há estação, e a lista de decoração some junto. */
     game.mercador = null;
     game.bancada = null;
-    expect(String(snapshot(game)).indexOf('|merc=-|banc=-|map=') >= 0,
+    game.alquimiaExtras = [];
+    expect(String(snapshot(game)).indexOf('|merc=-|banc=-|alq=-|map=') >= 0,
       'T13.11: ponto ausente devia sair como "-" — ' + String(snapshot(game))).toBe(true);
   }, LENTO);
 
@@ -2053,5 +2059,366 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
           ' não foi anunciada — ' + JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
       ).toBe(true);
     }
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T14 — a instalação da entrada, fase 2.1: mercador e estação de alquimia
+ *   no cômodo em que o herói começa
+ *
+ * POR QUE ESTE BLOCO EXISTE: o dono jogou uma expedição inteira e não achou o
+ * mercador. A regra antiga o punha perto da ESCADA (o fim do andar) e punha a
+ * oficina em OUTRA sala — conteúdo que existe no código e não existe na
+ * partida. A decisão nova é curta: os dois nascem no cômodo do início, e a
+ * alquimia fica logo na entrada dele.
+ *
+ * O que cada teste protege, em uma frase:
+ *   · mercador e caldeirão nascem na SALA DO INÍCIO, a Chebyshev 2..4 do herói,
+ *     e nunca faltam — 600 andares varridos (T14.1);
+ *   · a estação é uma INSTALAÇÃO de até três tiles: o caldeirão (interação) e
+ *     até dois extras ortogonais (decoração), que degradam num cômodo apertado
+ *     mas nunca levam o caldeirão junto (T14.2);
+ *   · nada da instalação pisa em início, escada, item, inimigo — nem em si
+ *     mesma (T14.3);
+ *   · mesma semente ⇒ mesmos pontos e mesmos extras, por `populate` e por
+ *     `createState` (T14.4);
+ *   · extra é CENÁRIO: reserva o tile e não abre balcão nenhum (T14.5);
+ *   · a estação é do ANDAR e se refaz na descida (T14.6);
+ *   · o save leva os extras, e um save antigo retoma sem eles em vez de
+ *     inventar mobília no lugar errado (T14.7);
+ *   · o `snapshot()` v4 mostra a estação inteira, com `alq=` entre `banc=` e o
+ *     checksum de tiles (T14.8).
+ * ================================================================== */
+
+/** Chebyshev — a mesma métrica de `cheb` do engine, reescrita para o teste. */
+function chebT14(a: Point, b: Point): number {
+  return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
+}
+
+/** O ponto está na MESMA sala em que o herói começa? (`roomAt` de um e de outro) */
+function mesmaSalaQueOInicio(map: GameMap, p: Point): boolean {
+  const sala = roomAt(map, p.x, p.y);
+  const salaInicio = roomAt(map, map.start.x, map.start.y);
+  return !!sala && !!salaInicio && sala.id === salaInicio.id;
+}
+
+/** As peças da instalação (até três), na ordem em que o engine as produz. */
+function tilesDaEstacao(pontos: { bancada: Point | null; alquimiaExtras: Point[] }): Point[] {
+  const out: Point[] = [];
+  if (pontos.bancada) out.push(pontos.bancada);
+  for (const e of pontos.alquimiaExtras) out.push(e);
+  return out;
+}
+
+describe('T14 — a instalação da entrada: mercador e estação no cômodo inicial', () => {
+  it('600 andares: mercador e caldeirão sempre na sala do início, a 2..4 do herói', () => {
+    let andares = 0;
+    let semMercador = 0;
+    let semCaldeirao = 0;
+    let estacaoCompleta = 0;
+
+    for (let i = 0; i < 200; i++) {
+      const semente = 'T14-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        const onde = ondeEsta('T14.1', { semente, depth });
+        andares++;
+
+        if (!pop.mercador) semMercador++;
+        if (!pop.bancada) semCaldeirao++;
+        if (pop.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) estacaoCompleta++;
+
+        const paradas: Array<[string, Point | null]> = [
+          ['mercador', pop.mercador],
+          ['caldeirão', pop.bancada]
+        ];
+        for (const [nome, ponto] of paradas) {
+          if (!ponto) continue;
+          expect(isWalkable(map, ponto.x, ponto.y),
+            onde + ': ' + nome + ' em tile não caminhável').toBe(true);
+          expect(mesmaSalaQueOInicio(map, ponto),
+            onde + ': ' + nome + ' fora da sala do início — ' + JSON.stringify(ponto)).toBe(true);
+          const d = chebT14(ponto, map.start);
+          expect(d >= 2 && d <= 4,
+            onde + ': ' + nome + ' a Chebyshev ' + d + ' do início (esperado 2..4)').toBe(true);
+        }
+      }
+    }
+
+    /* O número que importa: a instalação NUNCA falta. Não é sorte — o anel
+     * 2..4 do início cai inteiro dentro do raio seguro (SAFE_RADIUS = 6), onde
+     * inimigo e item não nascem, e a sala do início é uma sala de verdade
+     * (`map.start` é o centro de `rooms[0]`). O dia em que faltar é mudança de
+     * MAPA que merece decisão, não um teste que afrouxa o número. */
+    expect(andares, 'T14.1: a varredura não rodou os 600 andares').toBe(600);
+    expect(semMercador, 'T14.1: andar sem mercador').toBe(0);
+    expect(semCaldeirao, 'T14.1: andar sem caldeirão').toBe(0);
+
+    /* A estação COMPLETA (três peças) é o caso normal, não o excepcional:
+     * medido 579 de 600 (96,5%) — os que faltam são cômodos em cruz de braço
+     * estreito, onde a decoração não cabe sem sair da sala. O piso de 90% pega
+     * a regressão de verdade (a estação parar de montar) sem transformar um
+     * ajuste de gerador em build vermelho. */
+    expect(estacaoCompleta / andares,
+      'T14.1: a estação parou de montar as três peças — ' + estacaoCompleta + '/' + andares)
+      .toBeGreaterThan(0.9);
+  }, LENTO);
+
+  it('a estação tem até três tiles: caldeirão de interação e dois extras colados nele', () => {
+    let comDois = 0;
+    let comMenos = 0;
+
+    for (let i = 0; i < 60; i++) {
+      const semente = 'T14-EXTRAS-' + pad(i, 4);
+      for (let depth = 1; depth <= 2; depth++) {
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        const onde = ondeEsta('T14.2', { semente, depth });
+        const caldeirao = pop.bancada;
+        expect(caldeirao, onde + ': andar sem caldeirão').not.toBe(null);
+        if (!caldeirao) continue;
+
+        expect(pop.alquimiaExtras.length <= ALQUIMIA_EXTRAS_MAX,
+          onde + ': mais extras do que o teto — ' + JSON.stringify(pop.alquimiaExtras)).toBe(true);
+        if (pop.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) comDois++;
+        else comMenos++;
+
+        const vistos = new Set<string>();
+        let anterior = -1;
+        for (const extra of pop.alquimiaExtras) {
+          const chave = extra.x + ',' + extra.y;
+          /* Colado no caldeirão e ORTOGONAL: a estação é uma peça só. Dois
+           * vizinhos ortogonais do mesmo tile formam sempre um L ou uma linha. */
+          const dist = Math.abs(extra.x - caldeirao.x) + Math.abs(extra.y - caldeirao.y);
+          expect(dist, onde + ': extra ' + chave + ' não é vizinho ortogonal do caldeirão')
+            .toBe(1);
+          expect(isWalkable(map, extra.x, extra.y),
+            onde + ': extra ' + chave + ' em tile não caminhável').toBe(true);
+          expect(mesmaSalaQueOInicio(map, extra),
+            onde + ': extra ' + chave + ' fora da sala do início').toBe(true);
+          expect(chebT14(extra, map.start) >= 2,
+            onde + ': extra ' + chave + ' colado no herói').toBe(true);
+          expect(vistos.has(chave), onde + ': extra repetido — ' + chave).toBe(false);
+          vistos.add(chave);
+          /* Ordem ESTÁVEL: índice linear crescente, como sai de `populate` e
+           * como o `snapshot()` a lê de volta. */
+          const indice = extra.y * map.w + extra.x;
+          expect(indice > anterior, onde + ': extras fora da ordem canônica').toBe(true);
+          anterior = indice;
+        }
+      }
+    }
+
+    /* Os dois caminhos existem de verdade na amostra: se `comMenos` fosse zero
+     * a degradação nunca teria sido exercitada, e se `comDois` fosse zero a
+     * estação simplesmente não estaria montando. */
+    expect(comDois, 'T14.2: nenhuma estação completa na amostra').toBeGreaterThan(0);
+    expect(comDois + comMenos, 'T14.2: a varredura não rodou os 120 andares').toBe(120);
+  }, LENTO);
+
+  it('a instalação inteira é território reservado: nada nasce embaixo dela', () => {
+    for (let i = 0; i < 80; i++) {
+      const semente = 'T14-RESERVA-' + pad(i, 4);
+      for (let depth = 1; depth <= 2; depth++) {
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        const onde = ondeEsta('T14.3', { semente, depth });
+
+        const ocupados = new Map<string, string>();
+        ocupados.set(map.start.x + ',' + map.start.y, 'o início');
+        ocupados.set(map.stairs.x + ',' + map.stairs.y, 'a escada');
+        for (const e of pop.enemies) ocupados.set(e.x + ',' + e.y, 'o inimigo ' + e.id);
+        for (const it of pop.items) ocupados.set(it.x + ',' + it.y, 'o item ' + it.id);
+
+        const pecas: Array<[string, Point]> = [];
+        if (pop.mercador) pecas.push(['o mercador', pop.mercador]);
+        if (pop.bancada) pecas.push(['o caldeirão', pop.bancada]);
+        for (let k = 0; k < pop.alquimiaExtras.length; k++) {
+          pecas.push(['o extra ' + (k + 1), pop.alquimiaExtras[k]]);
+        }
+        for (const [nome, p] of pecas) {
+          const chave = p.x + ',' + p.y;
+          expect(ocupados.get(chave),
+            onde + ': ' + nome + ' nasceu sobre ' + ocupados.get(chave) + ' em ' + chave)
+            .toBe(undefined);
+          ocupados.set(chave, nome);
+        }
+      }
+    }
+  }, LENTO);
+
+  it('determinismo: mesma semente ⇒ mesmo mercador, mesmo caldeirão, mesmos extras', () => {
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T14-DET-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const a = populate(map, depth, 1);
+        const b = populate(map, depth, 1);
+        const onde = ondeEsta('T14.4', { semente, depth });
+
+        expect(JSON.stringify(b.alquimiaExtras), onde + ': os extras divergiram entre chamadas')
+          .toBe(JSON.stringify(a.alquimiaExtras));
+
+        /* E pelo caminho de verdade, que é o que a partida usa. */
+        const game = createState(semente, depth);
+        expect(JSON.stringify(game.mercador), onde + ': createState ≠ populate (mercador)')
+          .toBe(JSON.stringify(a.mercador));
+        expect(JSON.stringify(game.bancada), onde + ': createState ≠ populate (caldeirão)')
+          .toBe(JSON.stringify(a.bancada));
+        expect(JSON.stringify(game.alquimiaExtras), onde + ': createState ≠ populate (extras)')
+          .toBe(JSON.stringify(a.alquimiaExtras));
+      }
+    }
+  }, LENTO);
+
+  it('extra é cenário: reserva o tile, mas não abre balcão nenhum', () => {
+    /* Uma semente cuja estação nasceu COMPLETA — a varredura é determinística. */
+    let game: Game | null = null;
+    for (let i = 0; i < 32 && !game; i++) {
+      const candidata = createState('T14-CENARIO-' + pad(i, 4), 1);
+      if (candidata.bancada && candidata.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) {
+        game = candidata;
+      }
+    }
+    expect(game, 'T14.5: nenhuma das 32 sementes montou a estação completa').not.toBe(null);
+    if (!game) return;
+
+    game.player.maxHp = 999;
+    game.player.hp = 999;
+    game.player.bag.gosma = 9;
+    game.player.bag.espadaGoblin = 4;
+    game.player.moedas = 500;
+
+    for (const extra of game.alquimiaExtras) {
+      game.player.x = extra.x;
+      game.player.y = extra.y;
+      const antes = estadoDeComercio(game);
+      const marcaLog = game.log.length;
+      for (const texto of ['criar:pocao', 'criar:refino', 'vender:gosma,3', 'comprar:potion,1']) {
+        expect(aplicar(game, texto),
+          'T14.5: "' + texto + '" foi aceito sobre a DECORAÇÃO em ' + extra.x + ',' + extra.y)
+          .toBe(false);
+      }
+      expect(estadoDeComercio(game), 'T14.5: a recusa sobre o extra mexeu no estado').toBe(antes);
+      /* A recusa da oficina é a mesma de sempre — o extra não é meia bancada. */
+      expect(game.log.slice(marcaLog).map((l) => l.text).indexOf('Não há bancada aqui.') >= 0,
+        'T14.5: a recusa saiu fora do padrão — ' +
+          JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))).toBe(true);
+    }
+
+    /* Contraprova: no CALDEIRÃO, a mesma alquimia é aceita. */
+    if (game.bancada) {
+      game.player.x = game.bancada.x;
+      game.player.y = game.bancada.y;
+      expect(aplicar(game, 'criar:pocao'), 'T14.5: a alquimia foi recusada no caldeirão')
+        .toBe(true);
+    }
+  }, LENTO);
+
+  it('a estação é do ANDAR: descer a escada monta outra, no cômodo novo', () => {
+    const game = createState('T14-DESCIDA', 1);
+    const antes = JSON.stringify({
+      mercador: game.mercador,
+      bancada: game.bancada,
+      extras: game.alquimiaExtras
+    });
+
+    descend(game);
+
+    expect(game.mercador, 'T14.6: o nível 2 nasceu sem mercador').not.toBe(null);
+    expect(game.bancada, 'T14.6: o nível 2 nasceu sem caldeirão').not.toBe(null);
+    const depois = JSON.stringify({
+      mercador: game.mercador,
+      bancada: game.bancada,
+      extras: game.alquimiaExtras
+    });
+    expect(depois, 'T14.6: a instalação do nível 1 sobreviveu à descida').not.toBe(antes);
+    /* E ela continua colada no herói: o cômodo é outro, a regra é a mesma. */
+    for (const p of tilesDaEstacao(game)) {
+      expect(mesmaSalaQueOInicio(game.map, p),
+        'T14.6: peça da estação fora da sala do início do nível 2').toBe(true);
+    }
+  }, LENTO);
+
+  it('save/restore: os extras sobrevivem; save antigo retoma sem mobília inventada', () => {
+    const armazem = armazemDeMemoria();
+    let game: Game | null = null;
+    for (let i = 0; i < 32 && !game; i++) {
+      const candidata = createState('T14-SAVE-' + pad(i, 4), 1);
+      if (candidata.bancada && candidata.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) {
+        game = candidata;
+      }
+    }
+    expect(game, 'T14.7: nenhuma das 32 sementes montou a estação completa').not.toBe(null);
+    if (!game) return;
+
+    expect(escreverSave(game, armazem), 'T14.7: o save não foi gravado').toBe(true);
+    const voltou = restore(lerSave(armazem));
+    expect(voltou, 'T14.7: restore recusou um save válido').not.toBe(null);
+    if (!voltou) return;
+    expect(JSON.stringify(voltou.alquimiaExtras), 'T14.7: os extras não sobreviveram ao save')
+      .toBe(JSON.stringify(game.alquimiaExtras));
+    /* O snapshot é a prova de que a retomada é o MESMO andar, não um parecido. */
+    expect(String(snapshot(voltou)), 'T14.7: o snapshot da retomada divergiu')
+      .toBe(String(snapshot(game)));
+
+    /* Extra gravado LONGE do caldeirão (save de outra versão, ou editado à mão):
+     * o restore o descarta em vez de plantar uma estante no meio do cômodo. */
+    const adulterado = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    adulterado.alquimiaExtras = [
+      { x: game.map.start.x, y: game.map.start.y },              // em cima do herói
+      { x: 0, y: 0 },                                            // dentro da parede
+      { x: game.bancada ? game.bancada.x + 3 : 9, y: game.bancada ? game.bancada.y : 9 }
+    ];
+    const limpo = restore(adulterado);
+    expect(limpo, 'T14.7: restore recusou o save adulterado em vez de degradar').not.toBe(null);
+    if (limpo) {
+      expect(limpo.alquimiaExtras, 'T14.7: extra solto no cômodo foi aceito').toEqual([]);
+    }
+
+    /* Save LEGADO (anterior à fase 2.1): não tem o campo. Retoma com a estação
+     * SEM decoração — o caldeirão que vale é o do save, e herdar extras de
+     * outro cálculo poria estante e mesa longe dele. */
+    const legado = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    delete legado.alquimiaExtras;
+    const retomado = restore(legado);
+    expect(retomado, 'T14.7: restore recusou um save legado').not.toBe(null);
+    if (!retomado) return;
+    expect(retomado.alquimiaExtras, 'T14.7: save sem o campo devia retomar sem decoração')
+      .toEqual([]);
+    expect(JSON.stringify(retomado.bancada), 'T14.7: o caldeirão do save legado se perdeu')
+      .toBe(JSON.stringify(game.bancada));
+  }, LENTO);
+
+  it('o snapshot v4 traz a estação inteira em alq=, logo depois de banc=', () => {
+    let game: Game | null = null;
+    for (let i = 0; i < 32 && !game; i++) {
+      const candidata = createState('T14-SNAP-' + pad(i, 4), 1);
+      if (candidata.bancada && candidata.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) {
+        game = candidata;
+      }
+    }
+    expect(game, 'T14.8: nenhuma das 32 sementes montou a estação completa').not.toBe(null);
+    if (!game) return;
+
+    const inicial = String(snapshot(game));
+    expect(inicial.indexOf('v4|'), 'T14.8: o snapshot não é v4').toBe(0);
+
+    const esperado = game.alquimiaExtras.map((p) => p.x + ',' + p.y).join(';');
+    expect(inicial.indexOf('|alq=' + esperado + '|') >= 0,
+      'T14.8: a estação não aparece em alq= — ' + inicial).toBe(true);
+    /* `;` separa os pontos porque `|` já separa os campos do snapshot. */
+    expect(/\|alq=\d+,\d+;\d+,\d+\|map=[0-9a-f]+$/.test(inicial),
+      'T14.8: alq= fora do lugar (tem de vir entre banc= e map=) — ' + inicial).toBe(true);
+
+    /* Mudou a estação, mudou o resumo: é território reservado, e dois andares
+     * com a estante de lados diferentes NÃO são o mesmo andar. */
+    game.alquimiaExtras = [game.alquimiaExtras[0]];
+    const menor = String(snapshot(game));
+    expect(menor, 'T14.8: tirar um extra não mudou o snapshot').not.toBe(inicial);
+    game.alquimiaExtras = [];
+    expect(String(snapshot(game)).indexOf('|alq=-|map=') >= 0,
+      'T14.8: estação sem decoração devia sair como "-" — ' + String(snapshot(game))).toBe(true);
   }, LENTO);
 });

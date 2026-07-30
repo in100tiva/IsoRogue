@@ -2243,10 +2243,22 @@ const DESPOJOS_PREVIEW: Readonly<Record<string, readonly DespojoPreview[]>> = {
       chance: '1 por andar, a 2–4 tiles da escada'
     },
     {
-      rotulo: 'BANCADA (fase 2) — alquimia e refino', arquivo: 'bancada.ts',
-      modelo: 'MODELO_BANCADA', paleta: 'PALETA_BANCADA', rampas: 'RAMPAS_BANCADA',
-      rampaDaCor: 'RAMPA_DA_COR_BANCADA', emissivas: 'CORES_EMISSIVAS_BANCADA',
-      chance: '1 por andar, em outra sala'
+      rotulo: 'CALDEIRÃO — o tile de interação', arquivo: 'alquimia.ts',
+      modelo: 'MODELO_CALDEIRAO', paleta: 'PALETA_ALQUIMIA', rampas: 'RAMPAS_ALQUIMIA',
+      rampaDaCor: 'RAMPA_DA_COR_ALQUIMIA', emissivas: 'CORES_EMISSIVAS_ALQUIMIA',
+      chance: 'alquimia e refino'
+    },
+    {
+      rotulo: 'ESTANTE de frascos', arquivo: 'alquimia.ts',
+      modelo: 'MODELO_ESTANTE', paleta: 'PALETA_ALQUIMIA', rampas: 'RAMPAS_ALQUIMIA',
+      rampaDaCor: 'RAMPA_DA_COR_ALQUIMIA', emissivas: 'CORES_EMISSIVAS_ALQUIMIA',
+      chance: 'cenário, tile vizinho'
+    },
+    {
+      rotulo: 'MESA com livro e vela', arquivo: 'alquimia.ts',
+      modelo: 'MODELO_MESA_ALQUIMIA', paleta: 'PALETA_ALQUIMIA', rampas: 'RAMPAS_ALQUIMIA',
+      rampaDaCor: 'RAMPA_DA_COR_ALQUIMIA', emissivas: 'CORES_EMISSIVAS_ALQUIMIA',
+      chance: 'cenário, tile vizinho'
     }
   ],
   slime: [

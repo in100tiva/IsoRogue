@@ -38,7 +38,7 @@ import type {
   Room,
   Step
 } from './types';
-import { CONFIG, DIRS8, cheb, hash32, idx, makeRng } from './core';
+import { CONFIG, DIRS4, DIRS8, cheb, hash32, idx, makeRng } from './core';
 import { inBounds as mapInBounds, isWalkable, roomAt } from './mapgen';
 import {
   ITEM_KINDS,
@@ -900,20 +900,35 @@ export function makeItem(id: number, x: number, y: number, kind: ItemKind = 'pot
 }
 
 /* ------------------------------------------------------------------ *
- * Pontos de parada — mercador e bancada (fase 2)
+ * Pontos de parada — mercador e estação de alquimia (fase 2 / 2.1)
  * ------------------------------------------------------------------ */
 
 /**
- * Faixa Chebyshev entre o mercador e a escada. "Perto da escada" é a regra de
- * design: o jogador decide o que fazer com a bolsa no instante em que pode
- * descer. Dois é o mínimo para o mercador não bloquear a escada nem ficar
- * colado nela; quatro é o máximo para ele continuar no mesmo bolso de mapa.
+ * Faixa Chebyshev entre as paradas e o INÍCIO do andar.
+ *
+ * A régua mudou na fase 2.1. Até então o mercador nascia perto da ESCADA e a
+ * bancada numa sala qualquer que não fosse a do início: bonito no papel — "o
+ * jogador decide o que fazer com a bolsa no instante em que pode descer" — e
+ * ruim na mão. O dono jogou uma expedição inteira e não achou o mercador,
+ * porque a escada é o FIM do andar, não o começo, e uma oficina escondida em
+ * outro cômodo é uma oficina que não existe.
+ *
+ * Agora os dois nascem no cômodo em que o herói começa. Dois é o mínimo para
+ * não colarem no herói (nem bloquearem o primeiro passo); quatro é o máximo
+ * para caberem no primeiro campo de visão, que tem raio 9 — quem nasce vê.
  */
-const MERCADOR_DIST_MIN = 2;
-const MERCADOR_DIST_MAX = 4;
+const PARADA_DIST_MIN = 2;
+const PARADA_DIST_MAX = 4;
 
 /**
- * A escolha determinística dos dois pontos, num lugar só.
+ * Quantos tiles de DECORAÇÃO a estação de alquimia ganha ao redor do caldeirão:
+ * a estante e a mesa. Dois porque a estação é uma instalação de canto — três
+ * peças em L ou em linha —, não um cômodo dentro do cômodo.
+ */
+export const ALQUIMIA_EXTRAS_MAX = 2;
+
+/**
+ * A escolha determinística de um ponto, num lugar só.
  *
  * O contrato é: candidatos coletados em ordem CANÔNICA pelo chamador (índice
  * linear crescente — varredura linha a linha), embaralhados pelo rng de
@@ -931,77 +946,168 @@ function escolherParada(rng: Rng, cand: Candidate[]): Candidate | null {
   return cand[0];
 }
 
-/** Tiles elegíveis para o mercador: perto da escada e livres. Ordem canônica. */
-function candidatosMercador(
+/** O ponto está dentro da caixa da sala? Sem sala (corredor), tudo vale. */
+function naSala(room: Room | null, x: number, y: number): boolean {
+  if (!room) return true;
+  return x >= room.x && x < room.x + room.w && y >= room.y && y < room.y + room.h;
+}
+
+/**
+ * Tile utilizável pela instalação da entrada (mercador, caldeirão ou extra):
+ * caminhável, livre, dentro do escopo (a sala inicial) e fora do anel íntimo do
+ * herói.
+ *
+ * Note que o teto da faixa NÃO é checado aqui: quem o aplica é a varredura de
+ * candidatos. É de propósito — um extra é vizinho do caldeirão, então pode cair
+ * a cinco tiles do início sem deixar de ser parte da mesma instalação.
+ *
+ * `taken` já carrega início, escada, todo inimigo e todo item deste andar — é
+ * ele que garante "nunca sobre start, escada, item ou inimigo" sem uma segunda
+ * varredura das listas.
+ */
+function tileDaEntrada(
   map: GameMap,
   taken: Set<number>,
   start: Point,
-  stairs: Point
+  stairs: Point | null,
+  escopo: Room | null,
+  x: number,
+  y: number
+): boolean {
+  if (!inBounds(map, x, y)) return false;
+  if (!walkable(map, x, y)) return false;
+  if (!naSala(escopo, x, y)) return false;
+  if (cheb(x, y, start.x, start.y) < PARADA_DIST_MIN) return false;
+  if (stairs && x === stairs.x && y === stairs.y) return false;
+  return !taken.has(idx(map.w, x, y));
+}
+
+/** Tiles elegíveis no anel 2..4 do início, dentro do escopo. Ordem canônica. */
+function varrerEntrada(
+  map: GameMap,
+  taken: Set<number>,
+  start: Point,
+  stairs: Point | null,
+  escopo: Room | null
 ): Candidate[] {
   const out: Candidate[] = [];
-  const y0 = stairs.y - MERCADOR_DIST_MAX;
-  const y1 = stairs.y + MERCADOR_DIST_MAX;
-  const x0 = stairs.x - MERCADOR_DIST_MAX;
-  const x1 = stairs.x + MERCADOR_DIST_MAX;
-  for (let y = y0; y <= y1; y++) {
-    for (let x = x0; x <= x1; x++) {
-      const d = cheb(x, y, stairs.x, stairs.y);
-      if (d < MERCADOR_DIST_MIN || d > MERCADOR_DIST_MAX) continue;
-      if (!inBounds(map, x, y)) continue;
-      if (!walkable(map, x, y)) continue;
-      if (x === start.x && y === start.y) continue;
-      if (x === stairs.x && y === stairs.y) continue;
-      const i = idx(map.w, x, y);
-      /* `taken` já carrega início, escada, todo inimigo e todo item deste
-       * andar — é ele que garante "nunca sobre start, escada, item ou
-       * inimigo" sem uma segunda varredura das listas. */
-      if (taken.has(i)) continue;
-      out.push({ x: x, y: y, i: i });
+  for (let y = start.y - PARADA_DIST_MAX; y <= start.y + PARADA_DIST_MAX; y++) {
+    for (let x = start.x - PARADA_DIST_MAX; x <= start.x + PARADA_DIST_MAX; x++) {
+      if (cheb(x, y, start.x, start.y) > PARADA_DIST_MAX) continue;
+      if (!tileDaEntrada(map, taken, start, stairs, escopo, x, y)) continue;
+      out.push({ x: x, y: y, i: idx(map.w, x, y) });
     }
   }
   return out;
 }
 
+/** O escopo efetivo da colocação e os tiles que sobraram dentro dele. */
+interface Entrada {
+  /** A sala inicial, ou `null` quando a colocação degradou para o anel nu. */
+  escopo: Room | null;
+  cand: Candidate[];
+}
+
 /**
- * Tiles elegíveis para a bancada: qualquer sala que NÃO seja a da escada nem a
- * do início. A regra é de design — a oficina é um desvio do caminho, não uma
- * conveniência à beira da saída (que é o papel do mercador).
+ * Os tiles da ENTRADA do cômodo inicial, com a degradação embutida: primeiro a
+ * sala do início; se ela não tiver nenhum tile utilizável no anel (cômodo
+ * recortado, tomado por inimigo e item, ou início em corredor), o anel inteiro,
+ * sala ou não.
  *
- * Salas varridas por `id` crescente e tiles linha a linha: ordem canônica, do
- * mesmo jeito que `distribute` ordena as salas antes de repartir cotas.
- * Corredor não conta como sala (`roomAt` devolve `null`), então uma escada em
- * corredor não exclui sala nenhuma — e continua valendo que a bancada nasce
- * dentro de uma sala.
+ * Devolve também o escopo EFETIVO, porque é ele que os extras da estação usam
+ * para não atravessarem a parede para o cômodo vizinho.
  */
-function candidatosBancada(
+function entradaDoInicio(
   map: GameMap,
   taken: Set<number>,
   start: Point,
-  stairs: Point | null
+  stairs: Point | null,
+  sala: Room | null
+): Entrada {
+  const dentro = varrerEntrada(map, taken, start, stairs, sala);
+  if (dentro.length > 0 || !sala) return { escopo: sala, cand: dentro };
+  return { escopo: null, cand: varrerEntrada(map, taken, start, stairs, null) };
+}
+
+/**
+ * Os tiles de DECORAÇÃO de uma estação plantada em `caldeirao`: até
+ * `ALQUIMIA_EXTRAS_MAX` vizinhos ORTOGONAIS livres, escolhidos na ordem fixa de
+ * `DIRS4` e devolvidos em ordem canônica de índice linear.
+ *
+ * Duas ordens diferentes de propósito: a de ESCOLHA é `DIRS4` (leste, sul,
+ * oeste, norte — a mesma tabela que o BFS de conectividade usa), e a de
+ * ARMAZENAMENTO é o índice crescente, que é o que faz a lista sair igual no
+ * `snapshot()` e no save venha de onde vier. Dois vizinhos ortogonais quaisquer
+ * do mesmo tile formam sempre um L ou uma linha — não há terceira forma.
+ */
+function extrasDaEstacao(
+  map: GameMap,
+  taken: Set<number>,
+  start: Point,
+  stairs: Point | null,
+  escopo: Room | null,
+  caldeirao: Point
 ): Candidate[] {
   const out: Candidate[] = [];
-  const salaInicio = roomAt(map, start.x, start.y);
-  const salaEscada = stairs ? roomAt(map, stairs.x, stairs.y) : null;
-  const salas = (map.rooms || []).slice().sort(function (a, b) { return a.id - b.id; });
-  for (let r = 0; r < salas.length; r++) {
-    const room = salas[r];
-    if (salaInicio && room.id === salaInicio.id) continue;
-    if (salaEscada && room.id === salaEscada.id) continue;
-    const y1 = room.y + room.h;
-    const x1 = room.x + room.w;
-    for (let y = room.y; y < y1; y++) {
-      for (let x = room.x; x < x1; x++) {
-        if (!inBounds(map, x, y)) continue;
-        if (!walkable(map, x, y)) continue;
-        if (x === start.x && y === start.y) continue;
-        if (stairs && x === stairs.x && y === stairs.y) continue;
-        const i = idx(map.w, x, y);
-        if (taken.has(i)) continue;
-        out.push({ x: x, y: y, i: i });
+  for (let d = 0; d < DIRS4.length && out.length < ALQUIMIA_EXTRAS_MAX; d++) {
+    const x = caldeirao.x + DIRS4[d][0];
+    const y = caldeirao.y + DIRS4[d][1];
+    if (!tileDaEntrada(map, taken, start, stairs, escopo, x, y)) continue;
+    out.push({ x: x, y: y, i: idx(map.w, x, y) });
+  }
+  out.sort(function (a, b) { return a.i - b.i; });
+  return out;
+}
+
+/**
+ * Escolhe o CALDEIRÃO — o tile de interação da estação.
+ *
+ * Não é `escolherParada` porque aqui a peça não vem sozinha: entre os
+ * candidatos preferimos o que comporta a INSTALAÇÃO INTEIRA. A nota é
+ * `extras × 2 + encostado`, que é ordem lexicográfica escrita como número:
+ *   · `extras` (0..2) manda, porque estação de três peças é a decisão de
+ *     design — duas e uma são degradação, não alternativa;
+ *   · `encostado` (0 ou 1) desempata em favor do tile com parede ortogonal ao
+ *     lado, que é o "logo na entrada do cômodo": a instalação fica rente à
+ *     borda e o meio do cômodo continua sendo do jogador. Num salão grande
+ *     nenhum tile do anel 2..4 encosta em parede, e aí o desempate simplesmente
+ *     não opina.
+ *
+ * O embaralho continua sendo o mesmo de `escolherParada` — um `shuffle` do rng
+ * de população — e o `>` (e não `>=`) do laço mantém o PRIMEIRO empatado, isto
+ * é, o sorteado. Determinismo pela semente, com preferência estrutural por
+ * cima.
+ */
+function escolherCaldeirao(
+  rng: Rng,
+  map: GameMap,
+  taken: Set<number>,
+  start: Point,
+  stairs: Point | null,
+  escopo: Room | null,
+  cand: Candidate[]
+): Candidate | null {
+  if (cand.length === 0) return null;
+  rng.shuffle(cand);
+  let melhor: Candidate = cand[0];
+  let melhorNota = -1;
+  for (let k = 0; k < cand.length; k++) {
+    const c = cand[k];
+    const extras = extrasDaEstacao(map, taken, start, stairs, escopo, c).length;
+    let encostado = 0;
+    for (let d = 0; d < DIRS4.length; d++) {
+      if (!walkable(map, c.x + DIRS4[d][0], c.y + DIRS4[d][1])) {
+        encostado = 1;
+        break;
       }
     }
+    const nota = extras * 2 + encostado;
+    if (nota > melhorNota) {
+      melhorNota = nota;
+      melhor = c;
+    }
   }
-  return out;
+  return melhor;
 }
 
 export function populate(map: GameMap, depth: number, heroLevel: number): Population {
@@ -1017,7 +1123,7 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
   const start = map.start;
   const stairs: Point | null = map.stairs ?? null;
   if (!rooms.length || !start) {
-    return { enemies: enemies, items: items, mercador: null, bancada: null };
+    return { enemies: enemies, items: items, mercador: null, bancada: null, alquimiaExtras: [] };
   }
 
   /* Um único conjunto de tiles tomados: nada de sobreposição entre inimigos,
@@ -1052,6 +1158,17 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
    * migração usa para provar paridade. Vindo por último, a fase 1 continua
    * saindo byte a byte igual e as paradas só acrescentam.
    *
+   * COMO A ESTAÇÃO NÃO PISA EM NINGUÉM, sem inverter a ordem (fase 2.1): as
+   * paradas só se candidatam a tiles que já estão livres — `taken` carrega
+   * inimigos e itens quando esta seção começa —, e por isso NADA aqui remove
+   * nem move item nenhum; o consumo do rng de inimigos e itens fica intocado, e
+   * a fase 1 continua byte a byte igual. O anel 2..4 do início, aliás, é livre
+   * por construção: `roomCandidates` recusa tudo a Chebyshev ≤ SAFE_RADIUS (6)
+   * do início, então a instalação inteira — caldeirão, extras a cinco tiles
+   * inclusive — nasce dentro de um raio onde inimigo e item nunca caem. As
+   * checagens de `taken` continuam no código como cinto de segurança: no dia em
+   * que o raio seguro encolher, a colocação degrada sozinha em vez de sobrepor.
+   *
    * A contrapartida honesta: por virem depois dos inimigos, os pontos também
    * dependem do nível do herói no instante em que o andar foi povoado (é ele
    * que dirige `pickKind`, e `rng.int` consome um número variável de u32).
@@ -1059,19 +1176,44 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
    * dão sempre os mesmos pontos — e o save carrega os pontos escolhidos, então
    * nada disso é observável numa retomada.
    * ---------------------------------------------------------------- */
+  const salaInicial = roomAt(map, start.x, start.y);
+
   let mercador: Point | null = null;
-  if (stairs) {
-    const escolhido = escolherParada(rng, candidatosMercador(map, taken, start, stairs));
-    if (escolhido) {
-      mercador = { x: escolhido.x, y: escolhido.y };
-      /* Reservado: a bancada não pode nascer em cima do mercador. */
-      taken.add(escolhido.i);
+  const entradaMercador = entradaDoInicio(map, taken, start, stairs, salaInicial);
+  const escolhido = escolherParada(rng, entradaMercador.cand);
+  if (escolhido) {
+    mercador = { x: escolhido.x, y: escolhido.y };
+    /* Reservado: a estação não pode nascer em cima do mercador. */
+    taken.add(escolhido.i);
+  }
+
+  /* A estação vem depois do mercador e enxerga o tile dele já tomado — é o
+   * desempate que a interface documenta ("populate reserva o tile do mercador
+   * ANTES de sortear a bancada"), e o que garante que os dois nunca coincidem. */
+  const entradaEstacao = entradaDoInicio(map, taken, start, stairs, salaInicial);
+  const caldeirao = escolherCaldeirao(rng, map, taken, start, stairs,
+    entradaEstacao.escopo, entradaEstacao.cand);
+  let bancada: Point | null = null;
+  const alquimiaExtras: Point[] = [];
+  if (caldeirao) {
+    bancada = { x: caldeirao.x, y: caldeirao.y };
+    taken.add(caldeirao.i);
+    const extras = extrasDaEstacao(map, taken, start, stairs, entradaEstacao.escopo, caldeirao);
+    for (let k = 0; k < extras.length; k++) {
+      /* Território reservado: decoração não tem interação, mas ocupa o tile —
+       * é isso que impede um despojo futuro de cair dentro da estante. */
+      taken.add(extras[k].i);
+      alquimiaExtras.push({ x: extras[k].x, y: extras[k].y });
     }
   }
-  const naBancada = escolherParada(rng, candidatosBancada(map, taken, start, stairs));
-  const bancada: Point | null = naBancada ? { x: naBancada.x, y: naBancada.y } : null;
 
-  return { enemies: enemies, items: items, mercador: mercador, bancada: bancada };
+  return {
+    enemies: enemies,
+    items: items,
+    mercador: mercador,
+    bancada: bancada,
+    alquimiaExtras: alquimiaExtras
+  };
 }
 
 /* ------------------------------------------------------------------ *
