@@ -1,5 +1,5 @@
 /*
- * ISOROGUE — bloco Troca: o BALCÃO do mercador e a OFICINA da bancada
+ * ISOROGUE — bloco Troca: o BALCÃO do mercador e a ESTAÇÃO DE ALQUIMIA
  * (fase 2 do sistema de itens).
  *
  * ─────────────────────────── QUANDO APARECE ───────────────────────────
@@ -15,10 +15,23 @@
  * sabem escrever "Não há mercador aqui." — e a interface estaria ensinando o
  * jogador a ignorar um bloco inteiro. Aparecer é a mensagem: você CHEGOU.
  *
+ * ───────────── O QUE `game.bancada` É, DESDE A FASE 2.1 ─────────────
+ * O CALDEIRÃO — o tile de interação de uma instalação de até três tiles
+ * (caldeirão, estante e mesa; ver `Game.alquimiaExtras` em types.ts e o rig em
+ * src/render/characters/alquimia.ts). Os outros dois tiles são CENÁRIO: não
+ * abrem painel nenhum, porque não há comando nenhum sobre eles.
+ *
+ * O nome do campo continua `bancada` de propósito — ele é contrato de
+ * `snapshot()`, do save, do render e desta interface. O que mudou aqui foi só o
+ * TEXTO que o jogador lê: quem chega vê um caldeirão fumegando ao lado de uma
+ * estante de frascos, e chamar aquilo de "bancada" seria a tela discordando da
+ * imagem. Os dois ofícios (alquimia no caldeirão, refino na bigorna que o
+ * engine narra) continuam exatamente os mesmos, no mesmo tile.
+ *
  * ────────────────────── COMO ESCOLHE ENTRE OS DOIS ─────────────────────
  * `modoDaParada()` compara `player.x/y` com os dois pontos e devolve
  * `'mercador'`, `'bancada'` ou `null`. A ordem é um desempate que nunca
- * acontece: `populate` reserva o tile do mercador ANTES de sortear a bancada
+ * acontece: `populate` reserva o tile do mercador ANTES de sortear o caldeirão
  * (ver `escolherParada`, src/engine/entities.ts), então os dois pontos não
  * coincidem — e é justamente por isso que declarar a precedência custa nada e
  * torna o painel uma função pura do estado, sem "e se os dois?".
@@ -66,7 +79,12 @@ import { store } from '../../engine/store';
 import type { CustoReceita, Game, MaterialKind, Point } from '../../engine/types';
 import { useGameVersion } from '../hooks/useGameStore';
 
-/** Os dois ofícios do balcão. Nada mais entra nesta união sem entrar no engine. */
+/**
+ * Os dois ofícios do balcão. Nada mais entra nesta união sem entrar no engine.
+ *
+ * `'bancada'` é o nome do CAMPO (`game.bancada`), não o do móvel: a peça que o
+ * jogador vê nesse tile é o caldeirão da estação de alquimia. Ver o cabeçalho.
+ */
 type ModoTroca = 'mercador' | 'bancada';
 
 /** `inteiro()` de legacy/src-vanilla/60-ui.js: não-finito vira 0. */
@@ -262,7 +280,7 @@ function BlocoMercador({ game }: { game: Game }) {
             <span className="bolsa-preco">
               {PRECO_POCAO} moedas · devolve {POTION_HEAL} de vida na hora
             </span>
-            {/* O motivo, escrito, no mesmo idioma da bancada: um botão apagado
+            {/* O motivo, escrito, no mesmo idioma da oficina: um botão apagado
                 sem explicação manda o jogador procurar o que ele não tem. */}
             {motivoCompra ? (
               <span className="troca-falta" id="troca-motivo-potion">{motivoCompra}</span>
@@ -290,18 +308,23 @@ function BlocoMercador({ game }: { game: Game }) {
 }
 
 /* ------------------------------------------------------------------ *
- * A oficina da BANCADA
+ * A oficina da ESTAÇÃO DE ALQUIMIA (o tile do caldeirão)
  * ------------------------------------------------------------------ */
 
-function BlocoBancada({ game }: { game: Game }) {
+function BlocoAlquimia({ game }: { game: Game }) {
   const p = game.player;
   const bag = p.bag || {};
   const armaNivel = Math.max(0, inteiro(p.armaNivel));
 
   return (
     <>
+      {/* O texto descreve o que está NA TELA: o caldeirão fumegando, a estante
+          de frascos ao lado e a mesa com o livro aberto (os três rigs de
+          src/render/characters/alquimia.ts). A bigorna do refino continua
+          existindo na narração do engine — ela é o ofício, não a mobília. */}
       <p className="nota" id="troca-nota">
-        Um caldeirão e uma bigorna. Trabalhar aqui custa um turno.
+        O caldeirão ferve entre a estante de frascos e a mesa de trabalho.
+        Trabalhar aqui custa um turno.
       </p>
 
       <dl className="tabela" id="troca-receitas">
@@ -388,7 +411,7 @@ export function TradePanel() {
     <section
       className="bloco bloco-troca"
       id="troca"
-      aria-label={modo === 'mercador' ? 'Balcão do mercador' : 'Bancada de alquimia e refino'}
+      aria-label={modo === 'mercador' ? 'Balcão do mercador' : 'Estação de alquimia e refino'}
       onKeyDown={(ev) => {
         /*
          * Enter e Espaço ATIVAM o botão em foco (comportamento nativo) e, sem
@@ -403,14 +426,14 @@ export function TradePanel() {
         }
       }}
     >
-      <h2 className="titulo">{modo === 'mercador' ? 'Mercador' : 'Bancada'}</h2>
+      <h2 className="titulo">{modo === 'mercador' ? 'Mercador' : 'Alquimia'}</h2>
 
       <div className="vida-cabeca">
         <span className="rotulo">Moedas</span>
         <span className="valor valor-moedas" id="troca-moedas">{moedas}</span>
       </div>
 
-      {modo === 'mercador' ? <BlocoMercador game={game} /> : <BlocoBancada game={game} />}
+      {modo === 'mercador' ? <BlocoMercador game={game} /> : <BlocoAlquimia game={game} />}
     </section>
   );
 }

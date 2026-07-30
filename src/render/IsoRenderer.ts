@@ -165,13 +165,15 @@ import {
   RAMPA_DA_COR_MERCADOR
 } from './characters/mercador';
 import {
-  CORES_EMISSIVAS_BANCADA,
-  MODELO_BANCADA,
-  PALETA_BANCADA,
-  POSE_PARADA_BANCADA,
-  RAMPAS_BANCADA,
-  RAMPA_DA_COR_BANCADA
-} from './characters/bancada';
+  CORES_EMISSIVAS_ALQUIMIA,
+  MODELO_CALDEIRAO,
+  MODELO_ESTANTE,
+  MODELO_MESA_ALQUIMIA,
+  PALETA_ALQUIMIA,
+  POSE_PARADA_ALQUIMIA,
+  RAMPAS_ALQUIMIA,
+  RAMPA_DA_COR_ALQUIMIA
+} from './characters/alquimia';
 import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -692,26 +694,38 @@ interface ColetaVfx {
 }
 
 /* ------------------------------------------------------------------ *
- * OS PONTOS DE PARADA (fase 2 da economia): o MERCADOR e a BANCADA
+ * OS PONTOS DE PARADA: o MERCADOR e a ESTAÇÃO DE ALQUIMIA
  *
- * `game.mercador` e `game.bancada` são dois `Point | null` do ANDAR (ver
- * `Game` em src/engine/types.ts — eles NÃO são um valor novo de `Tile`, e é
- * por isso que o passe de pisos não sabe nada deles). Aqui eles são desenhados
- * no PASSE DE ENTIDADES, no tile em que estão, exatamente como um inimigo:
- * mesma âncora (`atlas.ancoraY` sobre o centro do losango), mesma sombra
- * elíptica no chão e mesma modulação pela luz do tile (`quadroModulado`).
+ * `game.mercador` e `game.bancada` são dois `Point | null` do ANDAR, e
+ * `game.alquimiaExtras` é uma lista de até DOIS `Point` (ver `Game` em
+ * src/engine/types.ts — nenhum deles é valor novo de `Tile`, e é por isso que o
+ * passe de pisos não sabe nada deles). Aqui todos são desenhados no PASSE DE
+ * ENTIDADES, no tile em que estão, exatamente como um inimigo: mesma âncora
+ * (`atlas.ancoraY` sobre o centro do losango), mesma sombra elíptica no chão,
+ * mesma modulação pela luz do tile (`quadroModulado`) e a MESMA regra de visão
+ * (R31 — fora do FOV, nada).
  *
- * A diferença entre os dois é de NATUREZA, e ela cabe em duas linhas:
+ * O QUE MUDOU NA FASE 2.1: a `bancada` deixou de ser um móvel só. A oficina
+ * virou uma INSTALAÇÃO DE TRÊS TILES — caldeirão, estante e mesa —, um rig por
+ * tile (ver o cabeçalho de `./characters/alquimia` para o porquê: um móvel de
+ * três tiles de largura invadiria os vizinhos e romperia a ordem do pintor).
+ * O campo `game.bancada` continua sendo o CALDEIRÃO, que é o tile de interação;
+ * os outros dois saem de `game.alquimiaExtras`, na ordem em que o engine os
+ * entrega (ver `PECAS_EXTRAS_ALQUIMIA`).
+ *
+ * As naturezas em jogo, e o que cada uma implica:
  *
  *   - o MERCADOR é gente. Ele encara quem chega — a direção sai por
  *     OBSERVAÇÃO em `orientarMercador`, no espírito da regra (b) de §0.2 do
  *     BESTIARIO, e mora num campo desta instância. Nenhuma letra no `Game`;
- *   - a BANCADA é mobília. Direção FIXA (`DIR_PARADA_FIXA`), como todo
- *     despojo no chão: um caldeirão não vira para ninguém, e fixar a direção é
- *     o que garante que ele desenhe igual em toda partida.
+ *   - as TRÊS PEÇAS da alquimia são mobília. Direção FIXA (`DIR_PARADA_FIXA`),
+ *     como todo despojo no chão: um caldeirão não vira para ninguém, e fixar a
+ *     direção é o que garante que ele desenhe igual em toda partida.
  *
- * O que os dois compartilham, além do desenho: o BRILHO DE CONVITE (ver
- * `desenharConvite`) — o pulso âmbar no losango que diz "atravesse a sala".
+ * O BRILHO DE CONVITE (ver `desenharConvite`) é dos tiles com que se INTERAGE:
+ * o mercador e o caldeirão. A estante e a mesa são cenário — não há comando
+ * nenhum sobre elas, e um losango piscando embaixo de coisa que não responde
+ * ensinaria o jogador a desconfiar do próprio convite.
  * ------------------------------------------------------------------ */
 
 /**
@@ -719,11 +733,11 @@ interface ColetaVfx {
  * memoiza por (modelo, opções) — objeto novo a cada chamada gera chave nova e
  * reforja tudo; e a cor é propriedade do rig, não do renderizador).
  *
- * `emissivas: CORES_EMISSIVAS_MERCADOR` é `['olhoVeneno']`: os dois olhos no
- * vão do capuz atravessam a modulação acesos (§1.1). É deliberado que sejam a
- * primeira coisa visível dele num corredor escuro — o rig foi desenhado assim
- * (I1 em `./characters/mercador`), e é esse par de pontos verdes que puxa o
- * jogador até o balcão antes de o sprite ser legível.
+ * `emissivas: CORES_EMISSIVAS_MERCADOR` é `['lenteAmbar']`: as duas lentes
+ * redondas do rosto (I1) e a chama da lanterna do mastro (I3) atravessam a
+ * modulação acesas (§1.1). É deliberado que sejam a primeira coisa visível
+ * dele num corredor escuro — o rig foi desenhado assim —, e é esse par de
+ * pontos âmbar que puxa o jogador até o balcão antes de o sprite ser legível.
  *
  * Sem `arcoGolpe`: o mercador não bate em ninguém. As colunas de 'atacando' do
  * atlas existem só porque a forja é genérica, e nunca são lidas.
@@ -737,43 +751,111 @@ const FORJA_MERCADOR: OpcoesForja = {
 };
 
 /**
- * Forja da BANCADA. Mesma forma, com o repouso VAZIO que o rig declara
- * (`POSE_PARADA_BANCADA`): mobília não articula, e a coluna ('parado', 0)
- * devolve o objeto exatamente como foi modelado.
+ * As TRÊS forjas da estação de alquimia. Uma constante por peça e não uma só
+ * reaproveitada, porque a chave do cache do forge é o par (modelo, opções): as
+ * opções são idênticas nas três — mesma paleta, mesmas rampas, mesmas
+ * emissivas — e é o MODELO que separa um atlas do outro. Declará-las
+ * separadamente é o que mantém a leitura "uma peça, uma ficha" de
+ * `FICHAS_DE_PARADA` e o que permite a uma delas divergir amanhã sem mexer nas
+ * outras duas.
  *
- * `emissivas: CORES_EMISSIVAS_BANCADA` é `['brasa']` — o fogo sob o caldeirão
- * (I3). É o análogo dos olhos do mercador: a oficina se anuncia pela brasa, e
- * sem ela o conjunto lê como entulho no escuro.
+ * `repouso: POSE_PARADA_ALQUIMIA` é a pose VAZIA que o rig declara: mobília não
+ * articula, e a coluna ('parado', 0) devolve o objeto exatamente como foi
+ * modelado.
+ *
+ * `emissivas: CORES_EMISSIVAS_ALQUIMIA` é `['caldoRoxo', 'frascoVerde',
+ * 'frascoAzul', 'chama']` — o caldo do caldeirão (I1), os frascos da estante
+ * (I2) e a vela da mesa (I3). É o análogo das lentes do mercador: a oficina se
+ * anuncia pelo que nela está aceso, e sem isso o conjunto lê como entulho no
+ * escuro. A lista é a MESMA nas três peças de propósito: cada rig usa só as
+ * cores que tem, e o forge ignora em silêncio as que não aparecem no modelo.
  */
-const FORJA_BANCADA: OpcoesForja = {
-  paleta: PALETA_BANCADA,
-  rampas: RAMPAS_BANCADA,
-  rampaDaCor: RAMPA_DA_COR_BANCADA,
-  repouso: POSE_PARADA_BANCADA,
-  emissivas: CORES_EMISSIVAS_BANCADA
+const FORJA_CALDEIRAO: OpcoesForja = {
+  paleta: PALETA_ALQUIMIA,
+  rampas: RAMPAS_ALQUIMIA,
+  rampaDaCor: RAMPA_DA_COR_ALQUIMIA,
+  repouso: POSE_PARADA_ALQUIMIA,
+  emissivas: CORES_EMISSIVAS_ALQUIMIA
 };
 
-/** Os dois pontos de parada do andar, como chave de tabela e de cache. */
-type TipoParada = 'mercador' | 'bancada';
+const FORJA_ESTANTE: OpcoesForja = {
+  paleta: PALETA_ALQUIMIA,
+  rampas: RAMPAS_ALQUIMIA,
+  rampaDaCor: RAMPA_DA_COR_ALQUIMIA,
+  repouso: POSE_PARADA_ALQUIMIA,
+  emissivas: CORES_EMISSIVAS_ALQUIMIA
+};
+
+const FORJA_MESA_ALQUIMIA: OpcoesForja = {
+  paleta: PALETA_ALQUIMIA,
+  rampas: RAMPAS_ALQUIMIA,
+  rampaDaCor: RAMPA_DA_COR_ALQUIMIA,
+  repouso: POSE_PARADA_ALQUIMIA,
+  emissivas: CORES_EMISSIVAS_ALQUIMIA
+};
+
+/**
+ * Os pontos de parada do andar, como chave de tabela e de cache. Um por PEÇA
+ * desenhável, e não um por campo do `Game`: a estação de alquimia é um campo só
+ * (`bancada`) mais uma lista (`alquimiaExtras`), mas são três atlas distintos e
+ * três desenhos de reserva distintos.
+ */
+type TipoParada = 'mercador' | 'caldeirao' | 'estante' | 'mesa';
 
 /**
  * ══ PONTO DE EXTENSÃO: como um ponto de parada ganha rosto ══
  *
- * A gêmea de `RETRATOS` e de `FICHAS_DE_ITEM`, para os pontos de parada. Um
- * terceiro ponto (um altar, um poço) entra com um arquivo em `./characters/`,
- * uma `FORJA_<COISA>` acima e UMA linha aqui — mais o campo correspondente no
- * `Game`, que é decisão do engine e não deste arquivo.
+ * A gêmea de `RETRATOS` e de `FICHAS_DE_ITEM`, para os pontos de parada. Uma
+ * peça nova (um altar, um poço) entra com um arquivo em `./characters/`, uma
+ * `FORJA_<COISA>` acima, um membro em `TipoParada` e UMA linha aqui — mais o
+ * campo correspondente no `Game`, que é decisão do engine e não deste arquivo.
  */
 const FICHAS_DE_PARADA: Readonly<Record<TipoParada, FichaDeSprite>> = {
   mercador: { modelo: MODELO_MERCADOR, forja: FORJA_MERCADOR },
-  bancada: { modelo: MODELO_BANCADA, forja: FORJA_BANCADA }
+  caldeirao: { modelo: MODELO_CALDEIRAO, forja: FORJA_CALDEIRAO },
+  estante: { modelo: MODELO_ESTANTE, forja: FORJA_ESTANTE },
+  mesa: { modelo: MODELO_MESA_ALQUIMIA, forja: FORJA_MESA_ALQUIMIA }
 };
 
 /**
- * Linha do atlas da BANCADA — a mesma direção fixa dos despojos (`DIR_ITEM`),
- * pelo mesmo motivo: objeto não encara ninguém.
+ * ══ O MAPEAMENTO extras → peça ══
+ *
+ * `game.alquimiaExtras[k]` é desenhado com `PECAS_EXTRAS_ALQUIMIA[k]`: o
+ * PRIMEIRO extra é a ESTANTE, o SEGUNDO é a MESA. Posicional, e não por nome,
+ * porque o engine entrega pontos e não papéis — ele reserva território, não
+ * escolhe mobília (ver `Game.alquimiaExtras` em src/engine/types.ts).
+ *
+ * A ordem tem uma razão de leitura: a estante é a peça ALTA (7u) e a mesa é a
+ * BAIXA (3,4u). Quando o cômodo só comporta um extra, sobra a peça que mais
+ * acrescenta silhueta ao conjunto — a estação encolhe perdendo a mesa primeiro,
+ * depois a estante, e o caldeirão nunca cai (é ele o tile de interação).
+ *
+ * Lista mais curta que esta tabela é DEGRADAÇÃO LEGÍTIMA, não erro: desenha-se
+ * o que houver. Lista mais longa (que o engine não produz) tem os excedentes
+ * ignorados pelo `Math.min` de `draw` — nunca um `undefined` virando peça.
+ */
+const PECAS_EXTRAS_ALQUIMIA: readonly TipoParada[] = ['estante', 'mesa'];
+
+/**
+ * Linha do atlas das peças de alquimia — a mesma direção fixa dos despojos
+ * (`DIR_ITEM`), pelo mesmo motivo: objeto não encara ninguém.
  */
 const DIR_PARADA_FIXA = DIR_ITEM;
+
+/**
+ * Meia-largura e meia-altura da sombra elíptica de cada peça, em px de tela a
+ * zoom 1. Elas diferem porque as SILHUETAS diferem: o caldeirão é um bojo largo
+ * e baixo, a estante é alta e rasa (a sombra de coisa encostada é curta), a
+ * mesa é larga e baixa, e a figura encapuzada do mercador não ocupa o tile
+ * inteiro. Sombra pequena sob peça larga lê como objeto flutuando; sombra larga
+ * sob a estante a faz parecer tombada.
+ */
+const SOMBRA_PARADA: Readonly<Record<TipoParada, readonly [number, number]>> = {
+  mercador: [11, 4.6],
+  caldeirao: [13, 5.4],
+  estante: [12, 4.4],
+  mesa: [12.5, 5.0]
+};
 
 /**
  * Até onde o mercador PERCEBE o jogador, em Chebyshev. Quatro tiles é a
@@ -784,13 +866,15 @@ const DIR_PARADA_FIXA = DIR_ITEM;
 const MERCADOR_ATENCAO = 4;
 
 /**
- * O BRILHO DE CONVITE — o pulso âmbar no losango dos pontos de parada.
+ * O BRILHO DE CONVITE — o pulso âmbar no losango dos tiles COM INTERAÇÃO (o
+ * mercador e o caldeirão; a estante e a mesa não respondem a nada e não
+ * piscam).
  *
- * Existe por um problema de desenho de jogo, não de estética: o mercador nasce
- * a 2–4 tiles da escada e a bancada noutra sala, e nenhum dos dois grita. Um
- * tile que pulsa devagar é o convite que faz o jogador atravessar a sala para
- * ver o que é — a mesma frase visual do realce sob o cursor e do clarão da
- * coleta ("olhe para este tile"), no mesmo âmbar.
+ * Existe por um problema de desenho de jogo, não de estética: desde a fase 2.1
+ * o mercador e a estação nascem na SALA INICIAL, a 2–4 tiles do herói, e mesmo
+ * assim nenhum dos dois grita. Um tile que pulsa devagar é o convite que faz o
+ * jogador atravessar a sala para ver o que é — a mesma frase visual do realce
+ * sob o cursor e do clarão da coleta ("olhe para este tile"), no mesmo âmbar.
  *
  * O pulso APAGA quando o jogador chega ao tile: o convite já foi aceito, e
  * manter a luz acesa embaixo dos próprios pés só disputaria atenção com o
@@ -1143,13 +1227,15 @@ export class IsoRenderer {
 
   /* --- os pontos de parada (ver `FICHAS_DE_PARADA`) --- */
   /**
-   * Atlas do mercador e da bancada, forjados SOB DEMANDA no primeiro desenho
-   * de cada um. Mesmo protocolo de `atlasInimigo` e `atlasItem`: `undefined` =
-   * nunca tentado, `null` GUARDADO = tentou e não há canvas (jsdom) — a forja
-   * jamais vira retentativa por quadro.
+   * Atlas do mercador e das TRÊS peças da estação de alquimia (caldeirão,
+   * estante e mesa), forjados SOB DEMANDA no primeiro desenho de cada um.
+   * Mesmo protocolo de `atlasInimigo` e `atlasItem`: `undefined` = nunca
+   * tentado, `null` GUARDADO = tentou e não há canvas (jsdom) — a forja jamais
+   * vira retentativa por quadro. São quatro entradas no máximo, uma por membro
+   * de `TipoParada`, e cada peça paga a sua forja só se aparecer na tela.
    *
    * Sobrevive à troca de mapa junto com os atlases da morte: o andar novo tem
-   * outro mercador em outro lugar, mas é o MESMO rig, e o forge o memoiza.
+   * outra estação em outro lugar, mas são os MESMOS rigs, e o forge os memoiza.
    */
   private readonly atlasParada = new Map<TipoParada, AtlasPersonagem | null>();
   /**
@@ -1686,12 +1772,22 @@ export class IsoRenderer {
       game.visible && typeof game.visible.has === 'function' ? game.visible : EMPTY_SET;
     const expl = game.explored || null;
     const p = game.player;
-    /* Os dois pontos de parada do andar, hasteados FORA do laço: eles são
+    /* Os pontos de parada do andar, hasteados FORA do laço: eles são
      * consultados uma vez por tile visível, e um `game.mercador` por tile seria
      * uma leitura de propriedade no laço quente para responder sempre a mesma
      * coisa. `null` (mapa sem tile elegível) simplesmente nunca casa. */
     const paradaMerc = game.mercador;
-    const paradaBanc = game.bancada;
+    /* `game.bancada` é o CALDEIRÃO — o tile de interação da estação (o nome do
+     * campo é anterior à instalação de três tiles; ver `Game` em types.ts). */
+    const paradaCald = game.bancada;
+    /* Os extras da estação (estante e mesa). A lista pode ser curta ou vazia
+     * num cômodo apertado: `quantos` é o que faz "menos extras" desenhar menos
+     * peças em vez de quebrar. Save antigo pode nem trazer o campo — daí o
+     * teste de array antes de perguntar o comprimento. */
+    const extrasAlq = game.alquimiaExtras;
+    const quantosExtras = extrasAlq
+      ? Math.min(extrasAlq.length, PECAS_EXTRAS_ALQUIMIA.length)
+      : 0;
 
     const z = cam.zoom;
     const hw = this.HW0 * z;
@@ -1813,18 +1909,28 @@ export class IsoRenderer {
           this.desenharBrilhoColeta(ctx, x, y, sx, sy, hw, hh);
         }
         // Os PONTOS DE PARADA, antes dos itens e do bicho: o mercador está
-        // POSTO e a bancada é mobília — o que se recolhe do chão e o que anda
-        // por cima deles vem depois, como vem por cima de qualquer cenário.
-        // A regra de visão é a dos inimigos (R31): fora do FOV, nada.
+        // POSTO e a estação de alquimia é mobília — o que se recolhe do chão e
+        // o que anda por cima deles vem depois, como vem por cima de qualquer
+        // cenário. A regra de visão é a dos inimigos (R31): fora do FOV, nada.
         if (seen) {
           if (paradaMerc && paradaMerc.x === x && paradaMerc.y === y) {
             this.desenharParada(
               ctx, 'mercador', this.facingMercador, sx, sy, cy, hw, hh, z, lvl, !isPlayer
             );
           }
-          if (paradaBanc && paradaBanc.x === x && paradaBanc.y === y) {
+          if (paradaCald && paradaCald.x === x && paradaCald.y === y) {
             this.desenharParada(
-              ctx, 'bancada', DIR_PARADA_FIXA, sx, sy, cy, hw, hh, z, lvl, !isPlayer
+              ctx, 'caldeirao', DIR_PARADA_FIXA, sx, sy, cy, hw, hh, z, lvl, !isPlayer
+            );
+          }
+          // A estante e a mesa, cada uma no tile que o engine reservou para ela
+          // (`PECAS_EXTRAS_ALQUIMIA` é o mapeamento posição → peça). `convida`
+          // é FALSO nas duas: são cenário, e não há comando nenhum sobre elas.
+          for (let k = 0; k < quantosExtras; k++) {
+            const ex = extrasAlq[k];
+            if (!ex || ex.x !== x || ex.y !== y) continue;
+            this.desenharParada(
+              ctx, PECAS_EXTRAS_ALQUIMIA[k], DIR_PARADA_FIXA, sx, sy, cy, hw, hh, z, lvl, false
             );
           }
         }
@@ -3610,7 +3716,7 @@ export class IsoRenderer {
   }
 
   /* ------------------------------------------------------------------ *
-   * Os PONTOS DE PARADA — o mercador e a bancada (fase 2 da economia)
+   * Os PONTOS DE PARADA — o mercador e a estação de alquimia
    *
    * Ver o bloco de constantes `FICHAS_DE_PARADA` para o porquê de cada
    * decisão. Aqui só há desenho, e ele é o mesmo de um inimigo com sprite:
@@ -3634,12 +3740,9 @@ export class IsoRenderer {
   }
 
   /**
-   * Um ponto de parada no tile dele. `convida` liga o pulso âmbar do chão —
-   * ele é falso exatamente quando o jogador está EM CIMA do ponto.
-   *
-   * A sombra é maior na bancada do que no mercador porque a mobília ocupa o
-   * tile inteiro e a figura encapuzada não: elipse pequena sob um caldeirão
-   * de 7u de largura lê como objeto flutuando.
+   * Um ponto de parada no tile dele. `convida` liga o pulso âmbar do chão — ele
+   * é falso quando o jogador está EM CIMA do ponto e falso, sempre, nos tiles
+   * de cenário da estação (estante e mesa não têm interação nenhuma).
    */
   private desenharParada(
     ctx: CanvasRenderingContext2D, tipo: TipoParada, dir: number,
@@ -3648,19 +3751,16 @@ export class IsoRenderer {
   ): void {
     if (convida) this.desenharConvite(ctx, sx, sy, hw, hh);
 
-    const mobilia = tipo === 'bancada';
-    fillEllipse(
-      ctx, sx, cy + 2 * z,
-      (mobilia ? 14 : 11) * z, (mobilia ? 5.4 : 4.6) * z,
-      COL_SHADOW_ENT
-    );
+    const sombra = SOMBRA_PARADA[tipo];
+    fillEllipse(ctx, sx, cy + 2 * z, sombra[0] * z, sombra[1] * z, COL_SHADOW_ENT);
 
     const atlas = this.atlasDaParada(tipo);
     if (atlas) {
-      // Coluna ('parado', 0) — nem o mercador nem a bancada andam ou atacam —,
-      // MODULADA pela luz do tile, como todo inimigo (§1). As emissivas (os
-      // olhos dele, a brasa dela) atravessam acesas sozinhas: quem cuida disso
-      // é `quadroModulado`, e este arquivo não conhece um pixel do assunto.
+      // Coluna ('parado', 0) — nem o mercador nem a mobília andam ou atacam —,
+      // MODULADA pela luz do tile, como todo inimigo (§1). As emissivas (as
+      // lentes dele, o caldo e os frascos dela) atravessam acesas sozinhas:
+      // quem cuida disso é `quadroModulado`, e este arquivo não conhece um
+      // pixel do assunto.
       const f = quadroModulado(atlas, dir, 'parado', 0, lvl / (LEVELS - 1));
       if (f.fonte) {
         const dx = Math.round(sx - atlas.ancoraX * z);
@@ -3673,9 +3773,12 @@ export class IsoRenderer {
       }
     }
     // Sem atlas: NUNCA deixar de desenhar. Um andar em que o mercador é
-    // invisível é um andar em que o jogador não sabe que pode negociar.
-    if (mobilia) this.desenharBancadaGeometrica(ctx, sx, cy, z, lvl);
-    else this.desenharMercadorGeometrico(ctx, sx, cy, z, lvl);
+    // invisível é um andar em que o jogador não sabe que pode negociar — e uma
+    // estação sem caldeirão é um tile de interação que ninguém encontra.
+    if (tipo === 'mercador') this.desenharMercadorGeometrico(ctx, sx, cy, z, lvl);
+    else if (tipo === 'caldeirao') this.desenharCaldeiraoGeometrico(ctx, sx, cy, z, lvl);
+    else if (tipo === 'estante') this.desenharEstanteGeometrica(ctx, sx, cy, z, lvl);
+    else this.desenharMesaGeometrica(ctx, sx, cy, z, lvl);
   }
 
   /**
@@ -3705,42 +3808,110 @@ export class IsoRenderer {
   }
 
   /**
-   * O MERCADOR sem atlas: o sino do manto (I3), o capuz (I1) e os dois olhos.
-   * Deliberadamente pobre, como toda reserva geométrica deste arquivo — o que
-   * ela precisa dizer é "há ALGUÉM neste tile", e os olhos acesos dizem que
-   * esse alguém é o encapuzado, não um monstro.
+   * O MERCADOR sem atlas: o sino do manto (I2), a cabeça e as duas lentes
+   * acesas (I1). Deliberadamente pobre, como toda reserva geométrica deste
+   * arquivo — o que ela precisa dizer é "há ALGUÉM neste tile", e as lentes
+   * acesas dizem que esse alguém é o mercador, não um monstro.
    *
-   * Os olhos saem em brilho pleno (`LEVELS − 1`), e não no `lvl` do tile:
-   * é a tradução honesta da camada emissiva do rig para um caminho que não tem
+   * As lentes saem em brilho pleno (`LEVELS − 1`), e não no `lvl` do tile: é a
+   * tradução honesta da camada emissiva do rig para um caminho que não tem
    * camada nenhuma.
    */
   private desenharMercadorGeometrico(
     ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
   ): void {
     const manto = this.luts.SHADES.linker;
-    const olho = this.luts.SHADES.potion;
+    const lente = this.luts.SHADES.amber;
     fillEllipse(ctx, cx, cy - 7 * z, 6 * z, 9 * z, manto.main[lvl]);
     fillEllipse(ctx, cx, cy - 16 * z, 4 * z, 3.4 * z, manto.dark[lvl]);
-    fillCircle(ctx, cx - 1.6 * z, cy - 16 * z, 1.1 * z, olho.light[LEVELS - 1]);
-    fillCircle(ctx, cx + 1.6 * z, cy - 16 * z, 1.1 * z, olho.light[LEVELS - 1]);
+    fillCircle(ctx, cx - 1.6 * z, cy - 16 * z, 1.3 * z, lente.light[LEVELS - 1]);
+    fillCircle(ctx, cx + 1.6 * z, cy - 16 * z, 1.3 * z, lente.light[LEVELS - 1]);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * A estação de alquimia sem atlas — três peças, três silhuetas
+   *
+   * A reserva do móvel único da rodada 1 virou três, uma por tile, pela mesma
+   * razão que os rigs viraram três: cada peça desenha no SEU losango. O
+   * vocabulário é o de sempre — elipses na cor de quem o objeto é —, e o que
+   * muda entre elas é só a silhueta: bojuda no caldeirão, ALTA e estreita na
+   * estante, BAIXA e larga na mesa. Três formas que se distinguem de relance é
+   * tudo o que uma reserva precisa entregar.
+   *
+   * O que está ACESO sai em brilho pleno (`LEVELS − 1`) e não no `lvl` do tile:
+   * é a tradução honesta das cores emissivas do rig (`CORES_EMISSIVAS_ALQUIMIA`)
+   * para um caminho que não tem camada emissiva nenhuma. Sempre em `.light`, e
+   * nunca em `.main`: `SHADES.amber.main[LEVELS − 1]` é EXATAMENTE a cor do
+   * pulso de convite, e um fogo daquela cor faria o desenho de reserva se
+   * confundir com o convite para quem lê o canvas (o que test/render.test.ts
+   * faz literalmente).
+   * ------------------------------------------------------------------ */
+
+  /**
+   * O CALDEIRÃO sem atlas: o bojo de pedra, a LAJE ROXA do caldo por cima (I1 —
+   * o conteúdo é a superfície, a mesma regra que o rig obedece) e a língua de
+   * fogo que escapa pela frente. É a peça do tile de interação, e é por isso
+   * que ela é a mais berrante das três: o jogador precisa achá-la.
+   */
+  private desenharCaldeiraoGeometrico(
+    ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
+  ): void {
+    const pedra = this.luts.SHADES.stone;
+    const caldo = this.luts.SHADES.linker;
+    const fogo = this.luts.SHADES.amber;
+    fillEllipse(ctx, cx, cy - 6 * z, 9 * z, 6 * z, pedra.main[lvl]);
+    fillEllipse(ctx, cx, cy - 11 * z, 7 * z, 3.2 * z, pedra.light[lvl]);
+    /* A laje roxa: o caldo É o topo do caldeirão, nunca algo "dentro" dele. */
+    fillEllipse(ctx, cx, cy - 12 * z, 5 * z, 2.2 * z, caldo.light[LEVELS - 1]);
+    fillCircle(ctx, cx, cy - 1.5 * z, 2.4 * z, fogo.light[LEVELS - 1]);
   }
 
   /**
-   * A BANCADA sem atlas: a laje de pedra que assenta o conjunto, o caldeirão à
-   * esquerda e as brasas sob ele (I3) — em brilho pleno, pelo mesmo motivo dos
-   * olhos do mercador. Baixa e larga: é mobília de um tile, e a silhueta tem de
-   * dizer isso mesmo em duas elipses.
+   * A ESTANTE sem atlas: um bloco ALTO de madeira com três frascos acesos
+   * escalonados (I2). A silhueta é o recado — ela é a única peça da estação que
+   * sobe acima da linha da cabeça do herói, e é o que faz a instalação ser
+   * notada de longe mesmo sem sprite nenhum.
+   *
+   * Madeira não tem chave própria em `SHADES` (a paleta do vanilla é por
+   * arquétipo, não por material): o tom quente escuro do âmbar é o que mais se
+   * aproxima, e é o mesmo critério de `RESERVA_DE_ITEM` — a cor de reserva é
+   * uma APROXIMAÇÃO deliberada, não a cor do rig 3D.
    */
-  private desenharBancadaGeometrica(
+  private desenharEstanteGeometrica(
     ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
   ): void {
-    const ferro = this.luts.SHADES.stone;
-    const caldo = this.luts.SHADES.potion;
-    const fogo = this.luts.SHADES.amber;
-    fillEllipse(ctx, cx, cy - 5 * z, 13 * z, 6 * z, ferro.main[lvl]);
-    fillEllipse(ctx, cx - 5 * z, cy - 12 * z, 5 * z, 4 * z, ferro.light[lvl]);
-    fillEllipse(ctx, cx - 5 * z, cy - 14 * z, 3 * z, 1.8 * z, caldo.main[lvl]);
-    fillCircle(ctx, cx - 5 * z, cy - 4 * z, 2.2 * z, fogo.main[LEVELS - 1]);
+    const madeira = this.luts.SHADES.amber;
+    const frascoA = this.luts.SHADES.potion;
+    const frascoB = this.luts.SHADES.sentinel;
+    const frascoC = this.luts.SHADES.linker;
+    fillEllipse(ctx, cx, cy - 13 * z, 6.5 * z, 13 * z, madeira.dark[lvl]);
+    fillEllipse(ctx, cx, cy - 25 * z, 7 * z, 2 * z, madeira.main[lvl]);
+    /* Três frascos, um por prateleira, acesos como no rig. As cores são as das
+     * trincas de `criarEstanteNo`: verde, azul e roxo. */
+    fillCircle(ctx, cx - 2.6 * z, cy - 20 * z, 1.7 * z, frascoA.light[LEVELS - 1]);
+    fillCircle(ctx, cx + 2.6 * z, cy - 13 * z, 1.7 * z, frascoB.light[LEVELS - 1]);
+    fillCircle(ctx, cx - 2.6 * z, cy - 6 * z, 1.7 * z, frascoC.light[LEVELS - 1]);
+  }
+
+  /**
+   * A MESA sem atlas: um tampo BAIXO e largo de madeira com o livro aberto por
+   * cima e a chama da vela acesa ao lado (I3). Baixa por contraste com a
+   * estante — as duas peças de cenário só valem alguma coisa se lerem como
+   * coisas diferentes num relance.
+   */
+  private desenharMesaGeometrica(
+    ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
+  ): void {
+    const madeira = this.luts.SHADES.amber;
+    fillEllipse(ctx, cx, cy - 5 * z, 10 * z, 4.5 * z, madeira.dark[lvl]);
+    fillEllipse(ctx, cx, cy - 9 * z, 8.5 * z, 2.6 * z, madeira.main[lvl]);
+    /* O livro aberto: a página clara, a leitura de "alguém trabalha aqui". */
+    fillEllipse(ctx, cx - 2 * z, cy - 11 * z, 4 * z, 1.5 * z, madeira.light[lvl]);
+    /* A vela: a única coisa acesa da peça. A chama sai da MESMA rampa da
+     * madeira (não há chave de fogo em `SHADES`, e o âmbar é as duas coisas);
+     * o que a separa do tampo é o brilho PLENO — `light[LEVELS − 1]` contra o
+     * `main[lvl]` que escurece com a distância. */
+    fillCircle(ctx, cx + 5.5 * z, cy - 13 * z, 1.5 * z, madeira.light[LEVELS - 1]);
   }
 
   /* ------------------------------------------------------------------ *

@@ -265,6 +265,23 @@ function copiaPonto(p: Point | null | undefined): Point | null {
   return { x: inteiro(p.x), y: inteiro(p.y) };
 }
 
+/**
+ * Cópia defensiva da decoração da estação de alquimia: os pontos válidos, na
+ * ordem em que estão (que sai canônica de `populate`), descartando o que não
+ * for par de números finitos. Lista vazia é valor legítimo — cômodo apertado
+ * monta a estação com uma peça só. Quem valida contra o mapa regerado (e contra
+ * o caldeirão) é o `restore`; aqui só garantimos que não gravamos lixo.
+ */
+function copiaExtras(lista: Point[] | null | undefined): Point[] {
+  const out: Point[] = [];
+  if (!lista || typeof lista.length !== 'number') return out;
+  for (let i = 0; i < lista.length; i++) {
+    const p = copiaPonto(lista[i]);
+    if (p) out.push(p);
+  }
+  return out;
+}
+
 function copiaInimigos(lista: Game['enemies'] | null | undefined): SavedEnemy[] {
   const out: SavedEnemy[] = [];
   if (!lista || typeof lista.length !== 'number') return out;
@@ -354,6 +371,10 @@ function serializar(game: Game): SaveGravado {
      * andar que o save PRECISA carregar — todo o resto é regerado por seed. */
     mercador: copiaPonto(game.mercador),
     bancada: copiaPonto(game.bancada),
+    /* A decoração da estação vai junto pelo mesmo motivo, e com um a mais: ela
+     * é território RESERVADO do andar, e um andar retomado com a estante em
+     * outro tile seria um andar diferente do que o jogador deixou. */
+    alquimiaExtras: copiaExtras(game.alquimiaExtras),
     explored: bytesToBase64(explored),
     exploredLen: explored && typeof explored.length === 'number' ? explored.length : 0,
     stats: copiaStats(game.stats),

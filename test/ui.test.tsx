@@ -18,8 +18,10 @@
  *     linha de um comando RECUSADO, que no vanilla ia ao DOM dentro do próprio
  *     `logMsg` (`R.UI.pushLog`) e portanto aparecia no ato;
  *   · o overlay de morte aparece com `over: true`, com os 9 campos do R48;
- *   · o BALCÃO (fase 2 da economia) só existe sobre o mercador ou sobre a
- *     bancada, despacha os comandos certos e reflete bolsa, moedas e receitas;
+ *   · o BALCÃO (fase 2 da economia) só existe sobre o mercador ou sobre o
+ *     caldeirão da estação de alquimia (`game.bancada`), despacha os comandos
+ *     certos e reflete bolsa, moedas e receitas — e os tiles de CENÁRIO da
+ *     estação (`game.alquimiaExtras`) não abrem painel nenhum;
  *   · o `IsoRenderer` degrada sem lançar quando `getContext('2d')` devolve null
  *     (jsdom não tem canvas 2D) — defensivo, não gambiarra;
  *   · o laço de rAF NÃO duplica com a montagem dupla do StrictMode e é
@@ -540,13 +542,18 @@ describe('UI — smoke da casca React (§7.4)', () => {
   });
 
   /* ================================================================ *
-   * O BALCÃO — mercador e bancada (fase 2 da economia)
+   * O BALCÃO — o mercador e a ESTAÇÃO DE ALQUIMIA (fase 2 da economia)
    *
-   * Os dois pontos de parada são estado do JOGO (`game.mercador` /
+   * Os pontos de parada são estado do JOGO (`game.mercador` /
    * `game.bancada`), então pôr o jogador "em cima" de um deles é mover o
    * PONTO até ele — muito mais barato e mais determinístico do que caminhar
    * até onde a semente resolveu colocá-lo, e a regra em teste ('estou sobre o
    * tile?') é exatamente a mesma nos dois casos.
+   *
+   * DESDE A FASE 2.1, `game.bancada` é o CALDEIRÃO: o tile de interação de uma
+   * instalação de até três tiles. Os outros dois (`game.alquimiaExtras`) são
+   * cenário puro — o engine não aceita comando sobre eles e esta interface não
+   * pode abrir painel neles. Há um caso só para isso.
    *
    * Notificação: `store.setHover` é a via pública mais barata de acordar os
    * assinantes sem consumir turno — e ela só emite quando o TILE muda, daí as
@@ -565,21 +572,58 @@ describe('UI — smoke da casca React (§7.4)', () => {
     /* `populate` nunca põe ponto de parada no tile inicial (start entra em
      * `taken` antes de qualquer sorteio), então a partida nasce longe dos dois. */
     const sobreMercador = !!g.mercador && g.mercador.x === g.player.x && g.mercador.y === g.player.y;
-    const sobreBancada = !!g.bancada && g.bancada.x === g.player.x && g.bancada.y === g.player.y;
-    expect(sobreMercador || sobreBancada, 'a semente do teste nasceu em cima de um balcão')
+    const sobreCaldeirao = !!g.bancada && g.bancada.x === g.player.x && g.bancada.y === g.player.y;
+    expect(sobreMercador || sobreCaldeirao, 'a semente do teste nasceu em cima de um balcão')
       .toBe(false);
 
     expect(document.getElementById('troca'), 'o balcão apareceu com o jogador longe dele')
       .toBeNull();
 
-    /* Andar sem mercador nem bancada (mapa sem tile elegível) também não abre. */
+    /* Andar sem mercador nem estação (mapa sem tile elegível) também não abre. */
     act(() => {
       g.mercador = null;
       g.bancada = null;
+      g.alquimiaExtras = [];
       acordar(1);
     });
     expect(document.getElementById('troca'), 'o balcão abriu num andar sem pontos de parada')
       .toBeNull();
+
+    esperarConsoleLimpo();
+  });
+
+  it('os tiles de cenário da estação não abrem balcão nenhum', () => {
+    /*
+     * Fase 2.1: a estante e a mesa (`game.alquimiaExtras`) ocupam território e
+     * não têm interação — `criar` só é aceito sobre `game.bancada` (o
+     * caldeirão). Pisar na estante tem de ser tão silencioso quanto pisar em
+     * chão comum: abrir a oficina ali seria a interface prometendo um comando
+     * que o engine recusa, e a recusa custa uma linha de 'aviso' no registro.
+     */
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = null;
+      /* O caldeirão fica ao LADO; o jogador está sobre o primeiro extra. */
+      g.bancada = { x: g.player.x + 1, y: g.player.y };
+      g.alquimiaExtras = [
+        { x: g.player.x, y: g.player.y },
+        { x: g.player.x + 2, y: g.player.y }
+      ];
+      acordar(0);
+    });
+
+    expect(document.getElementById('troca'), 'a estante abriu a oficina')
+      .toBeNull();
+
+    /* E o caldeirão, ao lado, continua abrindo — o caso não passou por engano. */
+    act(() => {
+      g.bancada = { x: g.player.x, y: g.player.y };
+      acordar(1);
+    });
+    expect(document.getElementById('troca'), 'o caldeirão parou de abrir a oficina')
+      .toBeTruthy();
 
     esperarConsoleLimpo();
   });
@@ -682,20 +726,27 @@ describe('UI — smoke da casca React (§7.4)', () => {
     esperarConsoleLimpo();
   });
 
-  it('sobre a bancada: sem material a receita fica desabilitada; com material, cria', () => {
+  it('sobre o caldeirão: sem material a receita fica desabilitada; com material, cria', () => {
     montarApp();
     const g = store.getGame();
 
     act(() => {
       g.mercador = null;
       g.bancada = { x: g.player.x, y: g.player.y };
+      g.alquimiaExtras = [];
       g.player.bag = {};
       g.player.potions = 0;
       acordar(0);
     });
 
+    /* O título é o da INSTALAÇÃO que o jogador vê no tile — caldeirão, estante
+     * e mesa (src/render/characters/alquimia.ts) —, e não o do campo do engine,
+     * que continua se chamando `bancada` por ser contrato de save e snapshot. */
     expect((document.querySelector('#troca .titulo') as HTMLElement).textContent)
-      .toBe('Bancada');
+      .toBe('Alquimia');
+    expect((document.getElementById('troca') as HTMLElement).getAttribute('aria-label'),
+      'o rótulo acessível não descreve a estação')
+      .toBe('Estação de alquimia e refino');
 
     const travado = document.getElementById('criar-pocao') as HTMLButtonElement;
     expect(travado.tagName, 'o gatilho da receita tem de ser um <button> de verdade')
@@ -710,7 +761,7 @@ describe('UI — smoke da casca React (§7.4)', () => {
     const turnoAntes = g.turn;
     act(() => { fireEvent.click(travado); });
     expect(g.turn, 'o clique no botão desabilitado consumiu turno').toBe(turnoAntes);
-    expect(g.player.potions, 'a bancada criou sem material').toBe(0);
+    expect(g.player.potions, 'a oficina criou sem material').toBe(0);
 
     /* Com as três gosmas na bolsa o botão abre e o caldeirão trabalha. */
     act(() => {
@@ -725,9 +776,9 @@ describe('UI — smoke da casca React (§7.4)', () => {
 
     act(() => { fireEvent.click(liberado); });
 
-    expect(g.player.potions, 'a bancada não engarrafou a poção').toBe(1);
+    expect(g.player.potions, 'o caldeirão não engarrafou a poção').toBe(1);
     expect(g.player.bag.gosma, 'a receita não consumiu a gosma').toBeUndefined();
-    expect(g.turn, 'usar a bancada custa um turno').toBe(turnoAntes + 1);
+    expect(g.turn, 'usar a oficina custa um turno').toBe(turnoAntes + 1);
     expect(document.getElementById('log')!.textContent, 'o caldeirão não foi narrado')
       .toContain('engarrafa uma poção');
 
@@ -775,13 +826,14 @@ describe('UI — smoke da casca React (§7.4)', () => {
     esperarConsoleLimpo();
   });
 
-  it('sobre a bancada: o refino mostra o nível da arma e trava no teto', () => {
+  it('sobre o caldeirão: o refino mostra o nível da arma e trava no teto', () => {
     montarApp();
     const g = store.getGame();
 
     act(() => {
       g.mercador = null;
       g.bancada = { x: g.player.x, y: g.player.y };
+      g.alquimiaExtras = [];
       g.player.bag = { espadaGoblin: 2 };
       g.player.armaNivel = 0;
       acordar(0);
