@@ -2235,6 +2235,20 @@ interface DespojoPreview {
  * atenção.
  */
 const DESPOJOS_PREVIEW: Readonly<Record<string, readonly DespojoPreview[]>> = {
+  guerreiro: [
+    {
+      rotulo: 'MERCADOR (fase 2) — compra os despojos', arquivo: 'mercador.ts',
+      modelo: 'MODELO_MERCADOR', paleta: 'PALETA_MERCADOR', rampas: 'RAMPAS_MERCADOR',
+      rampaDaCor: 'RAMPA_DA_COR_MERCADOR', emissivas: 'CORES_EMISSIVAS_MERCADOR',
+      chance: '1 por andar, a 2–4 tiles da escada'
+    },
+    {
+      rotulo: 'BANCADA (fase 2) — alquimia e refino', arquivo: 'bancada.ts',
+      modelo: 'MODELO_BANCADA', paleta: 'PALETA_BANCADA', rampas: 'RAMPAS_BANCADA',
+      rampaDaCor: 'RAMPA_DA_COR_BANCADA', emissivas: 'CORES_EMISSIVAS_BANCADA',
+      chance: '1 por andar, em outra sala'
+    }
+  ],
   slime: [
     {
       rotulo: 'frasco de gosma', arquivo: 'itemGosma.ts', modelo: 'MODELO_GOSMA',
@@ -2248,8 +2262,7 @@ const DESPOJOS_PREVIEW: Readonly<Record<string, readonly DespojoPreview[]>> = {
       paleta: 'PALETA_ORELHA_GOBLIN', rampas: 'RAMPAS_ORELHA_GOBLIN',
       rampaDaCor: 'RAMPA_DA_COR_ORELHA_GOBLIN', emissivas: null,
       chance: '50% · missão ou venda (5)'
-    },
-    {
+    },    {
       rotulo: 'cimitarra (reaproveitada da morte)', arquivo: null, modelo: 'MODELO_CIMITARRA',
       paleta: null, rampas: null, rampaDaCor: null, emissivas: null,
       chance: '15% · refino (ferro) ou venda (18)'
@@ -2298,7 +2311,7 @@ function secaoDespojos(alvo: Preparado, zAnim: number, n: () => string): HTMLEle
   if (!itens || itens.length === 0) return null;
 
   const s = secao(
-    `${n()} · despojos — o que este bicho larga ao morrer (dir ${DIR_ANIMACAO})`,
+    `${n()} · despojos e paradas — o que cai no chão e quem espera na masmorra (dir ${DIR_ANIMACAO})`,
     'cada item é um rig próprio, forjado num atlas próprio e lido na coluna parado/0 · ' +
       'é assim que o renderer o desenha caído no tile e, depois, como ícone de bolsa'
   );

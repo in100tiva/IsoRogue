@@ -73,6 +73,24 @@ No render, a pilha desenha até **três** sprites em leque (±3px·zoom), escolh
 menores `id` — os que caíram primeiro. É corte determinístico, não "os três primeiros que o
 laço encontrar".
 
+## Fase 2 — onde o despojo vira vantagem
+
+Dois pontos de parada nascem por andar (`game.mercador`, `game.bancada`), colocados pelo rng
+de população **depois** de inimigos e itens — pôr antes deslocaria o stream e mudaria a
+posição de todo inimigo de todo andar.
+
+- **Mercador** (2–4 tiles da escada): compra material pelo `valor` da tabela `ITENS` e vende
+  poção por `PRECO_POCAO` (15). Comandos `vender:<item>,<n>` e `comprar:potion,<n>`.
+- **Bancada** (outra sala): alquimia e refino, comando `criar:<receita>`. `RECEITAS` é a fonte
+  única — 3 gosmas viram 1 poção; 2 cimitarras viram +1 de ataque, com teto em
+  `ARMA_NIVEL_MAX` (5). O ferro da lâmina do goblin é o que aprimora a arma do herói.
+
+As três ações exigem o herói **sobre** o tile e **consomem turno** — negociar em masmorra
+custa tempo, e é o que dá peso à travessia carregada de loot. Fora do tile, o comando é
+recusado com registro e sem consumir turno.
+
+`player.moedas` e `player.armaNivel` entram no snapshot (v3), no save e atravessam a descida.
+
 ## O que isso mudou no oracle
 
 `snapshot()` subiu para **v2**: os itens agora publicam `kind` (`I[id:kind:x:y]`), a bolsa

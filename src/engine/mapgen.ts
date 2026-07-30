@@ -650,6 +650,25 @@ export function regions(map: GameMap): RegionsResult {
 }
 
 /**
+ * Sala que contém (x, y), ou `null` se o tile está em corredor (ou fora).
+ *
+ * As folhas do BSP não se sobrepõem, então a PRIMEIRA sala que casar é a única
+ * — a varredura linear é a resposta completa, não um palpite. Mora aqui, e não
+ * em quem pergunta, porque `rooms` é dado de mapa: game.ts (narração de sala) e
+ * entities.ts (colocação da bancada) precisavam da mesma resposta, e duas
+ * implementações da mesma pergunta são duas chances de divergir.
+ */
+export function roomAt(map: GameMap | null, x: number, y: number): Room | null {
+  const rooms = map ? map.rooms : null;
+  if (!rooms) return null;
+  for (let i = 0; i < rooms.length; i++) {
+    const r = rooms[i];
+    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r;
+  }
+  return null;
+}
+
+/**
  * Gera o mapa do nível. Mesma (seed, depth) => mapa byte-a-byte idêntico.
  * @param seedStr semente crua (será normalizada)
  * @param depth   profundidade 1-based

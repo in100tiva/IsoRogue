@@ -22,6 +22,7 @@ import type {
   LogClass,
   LogEntry,
   Player,
+  Point,
   SaveData,
   SavedEnemy,
   SavedItem,
@@ -237,11 +238,31 @@ function copiaJogador(p: Player | null | undefined): Player {
     atk: inteiro(j.atk), potions: inteiro(j.potions),
     level: inteiro(j.level), xp: inteiro(j.xp),
     bag: copiaBolsa(j.bag),
+    // Fase 2: moedas e degraus de refino são do JOGADOR e atravessam tudo —
+    // descida e retomada. Quem valida a leitura é o `restore` (que aplica piso
+    // zero e o teto de refino); aqui só garantimos inteiro.
+    moedas: inteiro(j.moedas),
+    armaNivel: inteiro(j.armaNivel),
     // `facing` é cosmético, mas gravá-lo evita o guerreiro girar para o sul ao
     // retomar. `normalizeFacing` (e não `inteiro`) porque a ausência tem de cair
     // no padrão 2, não no zero — save antigo carrega sem quebrar.
     facing: normalizeFacing(j.facing)
   };
+}
+
+/**
+ * Cópia defensiva de um ponto de parada. `null` é valor legítimo (andar sem
+ * mercador), e é o que sai também de qualquer coisa que não seja um par de
+ * números finitos — `num()` sozinho não serviria aqui, porque ele devolve 0
+ * para texto, e `{x:'a',y:'b'}` viraria a coordenada (0,0), que é um ponto de
+ * mapa de verdade. O `restore` valida de novo do outro lado, contra o mapa
+ * regerado, mas gravar lixo já corrigido não é trabalho do leitor.
+ */
+function copiaPonto(p: Point | null | undefined): Point | null {
+  if (!p || typeof p !== 'object') return null;
+  if (typeof p.x !== 'number' || !isFinite(p.x)) return null;
+  if (typeof p.y !== 'number' || !isFinite(p.y)) return null;
+  return { x: inteiro(p.x), y: inteiro(p.y) };
 }
 
 function copiaInimigos(lista: Game['enemies'] | null | undefined): SavedEnemy[] {
@@ -328,6 +349,11 @@ function serializar(game: Game): SaveGravado {
     enemies: copiaInimigos(game.enemies),
     items: copiaItens(game.items),
     proxItemId: inteiro(game.proxItemId),
+    /* Os pontos de parada não saem da geração do mapa (`populate` os escolhe
+     * depois de saber onde caíram inimigos e itens), então são a única parte do
+     * andar que o save PRECISA carregar — todo o resto é regerado por seed. */
+    mercador: copiaPonto(game.mercador),
+    bancada: copiaPonto(game.bancada),
     explored: bytesToBase64(explored),
     exploredLen: explored && typeof explored.length === 'number' ? explored.length : 0,
     stats: copiaStats(game.stats),

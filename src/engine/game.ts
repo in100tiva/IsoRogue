@@ -14,6 +14,7 @@
 import type {
   ArchetypeKey,
   Command,
+  CustoReceita,
   EnemyState,
   Enemy,
   Game,
@@ -22,7 +23,10 @@ import type {
   ItemKind,
   LogClass,
   LogEntry,
+  MaterialKind,
   Player,
+  Point,
+  ReceitaKind,
   Rng,
   Room
 } from './types';
@@ -30,6 +34,8 @@ import { Tile } from './types';
 import {
   CONFIG,
   DEFAULT_FACING,
+  QUANTIDADE_MAX,
+  QUANTIDADE_MIN,
   cheb,
   dirIndex,
   hash32,
@@ -38,18 +44,24 @@ import {
   normalizeFacing,
   normalizeSeed
 } from './core';
-import { generate, inBounds, isWalkable } from './mapgen';
+import { generate, inBounds, isWalkable, roomAt } from './mapgen';
 import { computeFov } from './fov';
 import { computeDijkstra } from './dijkstra';
-import type { ItemDef } from './entities';
+import type { ItemDef, ReceitaDef } from './entities';
 import {
   ARCHETYPES,
+  ARMA_NIVEL_MAX,
+  ATK_POR_REFINO,
   ITEM_KINDS,
   ITENS,
   POTION_HEAL,
+  PRECO_POCAO,
+  RECEITAS,
   ehMaterial,
+  faltasDaReceita,
   makeItem,
   normalizeItemKind,
+  normalizeReceita,
   populate,
   processEnemies,
   rollDamage,
@@ -167,21 +179,47 @@ function quantiaDeItem(def: ItemDef, n: number): string {
   return n === 1 ? artigoItem(def) + ' ' + def.nome : n + ' ' + def.plural;
 }
 
+/**
+ * Moedas por extenso, com o plural concordando ('1 moeda', '15 moedas').
+ * Sempre com o número — inclusive no singular: aqui a informação é a QUANTIA,
+ * não a cena, então 'uma moeda' seria estilo no lugar errado.
+ */
+function moedasEmTexto(n: number): string {
+  return n === 1 ? '1 moeda' : n + ' moedas';
+}
+
+/** Lista de materiais em pt-BR: 'a, b e c'. Ordem de entrada, nunca alfabética. */
+function listaEmTexto(partes: string[]): string {
+  if (partes.length === 0) return '';
+  if (partes.length === 1) return partes[0];
+  return partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+}
+
+/**
+ * O custo de uma receita por extenso ('3 frascos de gosma'), na ordem de
+ * `ITEM_KINDS` — a mesma ordem da bolsa e do snapshot, jamais `Object.keys`.
+ */
+function custoEmTexto(custo: CustoReceita): string {
+  const partes: string[] = [];
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const n = custo[kind] || 0;
+    if (n > 0) partes.push(quantiaDeItem(ITENS[kind], n));
+  }
+  return listaEmTexto(partes);
+}
+
 function tileEm(map: GameMap, x: number, y: number): number {
   if (!inBounds(map, x, y)) return Tile.Wall;
   return map.tiles[idx(map.w, x, y)];
 }
 
-// Sala que contém o tile (as folhas do BSP não se sobrepõem, logo a primeira
-// que casar é a única). Usado para narrar a movimentação no registro (R49).
+// Sala que contém o tile. A busca é de mapgen (`roomAt`), dono do dado; aqui
+// fica só o apelido em pt-BR que o resto do módulo já usava. Usado para narrar
+// a movimentação no registro (R49).
 function salaEm(map: GameMap | null, x: number, y: number): Room | null {
-  const rooms = map ? map.rooms : null;
-  if (!rooms) return null;
-  for (let i = 0; i < rooms.length; i++) {
-    const r = rooms[i];
-    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return r;
-  }
-  return null;
+  return roomAt(map, x, y);
 }
 
 function idDaSala(map: GameMap | null, x: number, y: number): number | null {
@@ -367,9 +405,16 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
       xp: 0,
       // Bolsa de materiais vazia — sem limite de capacidade nesta fase.
       bag: {},
+      // Fase 2: a expedição começa dura. Toda moeda vem de vender despojo.
+      moedas: 0,
+      armaNivel: 0,
       // §5.1 do docs/PERSONAGEM.md — cosmético; nunca entra em `snapshot()`.
       facing: DEFAULT_FACING
     },
+    // Os dois pontos de parada saem de `populate` (que sabe onde caíram
+    // inimigos e itens); podem ser `null` num mapa sem tile elegível.
+    mercador: pop.mercador,
+    bancada: pop.bancada,
     enemies: pop.enemies,
     items: pop.items,
     // Continua a numeração de `populate` (1..N) — o primeiro despojo é N+1.
@@ -566,6 +611,32 @@ function pegarItem(game: Game, explicito: boolean): boolean {
   return true;
 }
 
+/**
+ * O jogador está EXATAMENTE sobre o ponto? `null` (andar sem aquele ponto)
+ * responde `false` — não existe negociar com um mercador que não veio.
+ */
+function sobreOPonto(game: Game, ponto: Point | null): boolean {
+  if (!ponto) return false;
+  return game.player.x === ponto.x && game.player.y === ponto.y;
+}
+
+/**
+ * Narra a chegada a um ponto de parada. Vale a cada passo que TERMINA no tile,
+ * inclusive voltando ao mesmo ponto: pisar de novo é chegar de novo, e o
+ * jogador precisa da lembrança de que ali se negocia.
+ *
+ * Nada é anunciado na geração do andar de propósito — descobrir o mercador é
+ * parte da exploração, e uma linha de sistema por nível entregaria o mapa.
+ */
+function narrarParada(game: Game): void {
+  if (sobreOPonto(game, game.mercador)) {
+    logMsg(game, 'Você chega ao mercador. Ele avalia sua bolsa.', 'info');
+  }
+  if (sobreOPonto(game, game.bancada)) {
+    logMsg(game, 'Uma bancada de alquimia. Há um caldeirão e uma bigorna.', 'info');
+  }
+}
+
 // R49 (movimentação): um registro por passo viraria ruído em 400 linhas, então
 // narramos só a troca de sala. Corredores ficam silenciosos de propósito.
 function narrarSala(game: Game): void {
@@ -605,6 +676,7 @@ function mover(game: Game, dx: number, dy: number): boolean {
   p.y = ny;
   narrarSala(game);
   pegarItem(game, false);
+  narrarParada(game);
   if (tileEm(map, nx, ny) === Tile.Stairs) {
     logMsg(game, 'Você pisa na escada. Use ">" ou Enter para descer ao nível ' +
       (game.depth + 1) + '.', 'aviso');
@@ -642,6 +714,209 @@ function tentarDescer(game: Game): boolean {
     return false;
   }
   descend(game);
+  return true;
+}
+
+// --------------------------------------------------------------------------
+// Economia e oficina (fase 2)
+//
+// As três ações abaixo — vender, comprar, criar — dividem a mesma anatomia:
+//
+//   1. RECUSA (devolve `false`): lugar errado, quantidade impossível, material
+//      que falta, moeda que falta, teto atingido. Toda recusa escreve UMA linha
+//      de registro em 'aviso' e não toca no estado. Não consumir turno numa
+//      recusa é regra dura: um clique errado no balcão não pode custar um turno
+//      de vida com um Ogro na sala.
+//   2. EFEITO (devolve `true`): a troca acontece e o turno é CONSUMIDO.
+//      Negociar em masmorra custa tempo — é decisão de design, não descuido: o
+//      mercador não é um menu de pausa, e os monstros continuam andando
+//      enquanto o jogador conta moedas. É isso que torna "vendo agora ou levo
+//      até a escada?" uma decisão de verdade.
+//
+// E o que NÃO existe aqui: sorteio. Preço, receita e resultado são tabela.
+// Nenhuma destas funções encosta em `rngCombat` ou `rngLoot` — se um dia
+// encostarem, o determinismo do combate passa a depender de quanta gosma o
+// jogador vendeu, que é exatamente o acoplamento que a fase 1 desfez ao
+// separar os dois streams.
+// --------------------------------------------------------------------------
+
+/** Quantidade aceitável de negociação (1..99), ou `null` se não for. */
+function quantidadeValida(game: Game, quantidade: unknown): number | null {
+  const n = intOr(quantidade, NaN);
+  if (!isNum(n) || n < QUANTIDADE_MIN || n > QUANTIDADE_MAX) {
+    logMsg(game, 'Quantidade inválida: negocie de ' + QUANTIDADE_MIN + ' a ' +
+      QUANTIDADE_MAX + ' por vez.', 'aviso');
+    return null;
+  }
+  return n;
+}
+
+/** Tira `n` unidades da bolsa. A chave some quando zera — ausência é zero. */
+function tirarDaBolsa(p: Player, kind: MaterialKind, n: number): void {
+  const resto = (p.bag[kind] || 0) - n;
+  if (resto > 0) p.bag[kind] = resto;
+  else delete p.bag[kind];
+}
+
+/**
+ * Vende material ao mercador. `moedas += ITENS[kind].valor * quantidade`.
+ *
+ * A poção não chega aqui: `MaterialKind` a exclui no compilador e
+ * `normalizeMaterialKind` a recusa no parse do comando textual.
+ */
+function vender(game: Game, item: MaterialKind, quantidade: number): boolean {
+  const p = game.player;
+  if (!sobreOPonto(game, game.mercador)) {
+    logMsg(game, 'Não há mercador aqui.', 'aviso');
+    return false;
+  }
+  if (!ehMaterial(item)) {
+    /* Rede para chamador não tipado (JSON, console, ferramenta). */
+    logMsg(game, 'O mercador não compra isso.', 'aviso');
+    return false;
+  }
+  const n = quantidadeValida(game, quantidade);
+  if (n === null) return false;
+
+  const def = ITENS[item];
+  const tem = p.bag[item] || 0;
+  if (tem < n) {
+    logMsg(game, 'Você não tem ' + n + ' ' + (n === 1 ? def.nome : def.plural) +
+      ' para vender (bolsa: ' + tem + ').', 'aviso');
+    return false;
+  }
+
+  const ganho = def.valor * n;
+  tirarDaBolsa(p, item, n);
+  p.moedas += ganho;
+  logMsg(game, 'Você vende ' + quantiaDeItem(def, n) + ' por ' +
+    moedasEmTexto(ganho) + '. Total: ' + moedasEmTexto(p.moedas) + '.', 'bom');
+  return true;
+}
+
+/**
+ * Compra poção do mercador, a `PRECO_POCAO` a unidade.
+ *
+ * O item é `'potion'` por assinatura: hoje o mercador só vende isso, e o dia em
+ * que vender outra coisa a união de `Command` tem de mudar junto — o que é o
+ * ponto de usar um literal em vez de `ItemKind`.
+ */
+function comprar(game: Game, item: 'potion', quantidade: number): boolean {
+  const p = game.player;
+  if (!sobreOPonto(game, game.mercador)) {
+    logMsg(game, 'Não há mercador aqui.', 'aviso');
+    return false;
+  }
+  if (item !== 'potion') {
+    logMsg(game, 'O mercador não vende isso.', 'aviso');
+    return false;
+  }
+  const n = quantidadeValida(game, quantidade);
+  if (n === null) return false;
+
+  const def = ITENS.potion;
+  const custo = PRECO_POCAO * n;
+  if (p.moedas < custo) {
+    logMsg(game, 'Moedas insuficientes: ' + quantiaDeItem(def, n) + ' custa' +
+      (n === 1 ? '' : 'm') + ' ' + moedasEmTexto(custo) + ' e você tem ' +
+      moedasEmTexto(p.moedas) + '.', 'aviso');
+    return false;
+  }
+
+  p.moedas -= custo;
+  p.potions += n;
+  logMsg(game, 'Você compra ' + quantiaDeItem(def, n) + ' por ' +
+    moedasEmTexto(custo) + '. Restam ' + moedasEmTexto(p.moedas) +
+    ' e você carrega ' + p.potions + '.', 'bom');
+  return true;
+}
+
+/**
+ * Aplica o EFEITO de uma receita já validada (lugar certo, material em mãos,
+ * teto respeitado) e narra o resultado.
+ *
+ * O efeito mora aqui, e não em `RECEITAS`, porque é a única parte da receita
+ * que é REGRA e não dado: mexe no jogador, e o jogador é deste módulo. A tabela
+ * continua sendo fonte única do que a receita CUSTA e do que ela PRODUZ em
+ * texto — nenhuma quantidade de material aparece nesta função.
+ *
+ * O `never` do `default` não é decoração: quando `RECEITAS` ganhar a terceira
+ * receita, o compilador PARA aqui. Sem ele, a receita nova consumiria material
+ * e não faria nada — bug silencioso que custa a bolsa do jogador.
+ */
+function aplicarReceita(game: Game, receita: ReceitaDef): void {
+  const p = game.player;
+  switch (receita.key) {
+    case 'pocao':
+      p.potions += 1;
+      logMsg(game, 'Você ferve ' + custoEmTexto(receita.custo) +
+        ' no caldeirão e engarrafa uma poção (' + p.potions + ' no total).', 'bom');
+      return;
+    case 'refino':
+      p.armaNivel += 1;
+      p.atk += ATK_POR_REFINO;
+      logMsg(game, 'Você bate ' + custoEmTexto(receita.custo) +
+        ' na bigorna e afia a arma: refino ' + p.armaNivel + ' de ' +
+        ARMA_NIVEL_MAX + ', ataque ' + p.atk + '.', 'bom');
+      return;
+    default: {
+      const semEfeito: never = receita.key;
+      logMsg(game, 'A bancada não sabe o que fazer com "' + String(semEfeito) + '".', 'aviso');
+      return;
+    }
+  }
+}
+
+/** Usa a bancada: alquimia (`'pocao'`) ou refino (`'refino'`). */
+function criar(game: Game, receitaBruta: ReceitaKind): boolean {
+  const p = game.player;
+  if (!sobreOPonto(game, game.bancada)) {
+    logMsg(game, 'Não há bancada aqui.', 'aviso');
+    return false;
+  }
+  /* Normaliza mesmo já vindo tipado, pela mesma razão de `ehMaterial` em
+   * `vender`: rede para chamador não tipado (JSON de save, console, ferramenta
+   * headless). Receita desconhecida NÃO degrada para nenhuma outra — chutar
+   * gastaria material do jogador por causa de um nome errado. */
+  const key = normalizeReceita(receitaBruta);
+  const receita = key ? RECEITAS[key] : null;
+  if (!receita) {
+    logMsg(game, 'A bancada não conhece essa receita.', 'aviso');
+    return false;
+  }
+
+  /* O teto vem ANTES do material: recusar por limite depois de o jogador ler
+   * "faltam cimitarras" mandaria a mensagem errada — e o material continuaria
+   * na bolsa de qualquer jeito, já que recusa não consome nada. */
+  if (receita.key === 'refino' && p.armaNivel >= ARMA_NIVEL_MAX) {
+    logMsg(game, 'Sua arma já está no refino máximo (' + ARMA_NIVEL_MAX + ').', 'aviso');
+    return false;
+  }
+
+  const faltas = faltasDaReceita(p.bag, receita.custo);
+  if (faltas.length > 0) {
+    const texto: string[] = [];
+    for (let i = 0; i < faltas.length; i++) {
+      texto.push(quantiaDeItem(ITENS[faltas[i].item], faltas[i].falta));
+    }
+    /* Concordância: o verbo acompanha o SUJEITO, que é a quantia que falta —
+     * 'Falta uma cimitarra' × 'Faltam 2 cimitarras'. Contar as linhas da falta
+     * (e não as unidades) daria 'Falta 2 cimitarras', que é erro de português
+     * em texto que o jogador lê toda hora. */
+    const plural = faltas.length > 1 || faltas[0].falta > 1;
+    logMsg(game, receita.nome + ' pede ' + custoEmTexto(receita.custo) +
+      '. Falta' + (plural ? 'm' : '') + ' ' + listaEmTexto(texto) + '.', 'aviso');
+    return false;
+  }
+
+  /* Consumo na ordem de `ITEM_KINDS`, a mesma de todo o resto. */
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const n = receita.custo[kind] || 0;
+    if (n > 0) tirarDaBolsa(p, kind, n);
+  }
+  aplicarReceita(game, receita);
   return true;
 }
 
@@ -688,6 +963,18 @@ export function applyCommand(g: Game, cmd: Command): boolean {
       break;
     case 'descend':
       consumiu = tentarDescer(g);
+      break;
+    /* Fase 2 — economia. Cada uma valida sozinha e só devolve `true` quando a
+     * troca aconteceu; a recusa já escreveu a linha de registro e não custa
+     * turno (ver o bloco "Economia e oficina"). */
+    case 'vender':
+      consumiu = vender(g, cmd.item, cmd.quantidade);
+      break;
+    case 'comprar':
+      consumiu = comprar(g, cmd.item, cmd.quantidade);
+      break;
+    case 'criar':
+      consumiu = criar(g, cmd.receita);
       break;
     default:
       return false;
@@ -849,11 +1136,15 @@ export function descend(g: Game): void {
   g.map = map;
   g.enemies = pop.enemies;
   g.items = pop.items;
+  // Andar novo, paradas novas: o mercador e a bancada são do ANDAR. A BOLSA, as
+  // MOEDAS e o REFINO da arma não — são do jogador e descem com ele (nada aqui
+  // toca em `p.bag`, `p.moedas` ou `p.armaNivel`).
+  g.mercador = pop.mercador;
+  g.bancada = pop.bancada;
   // Andar novo, numeração de item nova: `populate` voltou a contar do 1.
   g.proxItemId = proximoIdDeItem(pop.items);
   g.rngCombat = makeRng(hash32(g.seedStr + '#combat' + depth));
-  // Sorte de despojo é por ANDAR, no mesmo padrão do combate. A BOLSA, não:
-  // ela é do jogador e atravessa os níveis (nada aqui toca em `p.bag`).
+  // Sorte de despojo é por ANDAR, no mesmo padrão do combate.
   g.rngLoot = makeRng(hash32(g.seedStr + '#loot' + depth));
   g.explored = new Uint8Array(map.w * map.h);
   g.visible = new Set<number>();
@@ -892,28 +1183,47 @@ function checksumTiles(tiles: Uint8Array): string {
 }
 
 /**
+ * Um ponto de parada no snapshot: `'x,y'`, ou `'-'` quando o andar não tem.
+ * O traço é um símbolo, não um número: `'0,0'` seria uma coordenada legítima
+ * (canto do mapa) e confundiria "não existe" com "existe na origem".
+ */
+function pontoEmTexto(p: Point | null): string {
+  return p ? p.x + ',' + p.y : '-';
+}
+
+/**
  * Resumo textual determinístico do estado. O golden test compara string com
  * string: o formato tem de sair estável byte a byte.
  *
- * FORMATO v2 (a fase 1 dos despojos):
+ * FORMATO v3 (a fase 2 — economia e oficina):
  *
- *   v2|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50
+ *   v3|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
  *     |E[1:linker:9:14:20|2:chaser:12:18:9]
  *     |I[3:potion:11:7|7:orelhaGoblin:18:9|8:espadaGoblin:18:9]
  *     |B[gosma2|orelhaGoblin1]
- *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364|map=1f3ac2b9
+ *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364
+ *     |merc=24,9|banc=8,31|map=1f3ac2b9
  *
- * O que mudou do v1, e por quê:
- *  · `I[...]` ganhou o `kind` entre o id e as coordenadas (`id:kind:x:y`):
- *    sem ele o oracle não distingue uma orelha de uma clava caída no mesmo
- *    tile, que é exatamente o que esta fase introduziu;
- *  · `B[...]` é a BOLSA, na ordem fixa de `ITEM_KINDS` (nunca `Object.keys`),
- *    só com os materiais de contagem positiva — bolsa vazia sai como `B[]`;
- *  · `rngL=` é o estado de `rngLoot`. Ele entra porque duas partidas com o
- *    mesmo chão e a mesma bolsa podem ter streams de loot em posições
- *    diferentes, e isso é divergência de estado que o oracle tem de pegar.
+ * O que mudou do v2, e por quê:
+ *  · o bloco do jogador ganhou `,mo<moedas>` e `,arm<armaNivel>` NO FIM, para
+ *    que a leitura da esquerda continue idêntica à do v2 — quem lê um snapshot
+ *    a olho encontra hp, atk e nível no mesmo lugar de sempre;
+ *  · `merc=` e `banc=` são os dois pontos de parada, no formato `x,y`, ou `-`
+ *    quando o andar não tem aquele ponto. Entram porque são estado de jogo que
+ *    o mapa NÃO carrega: o checksum de tiles em `map=` é cego a eles (é
+ *    justamente por isso que os pontos moram no `Game` e não em `Tile`), e sem
+ *    esta linha duas partidas com mercadores em lugares diferentes sairiam
+ *    idênticas para o oracle;
+ *  · a posição escolhida foi ANTES de `map=`: o checksum de tiles fecha o
+ *    snapshot desde o v1 e é onde o olho vai procurar "que andar é este".
  *
- * A etiqueta subiu de `v1` para `v2` de propósito: o golden gravado com o
+ * O que veio do v2 e continua valendo (herança dos despojos): `I[...]` traz
+ * `id:kind:x:y` — sem o `kind` o oracle não distingue uma orelha de uma clava
+ * caídas no mesmo tile; `B[...]` é a bolsa na ordem fixa de `ITEM_KINDS`, só
+ * com contagem positiva (bolsa vazia sai `B[]`); e `rngL=` é o estado do
+ * stream de despojos, que é divergência de estado como qualquer outra.
+ *
+ * A etiqueta subiu de `v2` para `v3` de propósito: o golden gravado com o
  * formato antigo DEVE reprovar, e reprovar dizendo qual é o problema (formato
  * novo) em vez de fingir divergência de simulação.
  */
@@ -921,13 +1231,15 @@ export function snapshot(game: Game): string {
   if (!game) return '';
   const p = game.player;
   const partes: string[] = [];
-  partes.push('v2');
+  partes.push('v3');
   partes.push('seed=' + game.seedStr);
   partes.push('d=' + game.depth);
   partes.push('t=' + game.turn);
   partes.push('over=' + (game.over ? 1 : 0));
   partes.push('p=' + p.x + ',' + p.y + ',' + p.hp + '/' + p.maxHp +
-    ',atk' + p.atk + ',poc' + p.potions + ',lv' + p.level + ':' + p.xp);
+    ',atk' + p.atk + ',poc' + p.potions + ',lv' + p.level + ':' + p.xp +
+    ',mo' + (isNum(p.moedas) ? p.moedas : 0) +
+    ',arm' + (isNum(p.armaNivel) ? p.armaNivel : 0));
 
   const inimigos = game.enemies.slice().sort((a, b) => a.id - b.id);
   let buf: string[] = [];
@@ -963,6 +1275,8 @@ export function snapshot(game: Game): string {
     ',' + s.itemsUsed + ',' + s.deepest + ',' + s.explorePct);
   partes.push('rng=' + (isNum(game.rngCombat.s) ? (game.rngCombat.s >>> 0) : 0));
   partes.push('rngL=' + (game.rngLoot && isNum(game.rngLoot.s) ? (game.rngLoot.s >>> 0) : 0));
+  partes.push('merc=' + pontoEmTexto(game.mercador));
+  partes.push('banc=' + pontoEmTexto(game.bancada));
   partes.push('map=' + checksumTiles(game.map.tiles));
   return partes.join('|');
 }
@@ -1092,6 +1406,26 @@ function reconstruirBolsa(bruto: unknown): Player['bag'] {
 }
 
 /**
+ * Reconstrói um ponto de parada do save.
+ *
+ * Devolve `null` para qualquer coisa que não seja um par de inteiros sobre tile
+ * CAMINHÁVEL do mapa recém-regerado. A validação importa porque o mapa não vem
+ * do save: um save de outra versão do gerador (ou editado à mão) traria um
+ * ponto dentro de uma parede, e um mercador dentro da parede é um mercador
+ * inalcançável — pior do que mercador nenhum, porque some sem dizer por quê.
+ *
+ * Quem chama decide o que fazer com o `null` (ver `restore`).
+ */
+function reconstruirPonto(bruto: unknown, map: GameMap): Point | null {
+  const o = objetoDe(bruto);
+  if (!o) return null;
+  const x = intOr(o.x, -1);
+  const y = intOr(o.y, -1);
+  if (!isWalkable(map, x, y)) return null;
+  return { x: x, y: y };
+}
+
+/**
  * Reconstrói um estado a partir do objeto lido do armazenamento.
  * O mapa NÃO vem do save: é regerado por seed+depth (determinismo garante que é
  * o mesmo mapa). Run morta não retoma — morte é permanente.
@@ -1150,6 +1484,12 @@ export function restore(dados: unknown): Game | null {
   p.xp = Math.max(0, intOr(sp.xp, 0));
   // A bolsa atravessa a retomada como atravessa a descida: é do jogador.
   p.bag = reconstruirBolsa(sp.bag);
+  // Moedas e refino, idem. Save de antes da fase 2 não os tem: zero é a leitura
+  // certa de um save legado (não havia mercador, logo não havia moeda) e é
+  // também o piso — negativo aqui seria dívida, que o jogo não modela.
+  p.moedas = Math.max(0, intOr(sp.moedas, 0));
+  // O teto vale na leitura também: um save adulterado não compra refino infinito.
+  p.armaNivel = clampInt(sp.armaNivel, 0, ARMA_NIVEL_MAX, 0);
   // Save gravado antes desta fase não tem `facing`: `normalizeFacing` devolve o
   // padrão (sul) em vez de recusar o save. Campo cosmético não invalida run.
   p.facing = normalizeFacing(sp.facing);
@@ -1195,6 +1535,18 @@ export function restore(dados: unknown): Game | null {
    * o campo. Tomar o máximo dos dois é o que garante que um contador mentiroso
    * (save editado, truncado, de outra versão) não produza id repetido no chão. */
   game.proxItemId = Math.max(intOr(obj.proxItemId, 0), proximoIdDeItem(game.items));
+
+  /* Pontos de parada. O save é a fonte preferida; um save que não os traga (ou
+   * que os traga inválidos) fica com os que `createState` acabou de calcular
+   * para esta mesma seed+depth+nível — determinístico, portanto uma retomada
+   * honesta, nunca uma recusa de run.
+   *
+   * Note que NÃO forçamos `null` quando o save omite: `null` significaria "este
+   * andar não tem mercador", que é uma afirmação que um save antigo nunca fez. */
+  const mercadorSalvo = reconstruirPonto(obj.mercador, map);
+  if (mercadorSalvo) game.mercador = mercadorSalvo;
+  const bancadaSalva = reconstruirPonto(obj.bancada, map);
+  if (bancadaSalva) game.bancada = bancadaSalva;
 
   // Exploração
   decodificarExplored(game.explored, obj.explored);

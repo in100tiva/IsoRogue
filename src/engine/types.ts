@@ -289,10 +289,39 @@ export interface Item {
  */
 export type Bag = Partial<Record<MaterialKind, number>>;
 
+/**
+ * As receitas da OFICINA (fase 2). Chave em pt-BR e sem acento porque ela viaja
+ * na forma textual do comando (`'criar:pocao'`), que é protocolo do oracle — o
+ * nome exibido mora em `RECEITAS[key].nome`.
+ *
+ *  · `pocao`  — alquimia: gosma vira poção de cura;
+ *  · `refino` — bigorna: cimitarras viram um degrau de arma.
+ *
+ * As duas moram no MESMO ponto do mapa (a bancada). São dois ofícios, não dois
+ * móveis: separar em dois tiles dobraria a colocação determinística e a
+ * superfície de teste sem mudar uma vírgula da decisão do jogador.
+ */
+export type ReceitaKind = 'pocao' | 'refino';
+
+/**
+ * Custo de uma receita em materiais. É o MESMO formato da bolsa de propósito:
+ * é assim que `faltasDaReceita(bag, custo)` compara os dois lado a lado sem
+ * conversão nenhuma, e é o compilador (não a disciplina de quem escreve) que
+ * proíbe uma receita cobrar `'potion'`.
+ */
+export type CustoReceita = Partial<Record<MaterialKind, number>>;
+
 /** Retorno de `populate(map, depth, heroLevel)`. */
 export interface Population {
   enemies: Enemy[];
   items: Item[];
+  /**
+   * Os dois pontos de parada do andar (fase 2), ou `null` quando o mapa não
+   * ofereceu tile elegível. Saem daqui, e não de `generate`, porque dependem de
+   * onde inimigos e itens caíram — nenhum dos dois pode ficar embaixo deles.
+   */
+  mercador: Point | null;
+  bancada: Point | null;
 }
 
 /**
@@ -335,6 +364,23 @@ export interface Player {
    * compilador, não pela disciplina de quem escreve.
    */
   bag: Bag;
+  /**
+   * A bolsa de MOEDAS (fase 2). Inteiro, começa em 0 e só cresce vendendo ou
+   * cai comprando — não há moeda no chão da masmorra nesta fase.
+   *
+   * Mesmo estatuto da bolsa de materiais: é do JOGADOR, atravessa a descida
+   * (`descend` não a toca) e entra em `snapshot()` e no save.
+   */
+  moedas: number;
+  /**
+   * Degraus de REFINO já aplicados à arma (fase 2). Começa em 0, teto em
+   * `ARMA_NIVEL_MAX`, e cada degrau soma +1 permanente em `atk`.
+   *
+   * Guardamos o CONTADOR e não só o `atk` porque o teto precisa de memória: sem
+   * ele não há como distinguir um ataque alto vindo de nível de experiência de
+   * um vindo da bigorna, e o limite de cinco refinos viraria letra morta.
+   */
+  armaNivel: number;
   /**
    * Para onde o personagem OLHA: índice 0..7 em `DIRS8` (core.ts), na ordem
    * fixa daquela tabela. Começa em `DEFAULT_FACING` (2 = sul do grid).
@@ -388,6 +434,29 @@ export interface Game {
   causeKind: ArchetypeKey | '';
   map: GameMap;
   player: Player;
+  /**
+   * O MERCADOR do andar — onde `vender` e `comprar` são aceitos. `null` quando
+   * o mapa não ofereceu tile elegível (ver `populate`).
+   *
+   * DECISÃO DE MODELAGEM (fase 2): os dois pontos de parada são estado do
+   * JOGO, não um valor novo em `Tile`. Três razões, nesta ordem:
+   *   1. o mapa NÃO é serializado — ele é regerado por seed+depth no restore
+   *      (CONTRACTS.md §9); um tile novo teria de nascer da geração, e a
+   *      geração não conhece inimigos nem itens, que é justamente o que a
+   *      colocação precisa evitar;
+   *   2. `snapshot()` fecha com o checksum de `map.tiles`; mexer no conteúdo
+   *      dos tiles mudaria o checksum de todo andar e misturaria "o mapa é
+   *      outro" com "o mercador está em outro lugar" numa única evidência;
+   *   3. render, FOV, Dijkstra e caminhabilidade leem `Tile` num switch cada:
+   *      um valor novo obrigaria todos a decidir o que fazer com ele, quando o
+   *      ponto de parada é chão comum com uma pessoa em cima.
+   *
+   * O preço é que o ponto viaja no save — e é o que fazemos, com validação e
+   * degradação tolerante (ver `SaveData`).
+   */
+  mercador: Point | null;
+  /** A BANCADA do andar (alquimia + refino no mesmo ponto). Ver `mercador`. */
+  bancada: Point | null;
   enemies: Enemy[];
   items: Item[];
   /**
@@ -449,12 +518,29 @@ export interface Game {
  * (docs/ARQUITETURA-REACT.md §3): a string `'move:1,-1'` virou união
  * discriminada. `parseCommand`/`formatCommand` em core.ts fazem a ponte com as
  * sequências gravadas no golden.
+ *
+ * Os três comandos de ECONOMIA (fase 2) nasceram já com forma textual, pela
+ * mesma razão: o protocolo do oracle é texto.
+ *   · `{ kind: 'vender', item: 'gosma', quantidade: 3 }`  ⇄ `'vender:gosma,3'`
+ *   · `{ kind: 'comprar', item: 'potion', quantidade: 1 }` ⇄ `'comprar:potion,1'`
+ *   · `{ kind: 'criar', receita: 'pocao' }`                ⇄ `'criar:pocao'`
+ *
+ * `quantidade` é sempre um NÚMERO: não existe `'vender:gosma,tudo'`. Quem
+ * traduz "vender tudo" para o número é a interface, que é quem sabe o que está
+ * na bolsa na hora do clique — o engine não adivinha intenção.
+ *
+ * `comprar` só aceita `'potion'` hoje, e o tipo diz isso em vez de aceitar
+ * `ItemKind` e recusar em runtime: material é o que o jogador VENDE ao
+ * mercador, não o que ele compra.
  */
 export type Command =
   | { kind: 'move'; dx: number; dy: number }
   | { kind: 'wait' }
   | { kind: 'use' }
-  | { kind: 'descend' };
+  | { kind: 'descend' }
+  | { kind: 'vender'; item: MaterialKind; quantidade: number }
+  | { kind: 'comprar'; item: 'potion'; quantidade: number }
+  | { kind: 'criar'; receita: ReceitaKind };
 
 /* ------------------------------------------------------------------ *
  * 8. Persistência (save.ts)
@@ -508,6 +594,17 @@ export interface SaveData {
    * `restore` recalcula por `max(id) + 1` em vez de recusar a run.
    */
   proxItemId: number;
+  /**
+   * Os dois pontos de parada do andar (fase 2). Vão para o save porque não
+   * saem da geração do mapa: `populate` os escolhe DEPOIS de saber onde caíram
+   * inimigos e itens (ver `Game.mercador`).
+   *
+   * Ausentes num save antigo, `restore` fica com os pontos que `createState`
+   * acabou de calcular para a mesma seed+depth — determinístico, portanto uma
+   * retomada honesta, nunca uma recusa de run.
+   */
+  mercador: Point | null;
+  bancada: Point | null;
   /** Já decodificado por `read()`; base64 na forma gravada. */
   explored: Uint8Array | null;
   exploredB64?: string;

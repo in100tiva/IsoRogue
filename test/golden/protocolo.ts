@@ -437,7 +437,10 @@ export function extrairJogador(p: Player): JogadorOracle {
   return {
     x: p.x, y: p.y, hp: p.hp, maxHp: p.maxHp,
     atk: p.atk, potions: p.potions, level: p.level, xp: p.xp,
-    bolsa: extrairBolsa(p.bag)
+    bolsa: extrairBolsa(p.bag),
+    // Economia (fase 2): moedas e nível da arma são estado LÓGICO — mudam com
+    // comando do jogador e mudam o dano. O oracle os captura como captura hp.
+    moedas: p.moedas, armaNivel: p.armaNivel
   };
 }
 

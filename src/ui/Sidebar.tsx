@@ -11,6 +11,13 @@
  * sobre o andar. Acrescentar um bloco à barra é mudança de contrato de UI, e
  * está declarada aqui e no teste que fixa a ordem (test/ui.test.tsx).
  *
+ * A TROCA (fase 2 da economia) é o segundo, e é CONDICIONAL: `TradePanel`
+ * devolve `null` a menos que o jogador esteja sobre o mercador ou sobre a
+ * bancada. Ele entra logo DEPOIS da bolsa por leitura: quem chega ao balcão lê
+ * de cima para baixo "isto é o que eu carrego / isto é o que posso fazer com
+ * ele". Como o bloco não existe na maior parte do tempo, a ordem fixada pelo
+ * teste é a de sempre — e há um caso próprio para a ordem COM o painel aberto.
+ *
  * A única peça de estado desta casca é `forcarAtualizacao`: o painel de semente
  * escreve no registro (mesmas mensagens do vanilla, `registrarCopia` de
  * 70-game.js) sem passar por um comando de jogo, e o `store` — por contrato do
@@ -28,6 +35,7 @@ import { HelpPanel } from './panels/HelpPanel';
 import { LogPanel } from './panels/LogPanel';
 import { MapStats } from './panels/MapStats';
 import { SeedPanel } from './panels/SeedPanel';
+import { TradePanel } from './panels/TradePanel';
 import { Vitals } from './panels/Vitals';
 
 export function Sidebar() {
@@ -38,6 +46,7 @@ export function Sidebar() {
       <Header />
       <Vitals />
       <BagPanel />
+      <TradePanel />
       <SeedPanel aoRegistrar={forcarAtualizacao} />
       <MapStats />
       <LogPanel />
