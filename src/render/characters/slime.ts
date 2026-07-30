@@ -1009,3 +1009,163 @@ export const POSE_PARADA_SLIME: Pose = {
     rx: grausParaRad(A.antenaRepousoRx)
   }
 };
+
+/* ------------------------------------------------------------------ *
+ * 8. Morte do Slime (fase das cinemáticas de abate — docs/BESTIARIO.md §14)
+ *
+ * A técnica é a da morte do Guerreiro (§8 de `./warrior`) com um desvio
+ * necessário: as poses de lá são REPUSOS de forja, e um repouso só ROTACIONA
+ * nós — mas o slime não MORRE tombando, ele DERRETE, e derreter é deformar
+ * geometria (achatar e alargar as camadas do domo). Então aqui a variante não
+ * é de pose, é de MODELO: três rigs derivados de `criarModeloSlime()` pelo
+ * mesmo molde de `criarModeloGuerreiroSemEspada` ("árvore nova a cada
+ * chamada; quem precisa de variante monta a sua"), cada um forjado com
+ * repouso NEUTRO e lido na coluna ('parado', 0). Nada aqui toca o engine
+ * (R54): quem detecta o abate é o IsoRenderer, por observação.
+ *
+ * O RASTRO do slime é a GELEIA: o estágio 3 é uma poça achatada que persiste
+ * no tile onde ele morreu, com a bolinha da antena afogada dentro — a âmbar
+ * EMISSIVA continua acesa no escuro (§1.1), então o jogador encontra o ponto
+ * luminoso na poça antes de ler a poça. É o contraste com o corpo do Goblin
+ * e com a marreta do Ogro.
+ * ------------------------------------------------------------------ */
+
+/**
+ * O corpo derretido: as mesmas camadas de `criarCorpo` achatadas por `f` (em
+ * altura E em z — a pilha é contígua a partir da base afundada, então escalar
+ * `cz` e `sz` pelo mesmo fator a mantém empilhada) e alargadas por `larg`.
+ *
+ * O ROSTO morre por afogamento, em três atos: `inteiro` (estágio 1 — olhos,
+ * recessos e boca no lugar, descidos junto com a superfície), `afogando`
+ * (estágio 2 — sobram só as barras âmbar, encolhidas e sem o recesso escuro;
+ * boca e especular já submergiram) e `nenhum` (estágio 3 — a superfície não
+ * tem mais traço nenhum: o rosto virou geleia).
+ */
+function criarCorpoDerretido(f: number, larg: number, rosto: 'inteiro' | 'afogando' | 'nenhum'): No {
+  const caixas: Caixa[] = [
+    //  o perfil de `criarCorpo`, camada a camada, achatado e alargado
+    ...camada('gosmaSombra', P.largura * larg, 9.6 * larg, 1.8 * f, (0.9 - P.afundar) * f, 1.6 * larg),
+    ...camada('gosmaMeio', 11.0 * larg, 9.2 * larg, 1.3 * f, 1.45 * f, 1.6 * larg),
+    ...camada('gosmaBase', 10.2 * larg, 8.5 * larg, 1.4 * f, 2.8 * f, 1.5 * larg),
+    ...camada('gosmaBase', 8.6 * larg, 7.1 * larg, 1.3 * f, 4.15 * f, 1.3 * larg, P.costuraAlto),
+    ...camada('gosmaBase', 6.2 * larg, 5.1 * larg, 1.0 * f, 5.3 * f, 1.0 * larg),
+    ...camada('gosmaLuz', 3.8 * larg, 3.1 * larg, 0.7 * f, 6.15 * f, 0.7 * larg),
+    detalhe('gosmaLuz', [1.9 * larg, 1.6 * larg, 0.5 * f], [0, 0, 6.75 * f])
+  ];
+  if (rosto === 'inteiro') {
+    caixas.push(
+      detalhe('vazio', [0.9, 0.8, 0.7], [0, P.yRosto, 3.6 * f]),
+      detalhe('vazio', [3.4, 0.6, 3.3], [-P.xOlho, P.yRosto - 0.25, 4.5 * f]),
+      detalhe('luzAmbar', [1.05, 0.7, 2.6], [-P.xOlho, P.yRosto, 4.5 * f]),
+      detalhe('luzAmbar', [2.8, 0.7, 1.05], [-P.xOlho, P.yRosto, 4.5 * f]),
+      detalhe('vazio', [3.4, 0.6, 3.3], [P.xOlho, P.yRosto - 0.25, 4.5 * f]),
+      detalhe('luzAmbar', [1.05, 0.7, 2.6], [P.xOlho, P.yRosto, 4.5 * f]),
+      detalhe('luzAmbar', [2.8, 0.7, 1.05], [P.xOlho, P.yRosto, 4.5 * f]),
+      detalhe('brilho', [2.6, 2.0, 0.45], [1.2, 1.2, 6.32 * f])
+    );
+  } else if (rosto === 'afogando') {
+    //  Só o âmbar, encolhido e meio submerso — os olhos BOIANDO na geleia.
+    caixas.push(
+      detalhe('luzAmbar', [0.9, 0.7, 1.6], [-P.xOlho, P.yRosto - 0.4, 4.5 * f]),
+      detalhe('luzAmbar', [1.8, 0.7, 0.9], [-P.xOlho, P.yRosto - 0.4, 4.5 * f]),
+      detalhe('luzAmbar', [0.9, 0.7, 1.6], [P.xOlho, P.yRosto - 0.4, 4.5 * f]),
+      detalhe('luzAmbar', [1.8, 0.7, 0.9], [P.xOlho, P.yRosto - 0.4, 4.5 * f])
+    );
+  }
+  return { nome: NOS_SLIME.corpo, pivo: [0, 0, 0], caixas };
+}
+
+/**
+ * A antena derretida. No estágio 1 o arco DESABA pela metade (`f` escala o z
+ * de cada trecho e do próprio pivô); no estágio 2 ela está deitada sobre a
+ * geleia (`f` mínimo: a haste toda achatada, esparramada para +X). A bolinha
+ * acompanha — ela afoga por ÚLTIMO, é o adeus do bicho.
+ */
+function criarAntenaDerretida(f: number): No {
+  const esparrame = 1 + (1 - f) * 0.8;
+  return {
+    nome: NOS_SLIME.antena,
+    pivo: [0, 0, 0],
+    caixas: [
+      detalhe('antena', [1.35, 1.35, 2.0 * f], [0, 0, 0.8 * f]),
+      detalhe('gosmaFundo', [1.25, 1.25, 1.9 * f], [0.35 * esparrame, 0.25, 2.75 * f]),
+      detalhe('gosmaFundo', [1.2, 1.2, 1.4 * f], [1.15 * esparrame, 0.6, 4.35 * f]),
+      detalhe('gosmaFundo', [1.15, 1.15, 1.1 * f], [2.3 * esparrame, 0.95, 5.05 * f]),
+      detalhe('gosmaFundo', [1.1, 1.1, 1.2 * f], [3.5 * esparrame, 1.15, 4.75 * f]),
+      detalhe('luzAmbar', [1.6, 1.6, 1.6 * f], [4.5 * esparrame, 1.8, 3.95 * f]),
+      detalhe('luzAmbar', [2.2, 1.2, 1.2 * f], [4.5 * esparrame, 1.8, 3.95 * f]),
+      detalhe('luzAmbar', [1.2, 1.2, 2.2 * f], [4.5 * esparrame, 1.8, 3.95 * f])
+    ]
+  };
+}
+
+/**
+ * Monta o rig do estágio de derretimento. A hierarquia é a de
+ * `criarModeloSlime()` (adaptadores `torso`/`bracoDir` inclusos, para o rig se
+ * comportar igual sob o mesmo forge) — menos no estágio 3, em que o ramo da
+ * antena não existe mais e a bolinha afogada vira caixa do corpo.
+ *
+ * Estágios: 1 = achatou (62% da altura, +15% de largura, rosto inteiro,
+ * antena caída); 2 = desabou (34%, +32%, olhos boiando, antena deitada);
+ * 3 = POÇA (16%, +50%, sem rosto nem antena — só a geleia e a bolinha
+ * afogada). O estágio 3 é o rastro persistente do abate.
+ */
+export function criarModeloSlimeDerretido(estagio: 1 | 2 | 3): No {
+  if (estagio === 3) {
+    const corpo = criarCorpoDerretido(0.16, 1.5, 'nenhum');
+    return {
+      nome: NOS_SLIME.raiz,
+      pivo: [0, 0, 0],
+      caixas: [],
+      filhos: [
+        {
+          nome: NOS_SLIME.corpoAnimado,
+          pivo: [0, 0, 0],
+          caixas: [],
+          filhos: [
+            {
+              ...corpo,
+              caixas: [
+                ...corpo.caixas,
+                //  a bolinha AFOGADA na geleia (S5 — ela afoga por último,
+                //  e é ela que fica brilhando na poça como rastro)
+                detalhe('luzAmbar', [1.3, 1.3, 0.9], [1.6, 1.2, 0.85]),
+                detalhe('luzAmbar', [1.8, 0.9, 0.7], [1.6, 1.2, 0.85]),
+                //  o brilho molhado não morre: uma película de especular na poça
+                detalhe('brilho', [2.2, 1.7, 0.3], [-1.4, 0.8, 1.15])
+              ]
+            }
+          ]
+        }
+      ]
+    };
+  }
+  const f = estagio === 1 ? 0.62 : 0.34;
+  const larg = estagio === 1 ? 1.15 : 1.32;
+  return {
+    nome: NOS_SLIME.raiz,
+    pivo: [0, 0, 0],
+    caixas: [],
+    filhos: [
+      {
+        nome: NOS_SLIME.corpoAnimado,
+        pivo: [0, 0, 0],
+        caixas: [],
+        filhos: [
+          criarCorpoDerretido(f, larg, estagio === 1 ? 'inteiro' : 'afogando'),
+          {
+            nome: NOS_SLIME.antenaAnimada,
+            pivo: [P.xAntena, 0, P.zAntena * f],
+            caixas: [],
+            filhos: [criarAntenaDerretida(estagio === 1 ? 0.55 : 0.15)]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+/** Os três estágios, no padrão de `MODELO_SLIME`: constantes de módulo, não mutar. */
+export const MODELO_SLIME_DERRETIDO_1: No = criarModeloSlimeDerretido(1);
+export const MODELO_SLIME_DERRETIDO_2: No = criarModeloSlimeDerretido(2);
+export const MODELO_SLIME_DERRETIDO_3: No = criarModeloSlimeDerretido(3);

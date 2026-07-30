@@ -1215,3 +1215,114 @@ export const POSE_PARADA_OGRO: Pose = {
     ry: grausParaRad(A.marretaRy)
   }
 };
+
+/* ------------------------------------------------------------------ *
+ * 8. Morte do Ogro (fase das cinemáticas de abate — docs/BESTIARIO.md §14)
+ *
+ * A MESMA técnica da morte do Guerreiro (§8 de `./warrior`) e do Goblin: as
+ * poses abaixo NÃO passam pela animação de §12.4 — são REPUSOS de forja
+ * congelados na coluna ('parado', 0) de atlases secundários, lidos na direção
+ * do facing. A queda da marreta é rotação de TELA no renderer. Nada aqui toca
+ * o engine (R54): quem detecta o abate é o IsoRenderer, por observação.
+ *
+ * O RASTRO do ogro NÃO é o corpo — é a MARRETA pousada sobre a poça de
+ * sangue. O corpo cai (`POSE_MORTE_OGRO_CAIDO`), mas some da tela em seguida
+ * (esmaece: a masmorra fica com a carcaça, não com a lembrança). É o
+ * contraste deliberado com o Goblin, cuja marca é o corpo, e com o Slime,
+ * cuja marca é a geleia — lendo o chão da masmorra, o jogador sabe QUEM
+ * morreu ali sem ter visto o abate.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Variante SEM a marreta, para a sequência de morte: `criarModeloOgro()`
+ * (árvore NOVA — `MODELO_OGRO` nunca é tocado) com o filho `marreta` de
+ * `bracoEsq` podado pelo nome. Mesmo molde de
+ * `criarModeloGuerreiroSemEspada`: o corpo é o mesmo, e duas declarações do
+ * mesmo corpo divergem no primeiro ajuste visual.
+ */
+export function criarModeloOgroSemMarreta(): No {
+  const modelo = criarModeloOgro();
+  const filhos = modelo.filhos ?? [];
+  return {
+    ...modelo,
+    filhos: filhos.map((no) =>
+      no.nome === NOS_OGRO.bracoEsq
+        ? {
+          ...no,
+          filhos: (no.filhos ?? []).filter((f) => f.nome !== NOS_OGRO.marreta)
+        }
+        : no
+    )
+  };
+}
+
+/**
+ * A marreta SOZINHA, como mini-rig: um nó raiz com as caixas de
+ * `criarMarreta()` ERGUIDAS para ficar em pé a partir da origem — o coto do
+ * cabo em z ≈ 0 (as caixas originais nascem com o centro do cabo em z 0,2 e o
+ * coto a −3,5: transladadas +3,5 ficam com a base no plano do chão, e a
+ * âncora do atlas é o coto, por onde a sequência de morte a faz girar).
+ * Forjada com repouso neutro e lida na coluna ('parado', 0): a rotação da
+ * queda é de TELA (`ctx.rotate` no renderer), não de pose.
+ */
+export function criarModeloMarreta(): No {
+  return {
+    nome: NOS_OGRO.raiz,
+    pivo: [0, 0, 0],
+    caixas: criarMarreta().caixas.map((c) => ({ ...c, cz: c.cz + 3.5 }))
+  };
+}
+
+/** Mesmo padrão de `MODELO_OGRO`: constantes de módulo, não mutar. */
+export const MODELO_OGRO_SEM_MARRETA: No = criarModeloOgroSemMarreta();
+export const MODELO_MARRETA: No = criarModeloMarreta();
+
+/**
+ * POSE_MORTE_OGRO_AGACHADO — o cambaleio do brutamontes (fase intermediária,
+ * ~0,45–1,0 s).
+ *
+ * AUTOCONTIDA: forjada como repouso, ela SUBSTITUI `POSE_PARADA_OGRO` —
+ * então a inclinação de postura (O8) precisa ser redeclarada aqui dentro,
+ * somada ao desabamento: o torso vai de −14° para −30° (em `matPivoRotacao`,
+ * para um nó que se estende em +Z é `rx` NEGATIVO que leva o topo para a
+ * frente — ver `ANGULOS_OGRO.torsoInclinacao`). As pernas cedem como as do
+ * Guerreiro (`pernaDir` rx −70°, o joelho ao chão; `pernaEsq` rx +20°, o pé
+ * plantado), a cabeça pende mais 22° e os braços perdem a abertura de
+ * repouso e caem moles. Ele é PESADO: o cambaleio lê como um edifício
+ * cedendo, não como um tropeço. Sem `marreta`: esta pose é forjada sobre
+ * `MODELO_OGRO_SEM_MARRETA`.
+ */
+export const POSE_MORTE_OGRO_AGACHADO: Pose = {
+  [NOS_OGRO.pernaDir]: { rx: grausParaRad(-70) },
+  [NOS_OGRO.pernaEsq]: { rx: grausParaRad(20) },
+  [NOS_OGRO.torso]: { rx: grausParaRad(-30) },
+  [NOS_OGRO.cabeca]: { rx: grausParaRad(-22) },
+  [NOS_OGRO.bracoEsq]: { rx: grausParaRad(8), ry: grausParaRad(14) },
+  [NOS_OGRO.bracoDir]: { rx: grausParaRad(8), ry: grausParaRad(-28) }
+};
+
+/**
+ * POSE_MORTE_OGRO_CAIDO — deitado no chão (fase breve: o corpo esmaece logo
+ * depois — o rastro que fica é a MARRETA, não ele).
+ *
+ * A via do Guerreiro (`POSE_CAIDA`): `raiz` em rx +85° tomba o corpo INTEIRO
+ * de COSTAS (em `matPivoRotacao`, `rx` positivo leva +Z para −Y), de face
+ * para CIMA, estendendo-se a partir da âncora (os pés ficam na origem).
+ * Torso −8° e cabeça −12° erguem peito e rosto para fora do plano do chão,
+ * rz +15° na cabeça tomba a máscara de lado. Braços abertos (ry ±45°, com o
+ * sinal trocado por lado porque este rig NÃO é espelhado — `bracoEsq` mora
+ * em −X e abre com `ry` positivo, `bracoDir` em +X abre com `ry` negativo),
+ * pernas levemente dobradas e assimétricas. A corcunda (O2) fica POR BAIXO
+ * do corpo: o morto de bruços lería como qualquer monte — de costas e de
+ * face para cima, a máscara com chifres e o peito largo continuam lendo
+ * "ogro" até o esmaecimento.
+ */
+export const POSE_MORTE_OGRO_CAIDO: Pose = {
+  [NOS_OGRO.raiz]: { rx: grausParaRad(85) },
+  [NOS_OGRO.torso]: { rx: grausParaRad(-8) },
+  [NOS_OGRO.cabeca]: { rx: grausParaRad(-12), rz: grausParaRad(15) },
+  [NOS_OGRO.bracoEsq]: { rx: grausParaRad(10), ry: grausParaRad(45) },
+  [NOS_OGRO.bracoDir]: { rx: grausParaRad(10), ry: grausParaRad(-45) },
+  [NOS_OGRO.pernaDir]: { rx: grausParaRad(15) },
+  [NOS_OGRO.pernaEsq]: { rx: grausParaRad(-12) }
+};

@@ -1,6 +1,6 @@
 ---
 tipo: indice
-atualizado: 2026-07-29
+atualizado: 2026-07-30
 tags: [indice, engine, jogo, moc]
 ---
 
@@ -36,6 +36,10 @@ por número, não por interface: um limiar alterado aqui reprova o golden lá.
 - [[turnos-e-progressao]] — o que consome turno (e o que só escreve no registro sem
   consumir), a ordem rígida do `endTurn`, morte permanente, descida de nível e o formato do
   `snapshot()`.
+- [[niveis-xp-e-spawn]] — os níveis dos monstros (Slime 1, Goblin 2, Ogro 3), o XP em
+  escala (100 × 2^Δ, cortado a zero), os 100 XP planos por nível com excedente carregado e
+  a mistura de spawn dirigida pelo nível do herói. **Mexeu? Regenera o oracle** — o rito
+  está documentado aqui.
 
 ## Transversais
 

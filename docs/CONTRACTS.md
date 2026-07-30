@@ -239,6 +239,13 @@ R.Ent.ARCH = {
 > **Emenda 2026-07-29:** `sentinel` passa a `nome:'Brutamontes', range:1, ideal:1, fem:false`
 > e peso de spawn 1 (`chaser` 10, `linker` 100). hp/atk/xp inalterados. O texto acima é o
 > contrato original, preservado como registro.
+>
+> **Emenda 2026-07-30 (balanceamento, §15 do BESTIARIO):** os campos `xp` e `peso` dos
+> arquétipos foram abolidos e substituídos por `nivel` — Slime (`linker`) 1, Goblin
+> (`chaser`) 2, Ogro (`sentinel`) 3. O XP do abate deixou de ser um valor por arquétipo e
+> virou escala contra o nível do herói (ver §15), e os pesos de spawn saíram do arquétipo
+> para a tabela por nível do herói (`PESOS_SPAWN`). A emenda de 2026-07-29 acima fica
+> como registro do estado anterior.
 
 Comportamento (todos usam **o mesmo `game.dmap`**):
 
@@ -277,6 +284,14 @@ pt-BR descrevendo a ação planejada (mostrada no tooltip): ex. `'avança para (
 ```js
 R.Ent.populate(map, depth) -> { enemies: [], items: [] }
 ```
+
+> **Emenda 2026-07-30 (balanceamento, §15 do BESTIARIO):** a assinatura passou a
+> `R.Ent.populate(map, depth, heroLevel)`. A **mistura** de arquétipos deixou de ser
+> peso base + reforço por profundidade e passou a ser a linha de `PESOS_SPAWN`
+> indexada pelo nível do herói (10/1/100 no herói 1 → 15/100/3 no herói 4+,
+> na ordem `chaser/sentinel/linker`). Contagem, restrições, escalonamento de
+> hp/atk por profundidade e a RNG `#pop#` continuam exatamente como descritos
+> abaixo.
 
 - RNG: `R.makeRNG(R.hash32(map.seed + '#pop#' + depth))`.
 - Total de inimigos: `Math.min(22, 4 + depth * 2)`.
@@ -447,12 +462,21 @@ Painel lateral contém, nesta ordem:
    para o fim, entradas coloridas por `cls`, no máximo `R.C.MAX_LOG`.
 6. **Ajuda**: lista compacta de teclas.
 
+> **Emenda 2026-07-30 (§16 do BESTIARIO):** o cabeçalho passa a quatro números e uma
+> barra — **Andar** (a profundidade, que o rótulo sempre chamou de "Nível"),
+> **Turno**, **Nível** (o do HERÓI, `player.level`) e **XP** (`player.xp`/100) com a
+> barra âmbar de progresso. Ids novos: `#hud-heroi-nivel`, `#hud-xp`,
+> `#hud-xp-barra`. Os ids antigos e os valores que mostram não mudaram.
+
 ### Elementos com id fixo (o `game.js` e o `ui.js` dependem destes)
 
 `#cv` (canvas), `#seed`, `#btn-gerar`, `#btn-aleatoria`, `#btn-copiar`, `#log`,
 `#hud-vida`, `#hud-vida-barra`, `#hud-nivel`, `#hud-turno`, `#hud-atk`, `#hud-pocoes`,
 `#map-conect`, `#map-salas`, `#map-inimigos`, `#map-itens`, `#map-visiveis`,
 `#tooltip`, `#debug`, `#morte`, `#morte-corpo`, `#btn-nova`.
+
+> **Emenda 2026-07-30 (§16 do BESTIARIO):** acrescentar à lista — `#hud-heroi-nivel`,
+> `#hud-xp`, `#hud-xp-barra`.
 
 ### API
 

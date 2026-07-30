@@ -1,6 +1,6 @@
 ---
 tipo: indice
-atualizado: 2026-07-29
+atualizado: 2026-07-30
 tags: [estado, handoff, roadmap, meta]
 ---
 
@@ -19,41 +19,49 @@ localStorage). Repositório: <https://github.com/in100tiva/IsoRogue>.
 | Engine (masmorra, FOV, Dijkstra, IA, turnos) | completo e determinístico |
 | Casca React + TypeScript | completa |
 | Personagem do jogador | Guerreiro, 8 direções, animado, com cinemáticas de intro (descida) e morte |
-| Bestiário | Goblin (Perseguidor), Slime (Vinculador), Ogro (Brutamontes) |
+| Bestiário | Goblin (Perseguidor), Slime (Vinculador), Ogro (Brutamontes), **cada um com cinemática de abate e rastro persistente no tile** |
+| Balanceamento | níveis de monstro (1/2/3), XP em escala (100×2^Δ), 100 XP plano por nível, spawn por nível do herói |
+| Progressão visível | texto de XP flutuante 3D nos abates; HUD com Andar × Nível do herói × XP |
 | Render | paredes do canto frontal ficam translúcidas para não esconder o herói |
-| Testes | 73, com golden test de 12 sementes |
+| Testes | 74 verdes de 77 (3 falhas pré-existentes do ambiente Windows: `find`/`npx` no spawn), com golden test de 12 sementes |
 | Cofre | esta documentação |
 
 Marcos, em ordem: nasceu em JavaScript vanilla → migrado para React 19 + TypeScript com
-golden test provando fidelidade → Guerreiro → Goblin → Slime e Ogro.
+golden test provando fidelidade → Guerreiro → Goblin → Slime e Ogro → cinemáticas →
+**balanceamento com regeneração deliberada do oracle** → XP visível.
 
 ## Comandos que importam
 
 ```bash
 npm run dev                            # Vite
-npm run check                          # fronteiras + typecheck (src e tools) + 73 testes
+npm run check                          # fronteiras + typecheck (src e tools) + testes
 npm run build                          # gera dist/index.html
-npm run preview:personagem -- elenco   # a folha dos 4 personagens (gates G9/G10)
+npm run golden                         # regenera o oracle (SÓ de propósito, com o vanilla espelhado)
+npm run preview:personagem -- elenco   # a folha dos 4 personagens + mortes + texto de XP
 ```
 
 `npm run check` verde é o gate de qualquer commit. Ver [[rodar-os-testes]].
 
 ## O próximo passo combinado
 
-**Balanceamento de níveis e dificuldade — agora a metade dos números.** A metade de
-arquétipos e distribuição já aconteceu em 2026-07-29 (ver "Resolvido" abaixo), e com ela a
-primeira **regeneração deliberada do oracle** desde a migração — o rito que se temia já tem
-fluxo documentado e não é mais desconhecido. O que falta é mexer nos números que **não**
-foram tocados: `PLAYER_BASE`, `POTION_HEAL`, hp/atk dos arquétipos e a curva por
-profundidade. Qualquer um deles regenera o oracle de novo — decisão explícita, nunca
-acidente, como da primeira vez.
+**O que cada nível dá em status** — a conversa marcada pelo dono ("depois vamos abordar o
+que cada nível vai dar em termos de status de dano e etc"). Hoje: +4 maxHp/+4 hp/+1 atk
+por nível, intocado desde o vanilla. A escala de XP e a mistura de spawn JÁ são do nível
+do herói ([[niveis-xp-e-spawn]]), então esta conversa decide a outra metada da progressão.
 
 Insumos já levantados para essa conversa:
 
 - **O jogo é agressivo demais.** Num teste de 3.000 comandos aleatórios o jogador tomou 1.144
   de dano e causou 90. Numa partida real observada, morreu no turno 28 com 45 recebidos
   contra 24 causados. As constantes ficam no topo de `src/engine/game.ts`
-  (`PLAYER_BASE 42/7/3`) e em `POTION_HEAL`.
+  (`PLAYER_BASE 42/7/3`) e em `POTION_HEAL`. Qualquer um deles regenera o oracle de novo —
+  decisão explícita, nunca acidente (o rito já foi feito duas vezes e está em
+  [[niveis-xp-e-spawn]]).
+
+**Resolvido em 2026-07-30:** as três fases do dia — cinemáticas de abate com rastro
+(corpo do goblin, marreta do ogro, geleia do slime), balanceamento por nível do herói e
+XP visível (texto flutuante + HUD). Detalhes em
+[[2026-07-30-abates-balanceamento-e-xp-visivel]].
 
 **Resolvido em 2026-07-29:** o `sentinel` deixou de ser a Sentinela atiradora (alcance 6,
 recuo tático) e virou o **Brutamontes** corpo a corpo — alcance 1, ideal 1, `aiSentinel`
@@ -83,6 +91,7 @@ input no teclado e no ponteiro, `prefers-reduced-motion` respeitado. Detalhes em
 | `combatRng` tem fallback com semente `'#combate'` divergente do canônico `'#combat' + depth` | engine | latente |
 | Não há CI: `npm run check` é manual | infra | processo |
 | `check-boundaries` cobre `engine` e `render`, mas nada impede a UI de pôr o `Game` num `useState` | infra | latente |
+| Testes T9 falham no Windows (`find`/`npx` ausentes no spawn do teste) | infra | ambiente |
 
 ## Por onde começar a ler
 

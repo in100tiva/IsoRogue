@@ -43,8 +43,9 @@ import { logMsg } from './game';
  * Arquétipos
  * ------------------------------------------------------------------ */
 
-/* `cor`/`corDetalhe`/`forma` são dicas para o render; `xp` para a progressão;
- * `peso` é o peso base de sorteio no spawn; `ideal` é a distância preferida;
+/* `cor`/`corDetalhe`/`forma` são dicas para o render; `nivel` é o nível do
+ * monstro na escala de balanceamento (§15 do BESTIARIO — dirige o XP do abate
+ * e a tabela de spawn por nível do herói); `ideal` é a distância preferida;
  * `fem` é o gênero gramatical do nome, usado para concordar artigo e particípio
  * nas mensagens do registro ('foge ferida' × 'foge ferido'). */
 export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
@@ -59,8 +60,7 @@ export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
     cor: '#d9534f',
     corDetalhe: '#f2a6a3',
     forma: 'triangulo',
-    xp: 3,
-    peso: 10,
+    nivel: 2,
     desc: 'Avança sem hesitar pelo caminho mais curto e golpeia corpo a corpo.'
   },
   sentinel: {
@@ -74,8 +74,7 @@ export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
     cor: '#4a90d9',
     corDetalhe: '#a9cbef',
     forma: 'hexagono',
-    xp: 4,
-    peso: 1,
+    nivel: 3,
     desc: 'Avança sem hesitar e esmaga corpo a corpo com a marreta.'
   },
   linker: {
@@ -89,8 +88,7 @@ export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
     cor: '#b06fd0',
     corDetalhe: '#ddb8ec',
     forma: 'duplo-losango',
-    xp: 6,
-    peso: 100,
+    nivel: 1,
     desc: 'Só parte para o ataque quando outro inimigo já está colado no jogador.'
   }
 };
@@ -509,16 +507,41 @@ function distribute(
   return placed;
 }
 
-/* Sorteio do arquétipo: pesos base 10/1/100 (a cada 10 Vinculadores, 1
- * Perseguidor; a cada 10 Perseguidores, 1 Brutamontes), com leve reforço de
- * Brutamontes/Vinculador conforme a profundidade. Determinístico (consome o
- * rng de população). */
-function pickKind(rng: Rng, depth: number): ArchetypeKey {
-  const weights = [
-    ARCHETYPES.chaser.peso,
-    ARCHETYPES.sentinel.peso + Math.floor(depth / 2),
-    ARCHETYPES.linker.peso + Math.floor(depth / 3)
-  ];
+/**
+ * §15 do BESTIARIO — a mistura de spawn, dirigida pelo NÍVEL DO HERÓI (não
+ * mais pela profundidade). Cada linha é um degrau do herói; as colunas seguem
+ * `KINDS` (chaser/sentinel/linker = Goblin/Ogro/Slime). A progressão pedida
+ * pelo dono:
+ *
+ *   herói 1: 10 goblin · 1 ogro · 100 slime — a cada 10 slimes, 1 goblin; a
+ *            cada 10 goblins, 1 ogro (a masmorra é dos slimes);
+ *   herói 2: os goblins dominam, ogros aparecem, slimes recuam;
+ *   herói 3: os ogros dominam, goblins continuam comuns, slimes raros;
+ *   herói 4+: ogros comuns, goblins em minoria, slimes raríssimos — o estado
+ *            final descrito pelo dono, estável dali em diante.
+ *
+ * O degrau 4 é também a régua dos níveis seguintes: com XP plano de 100 por
+ * nível o herói pode subir indefinidamente, e a mistura não volta a mudar.
+ */
+const PESOS_SPAWN: readonly (readonly [number, number, number])[] = [
+  [10, 1, 100],   // herói 1
+  [100, 10, 30],  // herói 2
+  [40, 100, 10],  // herói 3
+  [15, 100, 3]    // herói 4+
+];
+
+/** Os pesos da linha do herói (clamp nos dois extremos da tabela). */
+export function pesosSpawn(heroLevel: number): readonly [number, number, number] {
+  let l = Math.floor(heroLevel);
+  if (!Number.isFinite(l) || l < 1) l = 1;
+  if (l > PESOS_SPAWN.length) l = PESOS_SPAWN.length;
+  return PESOS_SPAWN[l - 1];
+}
+
+/* Sorteio do arquétipo pela linha de `PESOS_SPAWN` do nível do herói.
+ * Determinístico (consome o rng de população). */
+function pickKind(rng: Rng, heroLevel: number): ArchetypeKey {
+  const weights = pesosSpawn(heroLevel);
   let total = 0;
   let i: number;
   for (i = 0; i < weights.length; i++) total += weights[i];
@@ -573,7 +596,7 @@ export function makeItem(id: number, x: number, y: number): Item {
   };
 }
 
-export function populate(map: GameMap, depth: number): Population {
+export function populate(map: GameMap, depth: number, heroLevel: number): Population {
   const d = depth < 1 ? 1 : depth;
   const rng = makeRng(hash32(map.seed + '#pop#' + d));
   const enemies: Enemy[] = [];
@@ -597,7 +620,9 @@ export function populate(map: GameMap, depth: number): Population {
   let nextEnemyId = 1;
   distribute(map, rooms, qEnemies, nEnemies, rng, taken, start, stairs,
     function (x: number, y: number): void {
-      const kind = pickKind(rng, d);
+      // §15 — a MISTURA sai do nível do herói; a profundidade segue endurecendo
+      // contagem (acima) e hp/atk (`makeEnemy`).
+      const kind = pickKind(rng, heroLevel);
       enemies.push(makeEnemy(nextEnemyId++, kind, x, y, d));
     });
 

@@ -1,7 +1,7 @@
 ---
 tipo: nota
-atualizado: 2026-07-29
-tags: [render, bestiario, monstros, sprite, emissivo]
+atualizado: 2026-07-30
+tags: [render, bestiario, monstros, sprite, emissivo, mortes, xp]
 ---
 
 # 👺 O bestiário — três monstros, nenhum arquétipo novo
@@ -167,6 +167,64 @@ Detalhe que morde: dê à cor emissiva uma rampa própria (ou nenhuma). Se ela c
 outro material, o snap da paleta pode cobrir o pixel emissivo inteiro com um degrau vizinho — e
 aí não sobra pixel emissivo nenhum para recolar.
 
+## As mortes do bestiário (2026-07-30, `docs/BESTIARIO.md` §14)
+
+Quando o golpe do jogador mata um monstro, ele não some mais entre um quadro e outro: cada
+um dos três tem uma **sequência de morte própria** e deixa um **rastro persistente** no tile
+pelo resto do andar — quem passar depois sabe QUEM morreu ali sem ter visto o abate.
+
+**O gatilho é observação, como tudo nesta página.** `atacarInimigo` remove o inimigo de
+`game.enemies` no golpe fatal, e essa é a única via de saída da lista dentro de um mapa. O
+renderer guarda um `Vfx` por id; o abate é detectado pelo **diff entre os conjuntos de ids de
+dois quadros** (double-buffer de `Set`s — a diferença não pode custar uma alocação por frame,
+`registrarAbates` em `src/render/IsoRenderer.ts:935`). `syncRun` zera os conjuntos na troca de
+mapa, então descida e retomada de save não geram abates fantasmas. Nenhum campo em `Enemy`, em
+`snapshot()`, no save, no oracle.
+
+**A técnica é a da morte do Guerreiro, com um desvio.** Sangue e geleia são decalques de chão
+(a poça do guerreiro generalizada: elipse com ease-out + respingos de LCG semeado pelo tile,
+modulada pela luz); corpos e armas são **atlases secundários** lidos na coluna `('parado', 0)`
+com `quadroModulado()` — as emissivas atravessam acesas. A queda da arma é **rotação de tela**
+em torno do mini-rig (`MODELO_CIMITARRA`, `MODELO_MARRETA`), o mesmo truque da espada solta.
+O desvio é o Slime: repouso só **rotaciona** nós, e derreter é **deformar geometria** — os três
+estágios dele são variantes de MODELO (`criarModeloSlimeDerretido`), no molde de
+`criarModeloGuerreiroSemEspada`.
+
+| Monstro | Duração | Sequência | RASTRO |
+|---|---|---|---|
+| Goblin | 1,1 s | sangue cresce → cimitarra cai e **some** → corpo desaba (parado → agachado → caído) | **o CORPO** na poça |
+| Ogro | 1,7 s | sangue maior → marreta cai e **pousa na poça** → corpo desaba e **esmaece até sumir** | **a MARRETA** na poça |
+| Slime | 1,0 s | geleia cresce → derrete em 3 estágios (achatou → desabou → poça) | **a GELEIA** com a bolinha âmbar afogada — emissiva, acesa no escuro |
+
+Os relógios avançam por `dt`, tile visto ou não (a morte não congela quando o jogador vira o
+corredor); o desenho segue a regra de visão dos itens (só dentro do FOV), **antes** de itens,
+inimigos e jogador no passe do tile — qualquer vivo pisa POR CIMA dos rastros.
+`prefers-reduced-motion` pula direto para o rastro.
+
+## O texto de XP flutuante (2026-07-30, `docs/BESTIARIO.md` §16)
+
+O abate também solta um **"+100" dourado** que sobe do tile e esmaece — texto em **rig de
+caixas** (`src/render/characters/xpTexto.ts`), na mesma técnica dos monstros: cada pixel de
+uma fonte 3×5 vira um cubo de ouro, forjado em atlas sob demanda (o conjunto é fechado:
+25/50/100/200/400, da escala de §15), lido estático em `parado/0` na linha `dir 2` enquanto a
+posição de tela sobe 38px·zoom com ease-out e esmaece no último terço (~1,1 s).
+
+Duas coisas merecem registro:
+
+- **O valor vem de uma fila do engine** — `game.abatesRecentes`, campo APENAS-animado no
+  estatuto de `ent.bump` (fora de `snapshot()`, do save e do oracle). Sem ela o renderer não
+  tem como saber o XP com o nível do herói **de antes do golpe**: o level-up acontece dentro
+  do mesmo comando. Ver [[niveis-xp-e-spawn]] e
+  [[ADR-005-facing-cosmetico-invisivel-ao-oracle]].
+- **A fonte não pode ser deitada no plano X-Z** — a projeção cisalha o bitmap ~26° e o texto
+  vira um emaranhado. A cura é a **pré-distorção de outdoors**: passos-modelo `(e, −e, 0)` e
+  `(−f, −f, 2f)` que, projetados, formam uma grade QUADRADA na tela. A lição completa está em
+  [[texto-em-isometrica-cisalha]].
+
+O flutuante é desenhado DEPOIS do mundo (por cima até das paredes: é feedback de recompensa,
+não cenário), mas some fora do FOV — um abate não visto não solta texto; quem conta essa
+história é o rastro.
+
 ## O elenco, medido
 
 As quatro escalas são reais: a diferença de tamanho na tela vem da **altura do modelo em `u`**,
@@ -205,6 +263,18 @@ primeiro `sentinel` aparece na tela.
   num nó chamado `bracoDir` de propósito, e é por esse canal que o chicote do bote entra.
 - **Somar o `hop` do desenho geométrico ao sprite** — o quique da marcha e o peso do golpe já
   estão dentro dos quadros de animação; somados, o bicho salta duas vezes por passo.
+- **Detectar abate por `hp <= 0` em vez de diff de conjuntos** — o inimigo morto é REMOVIDO da
+  lista no mesmo comando em que morre: o renderer nunca vê o hp zerado. O que existe é
+  desaparecimento; a única via dele é o golpe fatal.
+- **Recomputar o XP do flutuante no renderer com o nível ATUAL do herói** — o level-up acontece
+  dentro do mesmo comando que mata, então o nível já subiu quando o quadro roda. O valor certo
+  só existe na fila `abatesRecentes`, escrita no instante do golpe.
+- **Deitar texto no plano X-Z do modelo** — a projeção cisalha o bitmap e o texto vira um
+  emaranhado ilegível de cubos. A pré-distorção certa está em `xpTexto.ts` e a lição em
+  [[texto-em-isometrica-cisalha]].
+- **Desenhar o flutuante de XP no passe do tile** — um "+100" atrás de uma parede não cumpre a
+  função dele. O passe próprio, depois do mundo, é deliberado (é feedback, não cenário) — e é
+  por isso que ele pode cobrir uma parede, nunca um tile fora do FOV.
 
 Ver também: [[sprite-forge]], [[personagem-rig-3d]], [[paleta-e-estilo]],
 [[fog-of-war-e-iluminacao]], [[arquetipos-de-inimigo]], [[legibilidade-em-40px]],

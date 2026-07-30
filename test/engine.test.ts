@@ -22,13 +22,13 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { CONFIG, DIRS8, parseCommand } from '../src/engine/core';
-import { generate } from '../src/engine/mapgen';
+import { generate, isWalkable } from '../src/engine/mapgen';
 import { checkSymmetry, computeFov, isVisibleFrom } from '../src/engine/fov';
 import { DIJKSTRA_INF, bestStep, computeDijkstra, fleeMap } from '../src/engine/dijkstra';
-import { populate } from '../src/engine/entities';
+import { ARCHETYPES, pesosSpawn, populate } from '../src/engine/entities';
 import { applyCommand, createState, descend, snapshot } from '../src/engine/game';
 import { setStorage } from '../src/engine/save';
-import type { Command, Enemy, Game, GameMap, Point } from '../src/engine/types';
+import type { ArchetypeKey, Command, Enemy, Game, GameMap, Point } from '../src/engine/types';
 
 /* O autosave não pode vazar de um teste para o outro (nem existir em Node). */
 setStorage(null);
@@ -268,8 +268,8 @@ describe('T3 — determinismo e regras de população', () => {
       for (let depth = 1; depth <= 3; depth++) {
         const mapa = generate(semente, depth);
         const mapb = generate(semente, depth);
-        const pa = populate(mapa, depth);
-        const pb = populate(mapb, depth);
+        const pa = populate(mapa, depth, 1);
+        const pb = populate(mapb, depth, 1);
         const onde = ondeEsta('T3', { semente, depth });
 
         expect(pa.enemies.map(chaveInimigo), onde + ': inimigos divergem entre duas populações')
@@ -870,5 +870,129 @@ describe('T10 — progressão: descer ' + N.t10Niveis + ' níveis, dificuldade e
       .toBeGreaterThan(primeiro.mediaHp);
     expect(ultimo.turnos, 'T10: stats.turns não acumulou entre níveis')
       .toBeGreaterThan(primeiro.turnos);
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T11 — balanceamento §15 do BESTIARIO (XP em escala + spawn por nível)
+ * ================================================================== */
+
+describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', () => {
+  it('a tabela de pesos segue o contrato, com clamp nos dois extremos', () => {
+    // colunas: [chaser (goblin), sentinel (ogro), linker (slime)]
+    expect(pesosSpawn(1)).toEqual([10, 1, 100]);
+    expect(pesosSpawn(2)).toEqual([100, 10, 30]);
+    expect(pesosSpawn(3)).toEqual([40, 100, 10]);
+    expect(pesosSpawn(4)).toEqual([15, 100, 3]);
+    expect(pesosSpawn(99), 'T11: acima do 4 vale a régua do 4').toEqual([15, 100, 3]);
+    expect(pesosSpawn(0), 'T11: abaixo do 1 vale a régua do 1').toEqual([10, 1, 100]);
+  });
+
+  it('cada monstro declara o nível do contrato: slime 1, goblin 2, ogro 3', () => {
+    expect(ARCHETYPES.linker.nivel, 'T11: slime (linker)').toBe(1);
+    expect(ARCHETYPES.chaser.nivel, 'T11: goblin (chaser)').toBe(2);
+    expect(ARCHETYPES.sentinel.nivel, 'T11: ogro (sentinel)').toBe(3);
+  });
+
+  it('a mistura desloca com o nível do herói e permanece determinística', () => {
+    const contar = (nivel: number): Record<ArchetypeKey, number> => {
+      const conta: Record<ArchetypeKey, number> = { chaser: 0, sentinel: 0, linker: 0 };
+      for (let s = 0; s < 24; s++) {
+        const pop = populate(generate('T11-MISTURA-' + s, 2), 2, nivel);
+        for (const e of pop.enemies) conta[e.kind]++;
+      }
+      return conta;
+    };
+    const l1 = contar(1);
+    const l2 = contar(2);
+    const l3 = contar(3);
+    const l4 = contar(4);
+    // herói 1: a masmorra é dos slimes (100 contra 10 e 1)
+    expect(l1.linker, 'T11: herói 1 devia ser dos slimes').toBeGreaterThan(l1.chaser * 3);
+    // herói 2: os goblins dominam
+    expect(l2.chaser, 'T11: herói 2 devia ser dos goblins').toBeGreaterThan(l2.linker * 2);
+    // herói 3: os ogros dominam e o slime já é minoria
+    expect(l3.sentinel, 'T11: herói 3 devia ser dos ogros').toBeGreaterThan(l3.chaser);
+    expect(l3.sentinel, 'T11: herói 3 com slime minoritário').toBeGreaterThan(l3.linker * 3);
+    // herói 4+: slime raro em absoluto, ogro comum, goblin em minoria
+    expect(l4.linker, 'T11: herói 4 com slime raro').toBeLessThan(l1.linker / 4);
+    expect(l4.sentinel, 'T11: herói 4 com ogro comum').toBeGreaterThan(l4.chaser * 3);
+    // mesma semente + mesmo nível → mesma mistura, sempre
+    const a = populate(generate('T11-DET', 1), 1, 3).enemies.map((e) => e.kind);
+    const b = populate(generate('T11-DET', 1), 1, 3).enemies.map((e) => e.kind);
+    expect(a, 'T11: populate divergiu com os mesmos argumentos').toEqual(b);
+  }, LENTO);
+
+  it('o XP do abate obedece à escala: 100 no próprio nível, 200/400 acima, 50/25/0 abaixo', () => {
+    const game = createState('T11-XP', 1);
+    const fabricar = (id: number, kind: ArchetypeKey): Enemy | null => {
+      for (const d of DIRS8) {
+        const x = game.player.x + d[0];
+        const y = game.player.y + d[1];
+        if (!isWalkable(game.map, x, y)) continue;
+        if (game.enemies.some((e) => e.x === x && e.y === y)) continue;
+        const ent: Enemy = {
+          id: id, kind: kind, x: x, y: y, hp: 1, maxHp: 1, atk: 1, range: 1,
+          state: 'idle', plan: '', lastDmg: 0, bump: 0
+        };
+        game.enemies.push(ent);
+        return ent;
+      }
+      return null;
+    };
+    const matar = (ent: Enemy | null): void => {
+      expect(ent, 'T11: sem tile livre ao redor do jogador para o abate').not.toBe(null);
+      if (!ent) return;
+      const dx = ent.x - game.player.x;
+      const dy = ent.y - game.player.y;
+      game.player.atk = 50; // golpe certeiro: o abate é o que está em teste
+      aplicar(game, 'move:' + dx + ',' + dy);
+    };
+
+    // nível 1 mata slime (nível 1): +100 xp → sobe ao 2 e zera o acumulado
+    game.player.level = 1;
+    game.player.xp = 0;
+    matar(fabricar(901, 'linker'));
+    expect(game.player.level, 'T11: 100 xp não subiu exatamente um nível').toBe(2);
+    expect(game.player.xp, 'T11: o excedente devia zerar (100 justos)').toBe(0);
+
+    // nível 2 mata slime (nível 1): +50 xp, sem subir
+    matar(fabricar(902, 'linker'));
+    expect(game.player.level, 'T11: 50 xp não devia subir').toBe(2);
+    expect(game.player.xp, 'T11: slime no nível 2 devia render 50').toBe(50);
+
+    // nível 2 mata goblin (nível 2): +100 xp → sobe ao 3 carregando os 50
+    matar(fabricar(903, 'chaser'));
+    expect(game.player.level, 'T11: 50+100 xp devia subir um nível').toBe(3);
+    expect(game.player.xp, 'T11: o excedente (50) devia CARREGAR').toBe(50);
+
+    // nível 3 mata ogro (nível 3): +100 xp → sobe ao 4 com 50 de sobra
+    matar(fabricar(904, 'sentinel'));
+    expect(game.player.level, 'T11: ogro no próprio nível devia render 100').toBe(4);
+    expect(game.player.xp, 'T11: excedente de 50 carregado').toBe(50);
+
+    // nível 4 mata slime (nível 1): sem xp — o corte do contrato (3 acima)
+    game.player.xp = 0;
+    matar(fabricar(905, 'linker'));
+    expect(game.player.level, 'T11: slime no nível 4 não devia render nível').toBe(4);
+    expect(game.player.xp, 'T11: slime no nível 4 devia render 0 xp').toBe(0);
+
+    // nível 4 mata goblin (nível 2): dois níveis abaixo = 25 xp
+    matar(fabricar(906, 'chaser'));
+    expect(game.player.xp, 'T11: goblin dois níveis abaixo devia render 25').toBe(25);
+
+    // nível 1 mata goblin (nível 2): um nível ACIMA = 200 xp = dois níveis
+    game.player.level = 1;
+    game.player.xp = 0;
+    matar(fabricar(907, 'chaser'));
+    expect(game.player.level, 'T11: 200 xp devia render dois níveis').toBe(3);
+    expect(game.player.xp, 'T11: 200 xp justos, excedente zero').toBe(0);
+
+    // nível 1 mata ogro (nível 3): dois níveis ACIMA = 400 xp = quatro níveis
+    game.player.level = 1;
+    game.player.xp = 0;
+    matar(fabricar(908, 'sentinel'));
+    expect(game.player.level, 'T11: 400 xp devia render quatro níveis').toBe(5);
+    expect(game.player.xp, 'T11: 400 xp justos, excedente zero').toBe(0);
   }, LENTO);
 });

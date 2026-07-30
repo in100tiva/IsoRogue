@@ -1,6 +1,6 @@
 ---
 tipo: nota
-atualizado: 2026-07-29
+atualizado: 2026-07-30
 tags: [turnos, progressao, morte-permanente, engine, estado]
 ---
 
@@ -110,12 +110,17 @@ O que acontece ao descer:
 
 ## Escalonamento de dificuldade
 
-Duas alavancas, ambas em função de `depth`:
+Duas alavancas: `depth` endurece **contagem e força**; o **nível do herói** dirige a
+**mistura** de monstros e o XP. Desde 2026-07-30 a segunda alavanca existe — antes a
+mistura também era da profundidade.
 
-**Quantidade e força dos inimigos** — `min(22, 4 + depth*2)` criaturas,
-`hp = base + floor(base * 0.15 * (depth-1))`, `atk = base + floor((depth-1)/2)`, e pesos de
-sorteio que reforçam Brutamontes e Vinculador conforme desce
-(`src/engine/entities.ts:516-531`). Detalhes em [[arquetipos-de-inimigo]].
+**Quantidade e força dos inimigos (por `depth`, intocado)** — `min(22, 4 + depth*2)`
+criaturas, `hp = base + floor(base * 0.15 * (depth-1))`, `atk = base + floor((depth-1)/2)`
+(`src/engine/entities.ts:533`). Detalhes em [[arquetipos-de-inimigo]].
+
+**Mistura de monstros (por nível do herói, desde 2026-07-30)** — a linha de
+`PESOS_SPAWN` para o nível do herói: 10/1/100 no nível 1 (a masmorra dos slimes) até
+15/100/3 no 4+ (ogros comuns, slimes raros). Tudo em [[niveis-xp-e-spawn]].
 
 **Recursos** — poções no chão `max(1, 3 + ((depth*7) % 3) - floor(depth/4))`: a fórmula
 oscila e depois seca.
@@ -123,9 +128,12 @@ oscila e depois seca.
 Do lado do jogador, duas curvas somam:
 
 - descer: `maxHp += 2`;
-- nível de experiência: `xp >= level * 10` (`XP_POR_NIVEL`, `src/engine/game.ts:56`) sobe o
-  nível, `maxHp += 4`, cura 4 e `atk += 1` (`ganharXp`, `src/engine/game.ts:352`). O xp por
-  abate vem do arquétipo (3 / 4 / 6).
+- nível de experiência: `xp >= 100` (`XP_POR_NIVEL` plano, `src/engine/game.ts:56`) sobe
+  o nível **carregando o excedente**, `maxHp += 4`, cura 4 e `atk += 1` (`ganharXp`,
+  `src/engine/game.ts:371`). O xp por abate é em **escala** contra o nível do monstro
+  (100 no mesmo nível, 200/400 acima, 50/25/0 abaixo) — a tabela inteira está em
+  [[niveis-xp-e-spawn]]. Antes de 2026-07-30 era `level × 10` com xp fixo por arquétipo
+  (3 / 4 / 6): o estado anterior ficou registrado em `docs/BESTIARIO.md` §15.
 
 Base do jogador: 42 de vida, 7 de ataque, 3 poções (`PLAYER_BASE`,
 `src/engine/game.ts:53`); poção cura 12 (`POTION_HEAL`, `src/engine/entities.ts:561` — a
