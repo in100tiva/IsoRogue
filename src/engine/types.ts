@@ -226,13 +226,68 @@ export interface Enemy {
   bump: number;
 }
 
+/**
+ * Tipos de item que existem no chão da masmorra (tabela `ITENS`, entities.ts).
+ *
+ * `'potion'` é CONTRATO ANTIGO (R7) e não se mexe: continua sendo o consumível
+ * fungível que vira `player.potions`, com `heal = POTION_HEAL`. Os demais são
+ * os despojos da fase 1 — MATERIAIS, que vão para a bolsa do jogador e um dia
+ * (fase 2) para o mercador.
+ *
+ * A chave é em camelCase e em pt-BR de propósito: ela viaja no save e no
+ * `snapshot()`, então é nome de contrato, não rótulo de tela. O nome exibido
+ * mora em `ITENS[kind].nome`.
+ */
+export type ItemKind =
+  | 'potion'
+  | 'gosma'
+  | 'orelhaGoblin'
+  | 'espadaGoblin'
+  | 'peOgro'
+  | 'clavaOgro';
+
+/**
+ * Todo item que NÃO é a poção. Nasce como `Exclude<...>` em vez de uma lista
+ * nova para que acrescentar um tipo em `ItemKind` já o torne material sem
+ * ninguém precisar lembrar de editar dois lugares — e para que o compilador
+ * proíba, de graça, que `'potion'` acabe dentro da bolsa (§4 dos despojos).
+ */
+export type MaterialKind = Exclude<ItemKind, 'potion'>;
+
 export interface Item {
   id: number;
-  kind: 'potion';
+  kind: ItemKind;
   x: number;
   y: number;
+  /**
+   * Cura em pontos de vida. Só a poção usa (POTION_HEAL); material carrega 0.
+   * O campo continua OBRIGATÓRIO porque `SavedItem` (§8) já o grava desde a
+   * primeira versão do save — tirá-lo seria quebrar o formato por estética.
+   */
   heal: number;
 }
+
+/**
+ * A BOLSA: contador de materiais do jogador.
+ *
+ * Escolha de tipo (pedido explícito de documentação): objeto ABERTO
+ * `Partial<Record<MaterialKind, number>>`, não um objeto fechado com todos os
+ * contadores em zero. Três razões, nesta ordem:
+ *   1. serializa sozinho — é JSON puro, sem Map/Set, e o save só carrega o que
+ *      o jogador de fato tem;
+ *   2. somar é uma linha (`bag[k] = (bag[k] || 0) + n`), e a ausência já
+ *      significa zero;
+ *   3. um objeto fechado obrigaria a inicializar (e migrar) todas as chaves a
+ *      cada tipo novo de material, e ainda assim não impediria ninguém de
+ *      escrever `bag.potion`.
+ *
+ * O preço é que a ORDEM das chaves de um objeto aberto é acidental — por isso
+ * ninguém aqui usa `Object.keys` para ler a bolsa: `snapshot()`, o save e o
+ * registro varrem `ITEM_KINDS` (ordem fixa da tabela `ITENS`).
+ *
+ * Sem limite de capacidade nesta fase.
+ */
+export type Bag = Partial<Record<MaterialKind, number>>;
 
 /** Retorno de `populate(map, depth, heroLevel)`. */
 export interface Population {
@@ -271,6 +326,15 @@ export interface Player {
   potions: number;
   level: number;
   xp: number;
+  /**
+   * A bolsa de materiais (fase 1 dos despojos). Atravessa os níveis: é do
+   * JOGADOR, não do andar — `descend` não a toca.
+   *
+   * A poção NÃO entra aqui: ela continua em `potions`, pelo contrato antigo
+   * (R7). O tipo `Bag` só aceita `MaterialKind`, então isso é garantido pelo
+   * compilador, não pela disciplina de quem escreve.
+   */
+  bag: Bag;
   /**
    * Para onde o personagem OLHA: índice 0..7 em `DIRS8` (core.ts), na ordem
    * fixa daquela tabela. Começa em `DEFAULT_FACING` (2 = sul do grid).
@@ -326,6 +390,23 @@ export interface Game {
   player: Player;
   enemies: Enemy[];
   items: Item[];
+  /**
+   * Próximo `id` a ser dado a um item CRIADO EM PARTIDA (despojo de abate).
+   *
+   * Por que um contador no estado, e não `max(id) + 1` na hora: `max(id) + 1`
+   * é calculado sobre os itens que ainda estão NO CHÃO, então recolher o item
+   * de maior id faz o próximo drop reaproveitar aquele número. Ids reciclados
+   * não quebram regra nenhuma (o id só ordena `snapshot()` e identifica o item
+   * para o render), mas tornam a leitura de um registro de partida ambígua —
+   * "item 7" passaria a significar duas coisas. Um contador monotônico custa um
+   * número e acaba com o assunto.
+   *
+   * Inicializado logo APÓS `populate` (que numera de 1 até N) como N+1, tanto
+   * em `createState` quanto em `descend`. É serializado no save; um save antigo
+   * que não o traga é reconstruído como `max(id) + 1` dos itens restaurados —
+   * degradação tolerada, nunca colisão.
+   */
+  proxItemId: number;
   dmap: Int32Array;
   fleeMap: Int32Array | null;
   /** Buffer reaproveitado pelo cálculo do `dmap`. Nunca lido como dado. */
@@ -336,6 +417,16 @@ export interface Game {
   explored: Uint8Array;
   /** Stream dedicado ao combate — a espinha do determinismo de partida. */
   rngCombat: Rng;
+  /**
+   * Stream dedicado aos DESPOJOS, separado de `rngCombat` por necessidade, não
+   * por organização: se o loot sorteasse do mesmo stream, o dano do próximo
+   * golpe passaria a depender da sorte do abate anterior — a mesma sequência de
+   * comandos daria partidas diferentes conforme o que caiu no chão.
+   *
+   * Semeado com `hash32(seed + '#loot' + depth)`, no mesmo padrão de
+   * `rngCombat`, e RESSEMEADO a cada `descend` (andar novo, sorte nova).
+   */
+  rngLoot: Rng;
   log: LogEntry[];
   stats: Stats;
   ui: GameUi;
@@ -388,6 +479,7 @@ export interface SavedEnemy {
 
 export interface SavedItem {
   id: number;
+  /** `ItemKind` como texto: vem de JSON não confiável, quem valida é `restore`. */
   kind: string;
   x: number;
   y: number;
@@ -411,6 +503,11 @@ export interface SaveData {
   player: Player;
   enemies: SavedEnemy[];
   items: SavedItem[];
+  /**
+   * Contador de ids de item (ver `Game.proxItemId`). Save antigo não o tem:
+   * `restore` recalcula por `max(id) + 1` em vez de recusar a run.
+   */
+  proxItemId: number;
   /** Já decodificado por `read()`; base64 na forma gravada. */
   explored: Uint8Array | null;
   exploredB64?: string;
@@ -419,6 +516,12 @@ export interface SaveData {
   /** Estado uint32 de `rngCombat`. Ambos os campos carregam o mesmo valor. */
   rngCombat: number;
   rngCombatS: number;
+  /**
+   * Estado uint32 de `rngLoot`. Ausente no save antigo — nesse caso `restore`
+   * fica com o stream recém-semeado por `createState`, que é determinístico
+   * pela seed+depth e portanto continua uma retomada honesta.
+   */
+  rngLoot: number;
   /** Últimas 80 entradas. */
   log: LogEntry[];
 }

@@ -21,14 +21,36 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { CONFIG, DIRS8, parseCommand } from '../src/engine/core';
+import { CONFIG, DIRS8, hash32, makeRng, parseCommand } from '../src/engine/core';
 import { generate, isWalkable } from '../src/engine/mapgen';
 import { checkSymmetry, computeFov, isVisibleFrom } from '../src/engine/fov';
 import { DIJKSTRA_INF, bestStep, computeDijkstra, fleeMap } from '../src/engine/dijkstra';
-import { ARCHETYPES, pesosSpawn, populate } from '../src/engine/entities';
-import { applyCommand, createState, descend, snapshot } from '../src/engine/game';
-import { setStorage } from '../src/engine/save';
-import type { ArchetypeKey, Command, Enemy, Game, GameMap, Point } from '../src/engine/types';
+import {
+  ARCHETYPES,
+  DROPS,
+  ITEM_KINDS,
+  ITENS,
+  KINDS,
+  POTION_HEAL,
+  ehMaterial,
+  makeItem,
+  pesosSpawn,
+  populate
+} from '../src/engine/entities';
+import { applyCommand, createState, descend, restore, snapshot } from '../src/engine/game';
+import { read as lerSave, setStorage, write as escreverSave } from '../src/engine/save';
+import type { StorageLike } from '../src/engine/save';
+import type {
+  ArchetypeKey,
+  Bag,
+  Command,
+  Enemy,
+  Game,
+  GameMap,
+  Item,
+  MaterialKind,
+  Point
+} from '../src/engine/types';
 
 /* O autosave não pode vazar de um teste para o outro (nem existir em Node). */
 setStorage(null);
@@ -994,5 +1016,445 @@ describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', ()
     matar(fabricar(908, 'sentinel'));
     expect(game.player.level, 'T11: 400 xp devia render quatro níveis').toBe(5);
     expect(game.player.xp, 'T11: 400 xp justos, excedente zero').toBe(0);
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T12 — despojos, fase 1: drop no abate, bolsa e determinismo
+ *
+ * O que estes testes protegem, em uma frase cada:
+ *   · o loot é determinístico pela semente (T12.1);
+ *   · o loot e o combate são streams SEPARADOS — mexer num não move o outro
+ *     (T12.2), e cada abate consome do loot uma quantia fixa (T12.3);
+ *   · itens empilham no tile e a coleta recolhe a pilha inteira somando certo
+ *     na bolsa (T12.4);
+ *   · bolsa e `kind` sobrevivem ao save, e um save legado (sem nenhum dos dois)
+ *     ainda carrega (T12.5);
+ *   · o `snapshot()` v2 expõe kind, bolsa (em ordem de TABELA) e rngLoot (T12.6).
+ * ================================================================== */
+
+/** Armazenamento de memória: o save do teste não encosta em disco nem em DOM. */
+function armazemDeMemoria(): StorageLike {
+  const dados = new Map<string, string>();
+  return {
+    getItem: (k) => (dados.has(k) ? (dados.get(k) as string) : null),
+    setItem: (k, v) => {
+      dados.set(k, String(v));
+    },
+    removeItem: (k) => {
+      dados.delete(k);
+    }
+  };
+}
+
+/** Soma de tudo que está na bolsa — serve para provar que o teste não é vazio. */
+function somaBolsa(bag: Bag): number {
+  let total = 0;
+  for (const kind of ITEM_KINDS) {
+    if (!ehMaterial(kind)) continue;
+    total += bag[kind] || 0;
+  }
+  return total;
+}
+
+/** Bolsa em texto, na ordem da tabela — comparável com `toBe`, não com `toEqual`. */
+function bolsaEmTexto(bag: Bag): string {
+  const partes: string[] = [];
+  for (const kind of ITEM_KINDS) {
+    if (!ehMaterial(kind)) continue;
+    partes.push(kind + '=' + (bag[kind] || 0));
+  }
+  return partes.join(',');
+}
+
+function itensEmTexto(game: Game): string[] {
+  return game.items.slice()
+    .sort((a, b) => a.id - b.id)
+    .map((it) => it.id + ':' + it.kind + ':' + it.x + ':' + it.y);
+}
+
+/**
+ * Projeção do estado de COMBATE — tudo que a sorte do despojo não pode tocar.
+ * Note o que está de fora: itens do chão, bolsa e `rngLoot`. É isso que faz o
+ * teste de independência dizer alguma coisa.
+ */
+function estadoDeCombate(game: Game): string {
+  const p = game.player;
+  const inimigos = game.enemies.slice().sort((a, b) => a.id - b.id)
+    .map((e) => e.id + ':' + e.kind + ':' + e.hp + ':' + e.x + ':' + e.y + ':' + e.state)
+    .join('|');
+  const s = game.stats;
+  return [
+    't=' + game.turn, 'over=' + (game.over ? 1 : 0), 'd=' + game.depth,
+    'p=' + p.x + ',' + p.y + ',' + p.hp + '/' + p.maxHp + ',atk' + p.atk +
+      ',poc' + p.potions + ',lv' + p.level + ':' + p.xp,
+    'E[' + inimigos + ']',
+    'S=' + s.kills + ',' + s.dmgDealt + ',' + s.dmgTaken + ',' + s.itemsUsed,
+    'rng=' + (game.rngCombat.s >>> 0)
+  ].join('|');
+}
+
+/** Tile vizinho caminhável, sem inimigo e sem item — o palco limpo da coleta. */
+function tileLimpoAoLado(game: Game): { x: number; y: number; dx: number; dy: number } | null {
+  for (const d of DIRS8) {
+    /* Só ortogonais: a diagonal tem a regra de corte de canto e um passo
+     * recusado transformaria a falha do teste numa charada. */
+    if (d[0] !== 0 && d[1] !== 0) continue;
+    const x = game.player.x + d[0];
+    const y = game.player.y + d[1];
+    if (!isWalkable(game.map, x, y)) continue;
+    if (game.enemies.some((e) => e.hp > 0 && e.x === x && e.y === y)) continue;
+    if (game.items.some((it) => it.x === x && it.y === y)) continue;
+    return { x: x, y: y, dx: d[0], dy: d[1] };
+  }
+  return null;
+}
+
+/** Planta um inimigo de 1 de vida colado no jogador, para um abate sob medida. */
+function plantarInimigo(game: Game, id: number, kind: ArchetypeKey): Enemy | null {
+  for (const d of DIRS8) {
+    const x = game.player.x + d[0];
+    const y = game.player.y + d[1];
+    if (!isWalkable(game.map, x, y)) continue;
+    if (game.enemies.some((e) => e.x === x && e.y === y)) continue;
+    const ent: Enemy = {
+      id: id, kind: kind, x: x, y: y, hp: 1, maxHp: 1, atk: 1, range: 1,
+      state: 'idle', plan: '', lastDmg: 0, bump: 0
+    };
+    game.enemies.push(ent);
+    return ent;
+  }
+  return null;
+}
+
+/** Partida de despojos: golpe que sempre abate, vida folgada, N comandos. */
+function partidaDeLoot(
+  semente: string,
+  tag: string,
+  n: number,
+  ajuste?: (g: Game) => void
+): Game {
+  const g = createState(semente, 1);
+  g.player.maxHp = 999;
+  g.player.hp = 999;
+  /* Ataque absurdo de propósito: cada golpe é um abate, e um abate é um
+   * sorteio de despojo. Sem isso, 160 comandos rendem loot quase nenhum e o
+   * teste passaria a verde sem exercitar nada. */
+  g.player.atk = 99;
+  if (ajuste) ajuste(g);
+  for (const cmd of sequenciaComandos(tag, n)) {
+    if (!g.over) g.player.hp = g.player.maxHp;
+    aplicar(g, cmd);
+  }
+  return g;
+}
+
+describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => {
+  it('as tabelas ITENS e DROPS são as do contrato da fase 1', () => {
+    /* Valores de moeda (fase 2 usa; a fase 1 só guarda) e o que é material. */
+    expect(ITENS.gosma.valor, 'T12.0: gosma').toBe(3);
+    expect(ITENS.orelhaGoblin.valor, 'T12.0: orelha de goblin').toBe(5);
+    expect(ITENS.espadaGoblin.valor, 'T12.0: cimitarra de goblin').toBe(18);
+    expect(ITENS.peOgro.valor, 'T12.0: pé de ogro').toBe(12);
+    expect(ITENS.clavaOgro.valor, 'T12.0: clava de ogro').toBe(40);
+
+    expect(ITENS.potion.material, 'T12.0: a poção NÃO é material (contrato antigo R7)')
+      .toBe(false);
+    expect(ehMaterial('potion'), 'T12.0: poção fora da bolsa').toBe(false);
+    for (const kind of ITEM_KINDS) {
+      if (kind === 'potion') continue;
+      expect(ehMaterial(kind), 'T12.0: ' + kind + ' devia ser material').toBe(true);
+      const def = ITENS[kind];
+      expect(def.key, 'T12.0: chave da ficha de ' + kind).toBe(kind);
+      expect(def.nome.length > 0 && def.plural.length > 0 && def.desc.length > 0,
+        'T12.0: ' + kind + ' sem nome, plural ou descrição').toBe(true);
+    }
+
+    /* A tabela de despojos, entrada por entrada e NA ORDEM (que é desempate
+     * determinístico: fixa a ordem dos sorteios e dos ids dos itens). */
+    expect(DROPS.linker.map((d) => d.item + ':' + d.chance), 'T12.0: Slime (linker)')
+      .toEqual(['gosma:0.7']);
+    expect(DROPS.chaser.map((d) => d.item + ':' + d.chance), 'T12.0: Goblin (chaser)')
+      .toEqual(['orelhaGoblin:0.5', 'espadaGoblin:0.15']);
+    expect(DROPS.sentinel.map((d) => d.item + ':' + d.chance), 'T12.0: Ogro (sentinel)')
+      .toEqual(['peOgro:0.45', 'clavaOgro:0.2']);
+  });
+
+  it('mesma semente e mesma sequência ⇒ mesmos despojos (posição, kind e ordem de id)', () => {
+    const a = partidaDeLoot('T12-DETERMINISMO', 'T12det', 160);
+    const b = partidaDeLoot('T12-DETERMINISMO', 'T12det', 160);
+
+    /* O teste só vale se a partida realmente matou e realmente largou coisa. */
+    expect(a.stats.kills, 'T12.1: a partida não abateu ninguém — teste vazio')
+      .toBeGreaterThan(0);
+    const materiaisNoChao = a.items.filter((it) => ehMaterial(it.kind)).length;
+    expect(
+      materiaisNoChao + somaBolsa(a.player.bag),
+      'T12.1: nenhum despojo foi gerado — teste vazio'
+    ).toBeGreaterThan(0);
+
+    expect(itensEmTexto(b), 'T12.1: itens do chão divergem entre duas partidas iguais')
+      .toEqual(itensEmTexto(a));
+    expect(bolsaEmTexto(b.player.bag), 'T12.1: bolsa diverge entre duas partidas iguais')
+      .toBe(bolsaEmTexto(a.player.bag));
+    expect(b.rngLoot.s >>> 0, 'T12.1: o stream de despojo parou em posições diferentes')
+      .toBe(a.rngLoot.s >>> 0);
+    expect(b.proxItemId, 'T12.1: o contador de id de item divergiu').toBe(a.proxItemId);
+    expect(String(snapshot(b)), 'T12.1: snapshots divergem').toBe(String(snapshot(a)));
+  }, LENTO);
+
+  it('trocar SÓ a sorte do despojo não muda uma vírgula do combate', () => {
+    const semente = 'T12-STREAMS';
+    const cmds = sequenciaComandos('T12str', 160);
+    const a = createState(semente, 1);
+    const b = createState(semente, 1);
+    for (const g of [a, b]) {
+      g.player.maxHp = 999;
+      g.player.hp = 999;
+      g.player.atk = 99;
+    }
+    /* ÚNICA diferença entre as duas partidas: onde o stream de loot começa.
+     * Se `rngCombat` fosse consumido pelo loot (ou vice-versa), o dano, a
+     * posição dos inimigos e o XP passariam a depender disto. */
+    b.rngLoot = makeRng(hash32(semente + '#loot#outra-sorte'));
+
+    expect(estadoDeCombate(b), 'T12.2: estados de combate já divergem no início')
+      .toBe(estadoDeCombate(a));
+
+    for (let i = 0; i < cmds.length; i++) {
+      if (!a.over) a.player.hp = a.player.maxHp;
+      if (!b.over) b.player.hp = b.player.maxHp;
+      const ra = aplicar(a, cmds[i]);
+      const rb = aplicar(b, cmds[i]);
+      expect(rb, 'T12.2: applyCommand divergiu no comando #' + i + ' (' + cmds[i] + ')')
+        .toBe(ra);
+      expect(
+        estadoDeCombate(b),
+        'T12.2: o combate divergiu após o comando #' + i + ' (' + cmds[i] + ') — ' +
+          'a sorte do despojo vazou para o stream de combate'
+      ).toBe(estadoDeCombate(a));
+    }
+
+    expect(b.rngCombat.s >>> 0, 'T12.2: rngCombat parou em posições diferentes')
+      .toBe(a.rngCombat.s >>> 0);
+
+    /* Contraprova: a sorte do despojo REALMENTE mudou. Sem isto o bloco acima
+     * estaria comparando duas partidas idênticas e não provaria nada.
+     * A comparação é do QUADRO COMPLETO do loot — chão MAIS bolsa —, porque
+     * numa caminhada aleatória o jogador costuma passar por cima do próprio
+     * abate e o despojo migra do chão para a bolsa. */
+    const lootDe = (g: Game): string =>
+      itensEmTexto(g).join('|') + ' # ' + bolsaEmTexto(g.player.bag);
+    expect(a.stats.kills, 'T12.2: a partida não abateu ninguém — contraprova vazia')
+      .toBeGreaterThan(0);
+    expect(
+      somaBolsa(a.player.bag) + a.items.filter((it) => ehMaterial(it.kind)).length,
+      'T12.2: nenhum despojo foi gerado — contraprova vazia'
+    ).toBeGreaterThan(0);
+    expect(lootDe(b), 'T12.2: o loot não mudou — a contraprova do teste falhou')
+      .not.toBe(lootDe(a));
+  }, LENTO);
+
+  it('cada abate consome do rngLoot uma tiragem por linha da tabela, dê no que der', () => {
+    const game = createState('T12-CONSUMO', 1);
+    game.player.maxHp = 999;
+    game.player.hp = 999;
+    game.player.atk = 99;
+
+    let id = 8100;
+    for (const kind of KINDS) {
+      const ent = plantarInimigo(game, id++, kind);
+      expect(ent, 'T12.3: sem tile livre ao redor do jogador para plantar o alvo')
+        .not.toBe(null);
+      if (!ent) return;
+      const alvo = { x: ent.x, y: ent.y };
+      const idsAntes = new Set(game.items.map((it) => it.id));
+      const proxAntes = game.proxItemId;
+
+      /* Quanto o stream DEVERIA andar: uma tiragem por linha da tabela, nem
+       * mais nem menos — o resultado do sorteio não pode alterar o consumo. */
+      const esperado = makeRng(game.rngLoot.s);
+      for (let k = 0; k < DROPS[kind].length; k++) esperado.u32();
+
+      game.player.hp = game.player.maxHp;
+      const aceito = aplicar(game, 'move:' + (ent.x - game.player.x) + ',' + (ent.y - game.player.y));
+      expect(aceito, 'T12.3: o golpe em ' + kind + ' não foi aceito').toBe(true);
+
+      expect(
+        game.rngLoot.s >>> 0,
+        'T12.3: o abate de ' + kind + ' consumiu do rngLoot algo diferente de ' +
+          DROPS[kind].length + ' tiragem(ns)'
+      ).toBe(esperado.s >>> 0);
+
+      const novos = game.items.filter((it) => !idsAntes.has(it.id));
+      const permitidos = DROPS[kind].map((d) => d.item);
+      for (const it of novos) {
+        expect(
+          permitidos.indexOf(it.kind as MaterialKind) >= 0,
+          'T12.3: ' + kind + ' largou ' + it.kind + ', que não está na tabela dele'
+        ).toBe(true);
+        expect(
+          it.x === alvo.x && it.y === alvo.y,
+          'T12.3: despojo em (' + it.x + ',' + it.y + '), fora do tile do abate ' +
+            '(' + alvo.x + ',' + alvo.y + ')'
+        ).toBe(true);
+        expect(it.heal, 'T12.3: material com cura — só a poção cura').toBe(0);
+      }
+      /* Ids sequenciais: o contador andou exatamente o número de drops, e
+       * nenhum id novo colidiu com o que já estava no chão. */
+      expect(game.proxItemId, 'T12.3: o contador de id não acompanhou os drops')
+        .toBe(proxAntes + novos.length);
+      const ids = game.items.map((it) => it.id);
+      expect(new Set(ids).size, 'T12.3: id de item repetido no chão').toBe(ids.length);
+    }
+  }, LENTO);
+
+  it('itens empilham no tile e a coleta recolhe a pilha inteira, somando na bolsa', () => {
+    const game = createState('T12-PILHA', 1);
+    game.player.maxHp = 999;
+    game.player.hp = 999;
+    const alvo = tileLimpoAoLado(game);
+    expect(alvo, 'T12.4: nenhum tile vizinho limpo para montar a pilha').not.toBe(null);
+    if (!alvo) return;
+
+    /* Pilha de quatro itens de três tipos no MESMO tile. */
+    const empilhados: Item[] = [
+      makeItem(game.proxItemId++, alvo.x, alvo.y, 'gosma'),
+      makeItem(game.proxItemId++, alvo.x, alvo.y, 'gosma'),
+      makeItem(game.proxItemId++, alvo.x, alvo.y, 'orelhaGoblin'),
+      makeItem(game.proxItemId++, alvo.x, alvo.y, 'potion')
+    ];
+    for (const it of empilhados) game.items.push(it);
+
+    /* Estado anterior, para provar que a coleta SOMA em vez de sobrescrever. */
+    game.player.bag.gosma = 3;
+    game.player.potions = 3;
+    const marcaDoLog = game.log.length;
+
+    const aceito = aplicar(game, 'move:' + alvo.dx + ',' + alvo.dy);
+    expect(aceito, 'T12.4: o passo sobre a pilha não foi aceito').toBe(true);
+    expect(game.player.x === alvo.x && game.player.y === alvo.y,
+      'T12.4: o jogador não chegou ao tile da pilha').toBe(true);
+
+    expect(
+      game.items.filter((it) => it.x === alvo.x && it.y === alvo.y).length,
+      'T12.4: sobrou item no tile — a coleta não pegou a pilha inteira'
+    ).toBe(0);
+    expect(game.player.bag.gosma, 'T12.4: 3 na bolsa + 2 recolhidos').toBe(5);
+    expect(game.player.bag.orelhaGoblin, 'T12.4: orelha não entrou na bolsa').toBe(1);
+    expect(game.player.potions, 'T12.4: a poção não foi para o contador de poções').toBe(4);
+    expect(
+      Object.prototype.hasOwnProperty.call(game.player.bag, 'potion'),
+      'T12.4: a poção entrou na BOLSA — ela é do contador, contrato antigo (R7)'
+    ).toBe(false);
+
+    /* Uma linha por TIPO, na ordem da tabela ITENS (poção, gosma, orelha) —
+     * e a linha da poção byte a byte igual à de antes dos despojos. */
+    const recolhas = game.log.slice(marcaDoLog)
+      .map((l) => l.text)
+      .filter((t) => t.indexOf('Você recolhe') === 0);
+    expect(recolhas, 'T12.4: mensagens de coleta fora do padrão ou fora de ordem').toEqual([
+      'Você recolhe uma poção (4 no total).',
+      'Você recolhe 2 frascos de gosma (5 no total).',
+      'Você recolhe uma orelha de goblin (1 no total).'
+    ]);
+  }, LENTO);
+
+  it('save/restore preserva bolsa e kinds; save legado (sem bag nem kind) ainda carrega', () => {
+    const armazem = armazemDeMemoria();
+    const game = createState('T12-SAVE', 1);
+    game.player.bag.gosma = 4;
+    game.player.bag.clavaOgro = 1;
+    /* A escada é caminhável e `populate` nunca põe nada nela: tile garantido
+     * para um material sobreviver à validação do restore. */
+    game.items.push(makeItem(game.proxItemId++, game.map.stairs.x, game.map.stairs.y, 'peOgro'));
+    game.rngLoot.u32(); /* desloca o stream: queremos vê-lo viajar no save */
+
+    expect(escreverSave(game, armazem), 'T12.5: o save não foi gravado').toBe(true);
+    const lido = lerSave(armazem);
+    expect(lido, 'T12.5: o save não foi lido de volta').not.toBe(null);
+
+    const voltou = restore(lido);
+    expect(voltou, 'T12.5: restore recusou um save válido').not.toBe(null);
+    if (!voltou) return;
+
+    expect(bolsaEmTexto(voltou.player.bag), 'T12.5: a bolsa não sobreviveu ao round-trip')
+      .toBe(bolsaEmTexto(game.player.bag));
+    expect(voltou.player.bag.gosma, 'T12.5: gosma').toBe(4);
+    expect(voltou.player.bag.clavaOgro, 'T12.5: clava de ogro').toBe(1);
+    expect(itensEmTexto(voltou), 'T12.5: id/kind/posição dos itens divergem')
+      .toEqual(itensEmTexto(game));
+    expect(voltou.proxItemId, 'T12.5: o contador de id de item não sobreviveu')
+      .toBe(game.proxItemId);
+    expect(voltou.rngLoot.s >>> 0, 'T12.5: o estado do rngLoot não sobreviveu')
+      .toBe(game.rngLoot.s >>> 0);
+    expect(voltou.player.potions, 'T12.5: as poções do contador antigo').toBe(game.player.potions);
+
+    /* ---- save LEGADO: o de antes dos despojos, sem bag, sem kind, sem
+     * contador de id e sem rngLoot. Tem de carregar, não recusar a run. ---- */
+    const bruto = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    delete (bruto.player as Record<string, unknown>).bag;
+    delete bruto.proxItemId;
+    delete bruto.rngLoot;
+    const itensBrutos = bruto.items as Array<Record<string, unknown>>;
+    for (const it of itensBrutos) delete it.kind;
+    /* No primeiro item também apagamos o `heal`, para exercitar o outro
+     * caminho de degradação: sem kind E sem cura, o item vira a poção padrão. */
+    delete itensBrutos[0].heal;
+
+    const legado = restore(bruto);
+    expect(legado, 'T12.5: restore recusou um save legado').not.toBe(null);
+    if (!legado) return;
+    expect(legado.player.bag, 'T12.5: save sem bag devia restaurar bolsa VAZIA').toEqual({});
+    expect(
+      legado.items.every((it) => it.kind === 'potion'),
+      'T12.5: item sem kind devia virar poção (leitura correta de um save antigo)'
+    ).toBe(true);
+    expect(legado.items.length, 'T12.5: o save legado perdeu itens no caminho')
+      .toBe(game.items.length);
+    expect(legado.items[0].heal, 'T12.5: item sem kind e sem heal cai na cura padrão')
+      .toBe(POTION_HEAL);
+    let maiorId = 0;
+    for (const it of legado.items) maiorId = Math.max(maiorId, it.id);
+    expect(legado.proxItemId, 'T12.5: sem contador salvo, o piso é max(id)+1')
+      .toBe(maiorId + 1);
+    expect(legado.rngLoot, 'T12.5: sem rngLoot salvo, vale o stream semeado por createState')
+      .not.toBe(null);
+  }, LENTO);
+
+  it('o snapshot v2 expõe kind do item, bolsa em ordem de tabela e estado do rngLoot', () => {
+    const game = createState('T12-SNAP', 1);
+    const inicial = String(snapshot(game));
+
+    expect(inicial.indexOf('v2|'), 'T12.6: o snapshot não é v2').toBe(0);
+    expect(inicial.indexOf('|B[]|') >= 0, 'T12.6: bolsa vazia devia sair como B[]').toBe(true);
+    expect(
+      /\|I\[\d+:potion:\d+:\d+(\|\d+:potion:\d+:\d+)*\]\|/.test(inicial),
+      'T12.6: I[...] devia trazer id:kind:x:y de cada item — ' + inicial
+    ).toBe(true);
+    expect(
+      inicial.indexOf('|rngL=' + (game.rngLoot.s >>> 0) + '|') >= 0,
+      'T12.6: o estado do rngLoot não aparece no snapshot — ' + inicial
+    ).toBe(true);
+
+    /* Inserção FORA de ordem de propósito: a bolsa tem de sair na ordem da
+     * tabela ITENS (gosma antes de clavaOgro), nunca na ordem de inserção. */
+    game.player.bag.clavaOgro = 2;
+    game.player.bag.gosma = 1;
+    game.items.push(makeItem(game.proxItemId++, game.map.stairs.x, game.map.stairs.y, 'espadaGoblin'));
+    const depois = String(snapshot(game));
+
+    expect(
+      depois.indexOf('|B[gosma1|clavaOgro2]|') >= 0,
+      'T12.6: a bolsa saiu fora da ordem da tabela — ' + depois
+    ).toBe(true);
+    expect(
+      depois.indexOf(':espadaGoblin:') >= 0,
+      'T12.6: o kind do despojo não aparece em I[...] — ' + depois
+    ).toBe(true);
+
+    /* E o que NÃO pode aparecer: a poção não é material e não entra na bolsa. */
+    expect(depois.indexOf('B[') >= 0 && depois.indexOf('potion0') === -1,
+      'T12.6: contador de poção vazou para a bolsa').toBe(true);
   }, LENTO);
 });

@@ -19,9 +19,11 @@ import type {
   Game,
   GameMap,
   Item,
+  ItemKind,
   LogClass,
   LogEntry,
   Player,
+  Rng,
   Room
 } from './types';
 import { Tile } from './types';
@@ -39,7 +41,20 @@ import {
 import { generate, inBounds, isWalkable } from './mapgen';
 import { computeFov } from './fov';
 import { computeDijkstra } from './dijkstra';
-import { ARCHETYPES, POTION_HEAL, populate, processEnemies, rollDamage } from './entities';
+import type { ItemDef } from './entities';
+import {
+  ARCHETYPES,
+  ITEM_KINDS,
+  ITENS,
+  POTION_HEAL,
+  ehMaterial,
+  makeItem,
+  normalizeItemKind,
+  populate,
+  processEnemies,
+  rollDamage,
+  sortearDespojos
+} from './entities';
 import {
   base64ToBytes,
   clear as apagarArmazenamento,
@@ -134,6 +149,24 @@ function artigoMaiusculo(ent: { kind: string }): string {
   return feminino(ent) ? 'A' : 'O';
 }
 
+/**
+ * Artigo INDEFINIDO do item ('um frasco', 'uma orelha'). O gênero é do item,
+ * não de quem o largou — por isso vem de `ITENS[kind].fem` e não do arquétipo.
+ */
+function artigoItem(def: ItemDef): string {
+  return def.fem ? 'uma' : 'um';
+}
+
+/**
+ * Quantidade por extenso do jeito que o registro fala: uma unidade sai com
+ * artigo e no singular ('uma poção'), duas ou mais saem com o número e no
+ * plural ('2 frascos de gosma'). É o que mantém a mensagem de poção BYTE A
+ * BYTE igual à de antes dos despojos.
+ */
+function quantiaDeItem(def: ItemDef, n: number): string {
+  return n === 1 ? artigoItem(def) + ' ' + def.nome : n + ' ' + def.plural;
+}
+
 function tileEm(map: GameMap, x: number, y: number): number {
   if (!inBounds(map, x, y)) return Tile.Wall;
   return map.tiles[idx(map.w, x, y)];
@@ -168,12 +201,33 @@ function enemyAt(game: Game, x: number, y: number): Enemy | null {
   return null;
 }
 
-function itemIndexAt(game: Game, x: number, y: number): number {
-  const list = game.items;
-  for (let i = 0; i < list.length; i++) {
-    if (list[i].x === x && list[i].y === y) return i;
+/**
+ * Primeiro id livre acima do maior id de item da lista.
+ *
+ * É a semente de `game.proxItemId` (§ tipo `Game`): `populate` numera de 1 a N,
+ * então o primeiro despojo da partida sai com N+1 e nunca colide com o que já
+ * está no chão. Vale também como reconstrução de um save antigo, que não
+ * gravava o contador.
+ */
+function proximoIdDeItem(itens: Item[]): number {
+  let maior = 0;
+  for (let i = 0; i < itens.length; i++) {
+    const it = itens[i];
+    if (it && it.id > maior) maior = it.id;
   }
-  return -1;
+  return maior + 1;
+}
+
+/**
+ * Stream de despojos, com o mesmo fallback determinístico de `combatRng` em
+ * entities.ts: o contrato é que ele venha de `createState`, mas um `Game`
+ * montado à mão (teste, ferramenta) não pode explodir por causa disso.
+ */
+function lootRng(game: Game): Rng {
+  if (!game.rngLoot) {
+    game.rngLoot = makeRng(hash32(String(game.seedStr) + '#loot' + game.depth));
+  }
+  return game.rngLoot;
 }
 
 // --------------------------------------------------------------------------
@@ -311,11 +365,15 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
       potions: PLAYER_BASE.potions,
       level: 1,
       xp: 0,
+      // Bolsa de materiais vazia — sem limite de capacidade nesta fase.
+      bag: {},
       // §5.1 do docs/PERSONAGEM.md — cosmético; nunca entra em `snapshot()`.
       facing: DEFAULT_FACING
     },
     enemies: pop.enemies,
     items: pop.items,
+    // Continua a numeração de `populate` (1..N) — o primeiro despojo é N+1.
+    proxItemId: proximoIdDeItem(pop.items),
     // O vanilla começava com `dmap: null`; aqui o campo é tipado como Int32Array,
     // então parte vazio e `refreshDerived` o preenche antes de qualquer leitura.
     dmap: new Int32Array(0),
@@ -324,6 +382,9 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
     visible: new Set<number>(),
     explored: new Uint8Array(map.w * map.h),
     rngCombat: makeRng(hash32(seed + '#combat' + d)),
+    // Stream SEPARADO do combate (ver `Game.rngLoot`): misturar os dois faria o
+    // dano do próximo golpe depender da sorte do despojo anterior.
+    rngLoot: makeRng(hash32(seed + '#loot' + d)),
     log: [],
     stats: {
       turns: 0,
@@ -391,6 +452,30 @@ function removerInimigo(game: Game, ent: Enemy): void {
   }
 }
 
+/**
+ * Larga os despojos do abate NO TILE onde o monstro morreu.
+ *
+ * Regras da fase 1:
+ *  · a tabela é rolada em `sortearDespojos` (entities.ts), que consome sempre o
+ *    mesmo número de valores de `rngLoot` — a sorte do despojo não desloca o
+ *    stream de ninguém;
+ *  · os ids saem de `game.proxItemId`, na ordem da tabela de despojos, e são
+ *    monotônicos pela partida inteira;
+ *  · itens EMPILHAM: dois despojos do mesmo abate (ou de dois abates no mesmo
+ *    tile) ficam ali, um sobre o outro. Nada é empurrado para tile vizinho —
+ *    deslocar item mudaria a leitura do mapa por um detalhe de arrumação, e
+ *    `pegarItem` recolhe a pilha inteira num passo só.
+ */
+function largarDespojos(game: Game, ent: Enemy): void {
+  const sorteados = sortearDespojos(lootRng(game), ent.kind);
+  for (let i = 0; i < sorteados.length; i++) {
+    const def = ITENS[sorteados[i]];
+    game.items.push(makeItem(game.proxItemId++, ent.x, ent.y, def.key));
+    logMsg(game, artigoMaiusculo(ent) + ' ' + nomeDe(ent) + ' larga ' +
+      artigoItem(def) + ' ' + def.nome + '.', 'bom');
+  }
+}
+
 function atacarInimigo(game: Game, ent: Enemy): void {
   const dmg = rollDamage(game.rngCombat, game.player.atk);
   ent.hp -= dmg;
@@ -413,6 +498,9 @@ function atacarInimigo(game: Game, ent: Enemy): void {
     if (game.abatesRecentes.length > 32) game.abatesRecentes.shift();
     logMsg(game, 'Você abate ' + artigo(ent) + ' ' + nome + ' com ' + dmg + ' de dano' +
       (xp > 0 ? ' (+' + xp + ' xp).' : ' (sem xp — monstro muito abaixo do seu nível).'), 'bom');
+    // Despojo ANTES do XP: o abate e o que caiu no chão são a mesma cena, e a
+    // subida de nível (que pode render várias linhas) fecha o bloco.
+    largarDespojos(game, ent);
     ganharXp(game, xp);
   } else {
     logMsg(game, 'Você atinge ' + artigo(ent) + ' ' + nome + ' por ' + dmg +
@@ -420,16 +508,61 @@ function atacarInimigo(game: Game, ent: Enemy): void {
   }
 }
 
+/**
+ * Recolhe TUDO que estiver no tile do jogador, numa única ação.
+ *
+ * Destino por tipo: `'potion'` continua indo para o contador `player.potions`
+ * (contrato antigo, R7) e material vai para `player.bag`. Uma linha de registro
+ * por TIPO recolhido — não por item —, na ordem fixa de `ITEM_KINDS`, para que
+ * pisar numa pilha de cinco coisas não vire cinco linhas iguais no registro.
+ *
+ * `explicito` é o comando manual de recolher: só ele avisa quando não há nada
+ * ali (andar sobre tile vazio tem de ser silencioso).
+ */
 function pegarItem(game: Game, explicito: boolean): boolean {
   const p = game.player;
-  const i = itemIndexAt(game, p.x, p.y);
-  if (i < 0) {
+  const restantes: Item[] = [];
+  /* Contagem por tipo. Aberto (não por `ITEM_KINDS`) porque só as chaves que
+   * apareceram interessam; a ORDEM de leitura é que vem da tabela, adiante. */
+  const contagem: Partial<Record<ItemKind, number>> = {};
+  let total = 0;
+
+  for (let i = 0; i < game.items.length; i++) {
+    const it = game.items[i];
+    if (!it) continue;
+    if (it.x !== p.x || it.y !== p.y) {
+      restantes.push(it);
+      continue;
+    }
+    const kind = normalizeItemKind(it.kind);
+    contagem[kind] = (contagem[kind] || 0) + 1;
+    total++;
+  }
+
+  if (total === 0) {
     if (explicito) logMsg(game, 'Não há nada para recolher aqui.', 'aviso');
     return false;
   }
-  game.items.splice(i, 1);
-  p.potions += 1;
-  logMsg(game, 'Você recolhe uma poção (' + p.potions + ' no total).', 'bom');
+  game.items = restantes;
+
+  for (let k = 0; k < ITEM_KINDS.length; k++) {
+    const kind = ITEM_KINDS[k];
+    const n = contagem[kind] || 0;
+    if (n <= 0) continue;
+    const def = ITENS[kind];
+    let acumulado: number;
+    if (ehMaterial(kind)) {
+      acumulado = (p.bag[kind] || 0) + n;
+      p.bag[kind] = acumulado;
+    } else {
+      /* Hoje o único não-material é a poção; se outro consumível surgir, ele
+       * ganha o seu ramo aqui em vez de cair no contador errado em silêncio. */
+      p.potions += n;
+      acumulado = p.potions;
+    }
+    logMsg(game, 'Você recolhe ' + quantiaDeItem(def, n) +
+      ' (' + acumulado + ' no total).', 'bom');
+  }
   return true;
 }
 
@@ -716,7 +849,12 @@ export function descend(g: Game): void {
   g.map = map;
   g.enemies = pop.enemies;
   g.items = pop.items;
+  // Andar novo, numeração de item nova: `populate` voltou a contar do 1.
+  g.proxItemId = proximoIdDeItem(pop.items);
   g.rngCombat = makeRng(hash32(g.seedStr + '#combat' + depth));
+  // Sorte de despojo é por ANDAR, no mesmo padrão do combate. A BOLSA, não:
+  // ela é do jogador e atravessa os níveis (nada aqui toca em `p.bag`).
+  g.rngLoot = makeRng(hash32(g.seedStr + '#loot' + depth));
   g.explored = new Uint8Array(map.w * map.h);
   g.visible = new Set<number>();
   g.dmap = new Int32Array(0);
@@ -755,13 +893,35 @@ function checksumTiles(tiles: Uint8Array): string {
 
 /**
  * Resumo textual determinístico do estado. O golden test compara string com
- * string: o formato tem de sair BYTE A BYTE igual ao do vanilla.
+ * string: o formato tem de sair estável byte a byte.
+ *
+ * FORMATO v2 (a fase 1 dos despojos):
+ *
+ *   v2|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50
+ *     |E[1:linker:9:14:20|2:chaser:12:18:9]
+ *     |I[3:potion:11:7|7:orelhaGoblin:18:9|8:espadaGoblin:18:9]
+ *     |B[gosma2|orelhaGoblin1]
+ *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364|map=1f3ac2b9
+ *
+ * O que mudou do v1, e por quê:
+ *  · `I[...]` ganhou o `kind` entre o id e as coordenadas (`id:kind:x:y`):
+ *    sem ele o oracle não distingue uma orelha de uma clava caída no mesmo
+ *    tile, que é exatamente o que esta fase introduziu;
+ *  · `B[...]` é a BOLSA, na ordem fixa de `ITEM_KINDS` (nunca `Object.keys`),
+ *    só com os materiais de contagem positiva — bolsa vazia sai como `B[]`;
+ *  · `rngL=` é o estado de `rngLoot`. Ele entra porque duas partidas com o
+ *    mesmo chão e a mesma bolsa podem ter streams de loot em posições
+ *    diferentes, e isso é divergência de estado que o oracle tem de pegar.
+ *
+ * A etiqueta subiu de `v1` para `v2` de propósito: o golden gravado com o
+ * formato antigo DEVE reprovar, e reprovar dizendo qual é o problema (formato
+ * novo) em vez de fingir divergência de simulação.
  */
 export function snapshot(game: Game): string {
   if (!game) return '';
   const p = game.player;
   const partes: string[] = [];
-  partes.push('v1');
+  partes.push('v2');
   partes.push('seed=' + game.seedStr);
   partes.push('d=' + game.depth);
   partes.push('t=' + game.turn);
@@ -778,18 +938,31 @@ export function snapshot(game: Game): string {
   }
   partes.push('E[' + buf.join('|') + ']');
 
+  /* Itens ordenados por id — que é único e monotônico, então a pilha de um
+   * mesmo tile sai sempre na ordem em que foi criada. */
   const itens = game.items.slice().sort((a, b) => a.id - b.id);
   buf = [];
   for (i = 0; i < itens.length; i++) {
     const it = itens[i];
-    buf.push(it.id + ':' + it.x + ':' + it.y);
+    buf.push(it.id + ':' + it.kind + ':' + it.x + ':' + it.y);
   }
   partes.push('I[' + buf.join('|') + ']');
+
+  /* Bolsa na ordem da TABELA, jamais na ordem de inserção do objeto. */
+  buf = [];
+  for (i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const n = p.bag[kind] || 0;
+    if (n > 0) buf.push(kind + n);
+  }
+  partes.push('B[' + buf.join('|') + ']');
 
   const s = game.stats;
   partes.push('S=' + s.turns + ',' + s.kills + ',' + s.dmgDealt + ',' + s.dmgTaken +
     ',' + s.itemsUsed + ',' + s.deepest + ',' + s.explorePct);
   partes.push('rng=' + (isNum(game.rngCombat.s) ? (game.rngCombat.s >>> 0) : 0));
+  partes.push('rngL=' + (game.rngLoot && isNum(game.rngLoot.s) ? (game.rngLoot.s >>> 0) : 0));
   partes.push('map=' + checksumTiles(game.map.tiles));
   return partes.join('|');
 }
@@ -874,19 +1047,48 @@ function reconstruirInimigo(bruto: unknown, depth: number, map: GameMap): Enemy 
   };
 }
 
+/**
+ * Reconstrói um item do save.
+ *
+ * `kind` desconhecido ou ausente vira `'potion'` (`normalizeItemKind`): antes
+ * dos despojos todo item era poção, então é assim que um save legado tem de ser
+ * lido — e é assim que um save corrompido degrada em vez de derrubar a run.
+ * `heal` só é respeitado para a poção; material nasce com 0, dê no que der o
+ * que estiver escrito no arquivo.
+ */
 function reconstruirItem(bruto: unknown, map: GameMap): Item | null {
   const o = objetoDe(bruto);
   if (!o) return null;
   const x = intOr(o.x, -1);
   const y = intOr(o.y, -1);
   if (!isWalkable(map, x, y)) return null;
+  const kind = normalizeItemKind(o.kind);
   return {
     id: intOr(o.id, 0),
-    kind: 'potion',
+    kind: kind,
     x: x,
     y: y,
-    heal: intOr(o.heal, POTION_HEAL)
+    heal: kind === 'potion' ? intOr(o.heal, POTION_HEAL) : 0
   };
+}
+
+/**
+ * Reconstrói a bolsa do save. Lê apenas as chaves conhecidas, na ordem da
+ * tabela, e apenas contagens inteiras positivas: chave desconhecida, valor
+ * negativo, `NaN` ou texto são descartados sem cerimônia. Save antigo (sem
+ * `bag`) devolve bolsa vazia — degradar, nunca recusar.
+ */
+function reconstruirBolsa(bruto: unknown): Player['bag'] {
+  const bolsa: Player['bag'] = {};
+  const o = objetoDe(bruto);
+  if (!o) return bolsa;
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const n = intOr(o[kind], 0);
+    if (n > 0) bolsa[kind] = n;
+  }
+  return bolsa;
 }
 
 /**
@@ -946,6 +1148,8 @@ export function restore(dados: unknown): Game | null {
   p.potions = Math.max(0, intOr(sp.potions, p.potions));
   p.level = Math.max(1, intOr(sp.level, 1));
   p.xp = Math.max(0, intOr(sp.xp, 0));
+  // A bolsa atravessa a retomada como atravessa a descida: é do jogador.
+  p.bag = reconstruirBolsa(sp.bag);
   // Save gravado antes desta fase não tem `facing`: `normalizeFacing` devolve o
   // padrão (sul) em vez de recusar o save. Campo cosmético não invalida run.
   p.facing = normalizeFacing(sp.facing);
@@ -986,6 +1190,12 @@ export function restore(dados: unknown): Game | null {
     game.items = itens;
   }
 
+  /* Contador de ids de item. O save é a fonte preferida; o `max(id)+1` dos
+   * itens restaurados é o PISO, e vale sozinho num save antigo que não gravava
+   * o campo. Tomar o máximo dos dois é o que garante que um contador mentiroso
+   * (save editado, truncado, de outra versão) não produza id repetido no chão. */
+  game.proxItemId = Math.max(intOr(obj.proxItemId, 0), proximoIdDeItem(game.items));
+
   // Exploração
   decodificarExplored(game.explored, obj.explored);
 
@@ -1008,6 +1218,15 @@ export function restore(dados: unknown): Game | null {
   const comoObj2 = objetoDe(s);
   if (comoObj2 && isNum(comoObj2.s)) s = comoObj2.s;
   if (isNum(s) && game.rngCombat) game.rngCombat.s = s >>> 0;
+
+  // Estado do RNG de despojos. Save antigo não o tem: fica o stream que
+  // `createState` acabou de semear com a seed+depth — determinístico, só não
+  // é a continuação exata daquela partida. Bolsa e chão já foram restaurados,
+  // então o pior caso é a próxima sorte de drop ser "de um jogo novo".
+  let sl: unknown = obj.rngLoot;
+  const lootObj = objetoDe(sl);
+  if (lootObj && isNum(lootObj.s)) sl = lootObj.s;
+  if (isNum(sl) && game.rngLoot) game.rngLoot.s = sl >>> 0;
 
   game.emTurno = false;
   game.causeKind = '';

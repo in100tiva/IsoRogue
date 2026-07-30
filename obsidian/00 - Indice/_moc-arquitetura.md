@@ -49,10 +49,15 @@ se paga por isso.
   como o React o observa por assinatura de versão, e a armadilha do seletor que derruba a
   aplicação em loop de render.
 - [[ADR-003-golden-test-como-oracle-da-migracao]] — congelar o vanilla em vez de apagá-lo.
-  `legacy/` não é código morto: é a régua.
+  `legacy/` não é código morto: é a régua. **Parcialmente superado pelo ADR-008** — a régua
+  cumpriu o papel e o oracle mudou de fonte.
 - [[ADR-005-facing-cosmetico-invisivel-ao-oracle]] — o precedente que permite adicionar
   feature cosmética ao engine sem invalidar o oracle. Leia antes de propor o próximo campo
   novo no `Player`.
+- [[ADR-008-oracle-derivado-do-engine]] — quando os despojos exigiriam reimplementar um
+  sistema inteiro dentro do HTML congelado, o oracle passou a ser gerado do próprio engine e
+  virou baseline de REGRESSÃO. O que se perde (checagem cruzada entre duas implementações) e
+  o que sobrou dela estão registrados lá.
 
 Os ADRs de arte — [[ADR-004-personagem-por-codigo]], [[ADR-006-atlas-forjado-em-runtime]] e
 [[ADR-007-monstro-e-aparencia-nao-arquetipo]] — estão indexados em [[_moc-render-e-arte]], mas
