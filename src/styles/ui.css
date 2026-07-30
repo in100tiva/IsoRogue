@@ -235,6 +235,29 @@
 
 .valor-otimo { color: var(--verde); }
 
+/* ------------------------------------------------------------------ bolsa */
+
+/* A bolsa reusa `.tabela` / `.tabela-linha` do estado do mapa — mesma leitura
+   de rótulo à esquerda e número tabular à direita. Duas diferenças, ambas
+   porque aqui o texto da esquerda é CONTEÚDO e não rótulo:
+
+   - o nome do item sobe de `--fraco` para `--texto`: numa tabela de estatística
+     o que importa é o número, na bolsa é o que se carrega;
+   - o preço unitário entra numa segunda linha, no cinza dos rótulos e um ponto
+     menor, para dizer "isto é secundário" sem sair da paleta — e para não
+     disputar a mesma linha com a quantidade. */
+
+.bolsa-nome { color: var(--texto); }
+
+.bolsa-preco {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--fraco);
+}
+
 /* --------------------------------------------------------------- registro */
 
 .bloco-registro { padding-bottom: 16px; }

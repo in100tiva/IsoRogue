@@ -26,7 +26,9 @@ import type {
   Game,
   GameMap,
   Item,
+  ItemKind,
   LogClass,
+  MaterialKind,
   Point,
   Population,
   Rng,
@@ -95,6 +97,201 @@ export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
 
 /** Ordem fixa de iteração dos arquétipos — nunca use Object.keys na lógica. */
 export const KINDS: ArchetypeKey[] = ['chaser', 'sentinel', 'linker'];
+
+/* ------------------------------------------------------------------ *
+ * Itens — a tabela dos despojos (fase 1)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Ficha de um tipo de item. Fica ao lado de `ARCHETYPES` porque é a mesma
+ * natureza de dado: tabela fixa, lida por todo mundo, escrita por ninguém.
+ *
+ * `fem` existe pela mesma razão que o `fem` do arquétipo — concordância de
+ * gênero em pt-BR no registro. O item tem gênero PRÓPRIO, independente do
+ * monstro que o largou: 'O Vinculador larga UM frasco de gosma', 'O
+ * Perseguidor larga UMA orelha de goblin'.
+ *
+ * `valor` é moeda e NÃO é usado por nada nesta fase — a venda é a fase 2. Está
+ * aqui porque o número é decisão de design (foi dado junto com a tabela) e
+ * espalhá-lo depois custaria mais do que guardá-lo agora.
+ */
+export interface ItemDef {
+  key: ItemKind;
+  /** Nome no singular, minúsculo, para compor frases. */
+  nome: string;
+  plural: string;
+  /** Gênero gramatical do NOME (não do monstro): 'uma orelha', 'um pé'. */
+  fem: boolean;
+  /** Preço de referência em moedas. Reservado para a fase 2 (venda). */
+  valor: number;
+  /** `true` = vai para `player.bag`; `false` = tem regra própria (a poção). */
+  material: boolean;
+  desc: string;
+}
+
+/**
+ * Tabela canônica dos itens.
+ *
+ * A ORDEM desta tabela é contrato: `ITEM_KINDS` a espelha e é ela que ordena a
+ * bolsa no `snapshot()`, no save e nas linhas de registro da coleta. Nunca leia
+ * a bolsa por `Object.keys` — a ordem de um objeto aberto é acidental, e o
+ * oracle não perdoa acidente.
+ */
+export const ITENS: Record<ItemKind, ItemDef> = {
+  potion: {
+    key: 'potion',
+    nome: 'poção',
+    plural: 'poções',
+    fem: true,
+    /* Sem preço declarado: a poção é consumível e a fase 2 decide se o
+     * mercador a compra. Zero aqui significa "não precificada", não "de graça". */
+    valor: 0,
+    material: false,
+    desc: 'Frasco de cura. Restaura vida na hora em que é bebido.'
+  },
+  gosma: {
+    key: 'gosma',
+    nome: 'frasco de gosma',
+    plural: 'frascos de gosma',
+    fem: false,
+    valor: 3,
+    material: true,
+    desc: 'Gosma de Slime raspada do chão. Sozinha não vale quase nada.'
+  },
+  orelhaGoblin: {
+    key: 'orelhaGoblin',
+    nome: 'orelha de goblin',
+    plural: 'orelhas de goblin',
+    fem: true,
+    valor: 5,
+    material: true,
+    desc: 'A prova de abate mais comum da masmorra — e a mais fácil de vender.'
+  },
+  espadaGoblin: {
+    key: 'espadaGoblin',
+    nome: 'cimitarra de goblin',
+    plural: 'cimitarras de goblin',
+    fem: true,
+    valor: 18,
+    material: true,
+    desc: 'Lâmina larga e mal-afiada. Vale pelo aço, não pelo corte.'
+  },
+  peOgro: {
+    key: 'peOgro',
+    nome: 'pé de ogro',
+    plural: 'pés de ogro',
+    fem: false,
+    valor: 12,
+    material: true,
+    desc: 'Pesado, malcheiroso e cotado no mercado de curiosidades.'
+  },
+  clavaOgro: {
+    key: 'clavaOgro',
+    /* O render chama a arma do Ogro de "marreta" (docs/BESTIARIO.md §12); a
+     * chave do item nasceu `clavaOgro` no desenho da fase 1, e chave é
+     * contrato — o nome exibido acompanha a chave para os dois não brigarem. */
+    nome: 'clava de ogro',
+    plural: 'clavas de ogro',
+    fem: true,
+    valor: 40,
+    material: true,
+    desc: 'Tronco cravejado que um humano mal levanta. O despojo mais caro.'
+  }
+};
+
+/**
+ * Ordem fixa de iteração dos itens — o análogo de `KINDS` para a tabela acima.
+ * Toda varredura de bolsa (snapshot, save, registro) passa por aqui.
+ */
+export const ITEM_KINDS: readonly ItemKind[] = [
+  'potion',
+  'gosma',
+  'orelhaGoblin',
+  'espadaGoblin',
+  'peOgro',
+  'clavaOgro'
+];
+
+/** `true` para tudo que vai para a bolsa — hoje, tudo menos a poção. */
+export function ehMaterial(kind: ItemKind): kind is MaterialKind {
+  const def = ITENS[kind];
+  return !!def && def.material;
+}
+
+/**
+ * Normaliza um `kind` vindo de fora (save antigo, JSON de terceiro).
+ * Desconhecido ou ausente vira `'potion'`: antes desta fase TODO item era
+ * poção, então essa é a leitura correta de um save legado — e degradar é
+ * sempre melhor do que recusar a run (mesmo espírito de `normalizeFacing`).
+ */
+export function normalizeItemKind(v: unknown): ItemKind {
+  if (typeof v !== 'string') return 'potion';
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    if (ITEM_KINDS[i] === v) return ITEM_KINDS[i];
+  }
+  return 'potion';
+}
+
+/* ------------------------------------------------------------------ *
+ * Despojos — o que cada arquétipo larga ao morrer
+ * ------------------------------------------------------------------ */
+
+/** Uma linha da tabela de despojos: um item e a chance INDEPENDENTE dele. */
+export interface DropEntry {
+  item: MaterialKind;
+  /** Probabilidade em [0,1]. Sorteio próprio, não é fatia de um bolo. */
+  chance: number;
+}
+
+/**
+ * Tabela de despojos por arquétipo (Slime/Goblin/Ogro = linker/chaser/sentinel).
+ *
+ * Cada linha é um sorteio INDEPENDENTE: um Goblin pode largar orelha e
+ * cimitarra no mesmo abate, como pode não largar nada. As chances NÃO somam 1 e
+ * não devem somar — não é uma distribuição, são moedas separadas.
+ *
+ * A ORDEM das linhas é desempate determinístico e portanto CONGELADA: ela fixa
+ * (a) a ordem em que os sorteios consomem `rngLoot` e (b) a ordem em que os ids
+ * dos itens são atribuídos quando dois caem no mesmo abate. Reordenar esta
+ * tabela muda todas as partidas salvas, exatamente como reordenar `DIRS8`.
+ */
+export const DROPS: Record<ArchetypeKey, ReadonlyArray<DropEntry>> = {
+  /* Slime */
+  linker: [
+    { item: 'gosma', chance: 0.70 }
+  ],
+  /* Goblin */
+  chaser: [
+    { item: 'orelhaGoblin', chance: 0.50 },
+    { item: 'espadaGoblin', chance: 0.15 }
+  ],
+  /* Ogro */
+  sentinel: [
+    { item: 'peOgro', chance: 0.45 },
+    { item: 'clavaOgro', chance: 0.20 }
+  ]
+};
+
+/**
+ * Rola a tabela de despojos de um arquétipo. Devolve os itens sorteados na
+ * ORDEM DA TABELA — a lista pode sair vazia, com um ou com todos.
+ *
+ * Consumo do stream: EXATAMENTE `DROPS[kind].length` valores, sempre, dê no que
+ * der. Isso vale porque `rng.chance` consome um u32 mesmo quando o resultado é
+ * previsível (contrato do rng.ts). É essa propriedade que faz a posição do
+ * stream de loot depender apenas de QUAIS monstros morreram, nunca de O QUE
+ * caiu — um invariante barato que mantém o determinismo estável a rebalanceio
+ * de chance.
+ */
+export function sortearDespojos(rng: Rng, kind: ArchetypeKey): MaterialKind[] {
+  const tabela = DROPS[kind];
+  const out: MaterialKind[] = [];
+  if (!tabela) return out;
+  for (let i = 0; i < tabela.length; i++) {
+    if (rng.chance(tabela[i].chance)) out.push(tabela[i].item);
+  }
+  return out;
+}
 
 /** Rótulos pt-BR dos estados, para o tooltip da UI. */
 export const STATE_LABEL: Record<EnemyState, string> = {
@@ -586,13 +783,22 @@ export function makeEnemy(
 // nunca mente sobre o que a poção faz.
 export const POTION_HEAL = 12;
 
-export function makeItem(id: number, x: number, y: number): Item {
+/**
+ * Cria um item no chão. `kind` é o ÚLTIMO parâmetro e tem padrão `'potion'`
+ * para que as chamadas antigas — `populate`, que só semeia poções — continuem
+ * lendo exatamente como liam.
+ *
+ * `heal` só faz sentido para a poção; material nasce com 0 (ele não cura, e um
+ * número mentiroso ali acabaria virando cura no dia em que alguém confiasse no
+ * campo em vez do `kind`).
+ */
+export function makeItem(id: number, x: number, y: number, kind: ItemKind = 'potion'): Item {
   return {
     id: id,
-    kind: 'potion',
+    kind: kind,
     x: x,
     y: y,
-    heal: POTION_HEAL
+    heal: kind === 'potion' ? POTION_HEAL : 0
   };
 }
 
@@ -857,6 +1063,13 @@ export function enemyAt(game: Game, x: number, y: number): Enemy | null {
   return null;
 }
 
+/**
+ * Primeiro item do tile na ordem de `game.items`.
+ *
+ * Com os despojos os itens EMPILHAM (vários no mesmo tile), então isto é uma
+ * sonda de "há algo aqui?", não a lista completa — quem recolhe é `pegarItem`
+ * em game.ts, que varre todos.
+ */
 export function itemAt(game: Game, x: number, y: number): Item | null {
   for (let i = 0; i < game.items.length; i++) {
     const it = game.items[i];

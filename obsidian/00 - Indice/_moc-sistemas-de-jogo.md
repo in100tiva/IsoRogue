@@ -30,6 +30,9 @@ por número, não por interface: um limiar alterado aqui reprova o golden lá.
 
 ## Quem se move e como
 
+- [[despojos-e-bolsa]] — o que cai quando o monstro morre, com que chance, em que tile, e
+  onde fica guardado. O stream próprio de RNG que impede a sorte do despojo de mexer no
+  dano do turno seguinte, e a bolsa que atravessa a descida.
 - [[arquetipos-de-inimigo]] — Perseguidor, Brutamontes e Vinculador numa tabela, sem herança.
   Tem a resolução determinística de conflito de movimento e o spawn proporcional à área por
   *largest remainder*.

@@ -15,6 +15,8 @@
     "typecheck:tools": "tsc --noEmit -p tsconfig.tools.json",
     "lint": "node tools/check-boundaries.mjs",
     "golden": "node tools/gen-golden.mjs",
+    "golden:engine": "node tools/gen-golden-engine.mjs",
+    "golden:engine:verificar": "node tools/gen-golden-engine.mjs --verificar",
     "preview:personagem": "node tools/preview-personagem.mjs",
     "preview:goblin": "node tools/preview-personagem.mjs goblin",
     "preview:slime": "node tools/preview-personagem.mjs slime",

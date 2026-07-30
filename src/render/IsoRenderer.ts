@@ -54,7 +54,9 @@
 import { CONFIG, DEFAULT_FACING, cheb, dirIndex, normalizeFacing } from '../engine/core';
 import { DIJKSTRA_INF } from '../engine/dijkstra';
 import { checkSymmetry, computeFov } from '../engine/fov';
-import type { ArchetypeKey, Enemy, Game, GameMap, Item, Player } from '../engine/types';
+import type {
+  ArchetypeKey, Enemy, Game, GameMap, Item, ItemKind, MaterialKind, Player
+} from '../engine/types';
 import {
   buildLuts,
   COL_BG,
@@ -76,7 +78,7 @@ import {
   FONT_MONO,
   LEVELS
 } from './palette';
-import type { Luts } from './palette';
+import type { Luts, ShadeKey } from './palette';
 import {
   MODELO_ESPADA,
   MODELO_GUERREIRO,
@@ -132,6 +134,28 @@ import {
   RAMPAS_XP,
   modeloDeXp
 } from './characters/xpTexto';
+import {
+  CORES_EMISSIVAS_GOSMA,
+  MODELO_GOSMA,
+  PALETA_GOSMA,
+  POSE_PARADA_GOSMA,
+  RAMPAS_GOSMA,
+  RAMPA_DA_COR_GOSMA
+} from './characters/itemGosma';
+import {
+  MODELO_ORELHA_GOBLIN,
+  PALETA_ORELHA_GOBLIN,
+  POSE_PARADA_ORELHA_GOBLIN,
+  RAMPAS_ORELHA_GOBLIN,
+  RAMPA_DA_COR_ORELHA_GOBLIN
+} from './characters/itemOrelhaGoblin';
+import {
+  MODELO_PE_OGRO,
+  PALETA_PE_OGRO,
+  POSE_PARADA_PE_OGRO,
+  RAMPAS_PE_OGRO,
+  RAMPA_DA_COR_PE_OGRO
+} from './characters/itemPeOgro';
 import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -478,6 +502,179 @@ interface FlutuanteXp {
   t: number;
 }
 
+/* ------------------------------------------------------------------ *
+ * OS DESPOJOS NO CHÃO (fase 1 dos itens)
+ *
+ * A mesma mecânica de `RETRATOS`, aplicada a coisa morta: cada MATERIAL tem
+ * uma ficha (rig + forja), o atlas é forjado sob demanda e o quadro sai da
+ * coluna ('parado', 0) — item não anda, não respira e não ataca, então as
+ * outras 8 colunas do atlas existem só porque a forja é genérica.
+ *
+ * O que NÃO entra nesta tabela: a poção. Ela é contrato antigo (R7), continua
+ * desenhada pelo caminho geométrico de sempre (`drawPotion`, byte a byte o do
+ * vanilla) e é justamente por isso que a tabela é indexada por `MaterialKind`
+ * e não por `ItemKind` — o compilador recusa `FICHAS_DE_ITEM.potion` e recusa
+ * também esquecer um material novo, que é o erro que dá para prevenir de graça.
+ *
+ * Duas fichas reaproveitam rig E forja das armas da cinemática de morte
+ * (`FORJA_CIMITARRA`, `FORJA_MARRETA`): o despojo "cimitarra de goblin" É a
+ * cimitarra que o goblin largou. Como a chave do cache do forge é (modelo,
+ * opções) e as duas constantes são as MESMAS, o atlas é literalmente o mesmo
+ * objeto — a arma no chão não custa uma segunda forja.
+ *
+ * As duas armas são desenhadas EM PÉ, na mesma âncora dos outros despojos, e
+ * NÃO deitadas como o prop da §14. É deliberado: a arma da morte está caída no
+ * chão (é rastro de um acontecimento), a arma-item está PARA SER PEGA — em pé,
+ * com o bob suave, ela lê como coisa que se recolhe, que é a convenção do
+ * gênero. O custo de deitá-la seria um segundo canal na tabela (um ângulo por
+ * ficha) para dizer o que a leitura já diz.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Forjas dos rigs próprios de despojo. Constante de módulo pelos mesmos dois
+ * motivos de sempre (o forge memoiza por (modelo, opções) — objeto novo a cada
+ * chamada gera chave nova e reforja tudo; e a cor é propriedade do rig).
+ *
+ * O `repouso` vem do próprio rig e é VAZIO nos três: um frasco não tem membro
+ * para articular. Está aqui, e não omitido, porque é assim que o arquivo do
+ * item continua sendo a fonte da verdade — se um dia um despojo ganhar pose, a
+ * mudança é lá e esta linha já a colhe.
+ */
+const FORJA_GOSMA: OpcoesForja = {
+  paleta: PALETA_GOSMA,
+  rampas: RAMPAS_GOSMA,
+  rampaDaCor: RAMPA_DA_COR_GOSMA,
+  repouso: POSE_PARADA_GOSMA,
+  /* O ponto âmbar do frasco é EMISSIVO (§1.1): é ele que faz o despojo ser
+   * avistado num corredor escuro. Sem isso o item cai no chão e desaparece. */
+  emissivas: CORES_EMISSIVAS_GOSMA
+};
+
+const FORJA_ORELHA_GOBLIN: OpcoesForja = {
+  paleta: PALETA_ORELHA_GOBLIN,
+  rampas: RAMPAS_ORELHA_GOBLIN,
+  rampaDaCor: RAMPA_DA_COR_ORELHA_GOBLIN,
+  repouso: POSE_PARADA_ORELHA_GOBLIN
+};
+
+const FORJA_PE_OGRO: OpcoesForja = {
+  paleta: PALETA_PE_OGRO,
+  rampas: RAMPAS_PE_OGRO,
+  rampaDaCor: RAMPA_DA_COR_PE_OGRO,
+  repouso: POSE_PARADA_PE_OGRO
+};
+
+/**
+ * ══ PONTO DE EXTENSÃO: como um despojo ganha rosto ══
+ *
+ * `MaterialKind` → ficha do rig. Um material novo em `ItemKind` (engine) deixa
+ * ESTA tabela vermelha até ganhar a sua linha — de propósito: um item sem
+ * ficha sairia como bolha geométrica em silêncio, e ninguém descobriria antes
+ * do jogador. O caminho é o mesmo de `RETRATOS`: escreva
+ * `./characters/item<Coisa>.ts`, declare a `FORJA_<COISA>` acima, some uma
+ * linha aqui. Nada mais neste arquivo muda.
+ */
+const FICHAS_DE_ITEM: Readonly<Record<MaterialKind, FichaDeSprite>> = {
+  gosma: { modelo: MODELO_GOSMA, forja: FORJA_GOSMA },
+  orelhaGoblin: { modelo: MODELO_ORELHA_GOBLIN, forja: FORJA_ORELHA_GOBLIN },
+  /* A arma que caiu da mão do goblin — mesmo rig e mesma forja da §14. */
+  espadaGoblin: { modelo: MODELO_CIMITARRA, forja: FORJA_CIMITARRA },
+  peOgro: { modelo: MODELO_PE_OGRO, forja: FORJA_PE_OGRO },
+  clavaOgro: { modelo: MODELO_MARRETA, forja: FORJA_MARRETA }
+};
+
+/**
+ * Cor do desenho de RESERVA de cada despojo — o que aparece sem atlas (jsdom,
+ * Node, qualquer ambiente sem contexto 2D). Nunca deixar de desenhar é a regra
+ * que mantém esses ambientes vivos, e a regra vale para item como vale para
+ * monstro (§7.3).
+ *
+ * O critério é o vocabulário GEOMÉTRICO do vanilla, onde cada arquétipo tem uma
+ * cor: o despojo herda a de quem o largou (a gosma é roxa como o `linker`
+ * geométrico, a orelha é vermelha como o `chaser`), e o que é aço fica na
+ * pedra. Não é a cor do rig 3D — no caminho de reserva não existe rig.
+ */
+const RESERVA_DE_ITEM: Readonly<Record<MaterialKind, ShadeKey>> = {
+  gosma: 'linker',
+  orelhaGoblin: 'chaser',
+  espadaGoblin: 'stone',
+  peOgro: 'sentinel',
+  clavaOgro: 'stone'
+};
+
+/**
+ * Linha do atlas em que todo despojo é lido. Um objeto largado no chão não
+ * encara ninguém: fixar a direção (2 = a frente, a mesma do texto de XP) é o
+ * que garante que o mesmo item desenhe igual em toda partida — e é o oposto do
+ * inimigo, cujo `facing` é derivado por observação (§0.2).
+ */
+const DIR_ITEM = 2;
+
+/**
+ * Quantos sprites de uma PILHA de itens no mesmo tile são desenhados. Um abate
+ * pode largar dois despojos no mesmo losango e uma sala pode acumular vários —
+ * mas o losango tem 64×32 px e a partir do terceiro sprite a pilha vira mancha.
+ * Três é o que ainda se conta de relance; o resto está no registro e na bolsa.
+ */
+const PILHA_MAX = 3;
+/** Deslocamento em tela por item extra da pilha, em px a zoom 1. */
+const PILHA_DX = 3;
+const PILHA_DY = -2;
+
+/**
+ * O LEQUE: deslocamento horizontal do item `ordem` de uma pilha, em px de tela.
+ * Ímpares para a direita, pares para a esquerda — a pilha abre em leque em vez
+ * de escorregar toda para um lado. Vale para os itens no chão E para os pops de
+ * coleta: recolher três coisas de um tile mostra três pops, não um só com o
+ * triplo da opacidade.
+ */
+function dxDoLeque(ordem: number, z: number): number {
+  if (ordem <= 0) return 0;
+  return (ordem % 2 === 1 ? PILHA_DX : -PILHA_DX) * z;
+}
+
+/* --- o feedback de COLETA (observação pura: o engine não avisa nada) --- */
+/** Duração do brilho no tile e do "pop" do sprite, em segundos. */
+const DUR_COLETA = 0.35;
+/** Quanto o sprite recolhido sobe no pop, em px a zoom 1. */
+const COLETA_SUBIDA = 16;
+/** Alpha do brilho âmbar no auge (decai linearmente até zero). */
+const COLETA_BRILHO = 0.34;
+/**
+ * Teto de pops simultâneos. Pisar numa pilha recolhe TUDO de uma vez, então a
+ * rajada é do tamanho da pilha; o teto existe para que um bug de observação
+ * jamais vire uma lista que cresce sem parar.
+ */
+const COLETA_MAX = 8;
+
+/**
+ * A memória de um item visto no chão — a única coisa que torna a coleta
+ * detectável sem o engine avisar nada.
+ *
+ * O gatilho é o mesmo dos abates (§14): um id que o renderer conhecia SUMIU da
+ * lista. Como `pegarItem` remove no mesmo turno em que o jogador entra no tile,
+ * a última posição conhecida do item é comparada com o tile ATUAL do jogador —
+ * se batem, ele recolheu; se não, o item saiu da lista por outra via (troca de
+ * mapa, retomada de save) e nada é celebrado.
+ */
+interface ItemVisto {
+  kind: ItemKind;
+  x: number;
+  y: number;
+  /** Nº do quadro em que este item foi visto pela última vez. */
+  carimbo: number;
+}
+
+/** Um "pop" de coleta vivo: brilho no tile + sprite subindo e esmaecendo. */
+interface ColetaVfx {
+  x: number;
+  y: number;
+  kind: ItemKind;
+  t: number;
+  /** Posição na rajada daquele tile — abre o mesmo leque da pilha do chão. */
+  ordem: number;
+}
+
 /**
  * §6 — a troca de tile leva ~120 ms NA TELA. O estado lógico já mudou antes do
  * primeiro quadro desta interpolação: o turno não espera animação (R54).
@@ -796,6 +993,25 @@ export class IsoRenderer {
    */
   private readonly atlasMorteInimigo = new Map<string, AtlasPersonagem | null>();
 
+  /* --- os despojos no chão (ver `FICHAS_DE_ITEM`) --- */
+  /**
+   * Atlas por MATERIAL, forjado sob demanda no primeiro desenho daquele
+   * despojo. Mesmo protocolo de `atlasInimigo`: `undefined` = nunca tentado,
+   * `null` GUARDADO = tentou e não há canvas — a forja nunca vira retentativa
+   * por quadro. A poção não entra aqui: ela não tem atlas, tem geometria.
+   */
+  private readonly atlasItem = new Map<MaterialKind, AtlasPersonagem | null>();
+  /**
+   * Memória dos itens vistos no chão, por id — a base da detecção de coleta.
+   * As entradas são MUTADAS no lugar (nada é alocado por quadro depois do
+   * primeiro) e some quem não recebe o carimbo do quadro corrente.
+   */
+  private readonly itensVistos = new Map<number, ItemVisto>();
+  /** Contador de quadros que carimba `itensVistos`. Só cresce; só é comparado. */
+  private carimboItens = 0;
+  /** Pops de coleta vivos. Poucos e de vida curtíssima — varridos sem índice. */
+  private readonly coletas: ColetaVfx[] = [];
+
   /* --- o texto de XP flutuante (docs/BESTIARIO.md §16) --- */
   /** Flutuantes vivos. Poucos e de vida curta — varridos por quadro sem índice. */
   private readonly flutuantes: FlutuanteXp[] = [];
@@ -1086,6 +1302,15 @@ export class IsoRenderer {
       if (f.t >= DUR_FLUTUA_XP) this.flutuantes.splice(i, 1);
     }
 
+    // Os despojos: quem sumiu do chão sob os pés do jogador foi recolhido.
+    // OBSERVAÇÃO pura — o engine não abre canal nenhum para avisar (R54).
+    this.observarColeta(game);
+    for (let i = this.coletas.length - 1; i >= 0; i--) {
+      const c = this.coletas[i];
+      c.t += d;
+      if (c.t >= DUR_COLETA) this.coletas.splice(i, 1);
+    }
+
     /*
      * Paredes do canto frontal: desliza o alpha para o alvo. As três tiles à
      * frente do jogador que são parede miram ALFA_PAREDE_OCULTA; as demais
@@ -1179,6 +1404,68 @@ export class IsoRenderer {
       const lista = this.mortesPorTile.get(ti);
       if (lista) lista.push(m);
       else this.mortesPorTile.set(ti, [m]);
+    }
+  }
+
+  /**
+   * O gatilho da COLETA, pelo mesmo método dos abates: marca-e-varre sobre
+   * `game.items`. Todo item que estava na lista no quadro anterior, sumiu neste
+   * e cuja última posição conhecida é o tile ATUAL do jogador foi recolhido —
+   * `pegarItem` (src/engine/game.ts) esvazia o tile no mesmo turno em que o
+   * jogador entra nele, então essa igualdade é a assinatura da coleta.
+   *
+   * Por que a comparação NÃO é "sumiu do tile onde o jogador está parado": no
+   * quadro anterior à coleta o jogador ainda estava no tile de origem, e um
+   * observador preso ao tile dele jamais veria os itens do destino. A memória
+   * é da LISTA inteira, e é a última posição do item que fecha a conta.
+   *
+   * As outras saídas da lista (troca de mapa, retomada de save) não celebram
+   * nada: `syncRun` limpa a memória antes que este método rode, então o primeiro
+   * quadro de um andar novo apenas cadastra o que existe.
+   *
+   * Custo: um `Map.get` por item por quadro (dezenas), zero alocação depois do
+   * primeiro cadastro — as entradas são mutadas no lugar.
+   */
+  private observarColeta(game: Game): void {
+    const memoria = this.itensVistos;
+    const p = game.player;
+    const itens = game.items;
+    const carimbo = ++this.carimboItens;
+
+    if (itens) {
+      for (let i = 0; i < itens.length; i++) {
+        const it = itens[i];
+        if (!it) continue;
+        const visto = memoria.get(it.id);
+        if (visto) {
+          visto.kind = it.kind;
+          visto.x = it.x;
+          visto.y = it.y;
+          visto.carimbo = carimbo;
+        } else {
+          memoria.set(it.id, { kind: it.kind, x: it.x, y: it.y, carimbo: carimbo });
+        }
+      }
+    }
+
+    for (const [id, v] of memoria) {
+      if (v.carimbo === carimbo) continue;
+      // Apagar durante a iteração de um Map é seguro por especificação.
+      memoria.delete(id);
+      if (v.x !== p.x || v.y !== p.y) continue;
+      if (this.coletas.length >= COLETA_MAX) continue;
+      // Quantos pops já vivem neste tile: pisar numa pilha recolhe tudo de uma
+      // vez, e sem o leque os três sairiam exatamente um sobre o outro.
+      let ordem = 0;
+      for (let i = 0; i < this.coletas.length; i++) {
+        const outra = this.coletas[i];
+        if (outra.x === v.x && outra.y === v.y) ordem++;
+      }
+      const c: ColetaVfx = { x: v.x, y: v.y, kind: v.kind, t: 0, ordem: ordem };
+      // `prefers-reduced-motion` fica só com o brilho: o pop já nasce no fim
+      // da subida, como a cinemática de morte nasce no rastro.
+      if (prefereReduzirMovimento()) c.t = DUR_COLETA * 0.5;
+      this.coletas.push(c);
     }
   }
 
@@ -1321,9 +1608,22 @@ export class IsoRenderer {
             }
           }
         }
+        if (seen && this.coletas.length > 0) {
+          // O brilho da coleta é LUZ DE CHÃO: entra depois dos decalques do
+          // abate e antes de tudo o que está de pé, para não pintar por cima
+          // das botas do jogador — que é exatamente quem está nesse tile.
+          this.desenharBrilhoColeta(ctx, x, y, sx, sy, hw, hh);
+        }
         if (seen && this.itemAt) {
-          const ii = this.itemAt[i];
-          if (ii >= 0) this.drawPotion(ctx, game.items[ii], sx, cy, z, lvl, ii);
+          // A PILHA: até `PILHA_MAX` sprites por tile, já ordenados por `id`
+          // crescente pelo índice. Os slots são contíguos e o primeiro vazio
+          // encerra a pilha — não há buraco no meio, por construção.
+          const base = i * PILHA_MAX;
+          for (let k = 0; k < PILHA_MAX; k++) {
+            const ii = this.itemAt[base + k];
+            if (ii < 0) break;
+            this.drawItem(ctx, game.items[ii], sx, cy, z, lvl, k, ii);
+          }
         }
         if (seen && this.entAt) {
           const ei = this.entAt[i];
@@ -1346,6 +1646,21 @@ export class IsoRenderer {
         const f = this.flutuantes[i];
         if (!vis.has(f.y * w + f.x)) continue;
         this.desenharFlutuanteXp(ctx, f, hw, hh, ox, oy, z);
+      }
+    }
+
+    /*
+     * O "pop" da coleta, pelo mesmo motivo e no mesmo lugar dos flutuantes: é
+     * feedback, não cenário. O tile é sempre o do jogador (foi ele quem
+     * recolheu), então o recorte por visão é trivialmente verdadeiro — mas fica
+     * escrito, porque quem herdar isto vai querer disparar coleta de outra
+     * fonte um dia.
+     */
+    if (this.coletas.length > 0) {
+      for (let i = 0; i < this.coletas.length; i++) {
+        const c = this.coletas[i];
+        if (!vis.has(c.y * w + c.x)) continue;
+        this.desenharPopColeta(ctx, c, hw, hh, ox, oy, z);
       }
     }
 
@@ -1406,6 +1721,9 @@ export class IsoRenderer {
     this.kindPorId.clear();
     this.flutuantes.length = 0;
     this.atlasXp.clear();
+    this.atlasItem.clear();
+    this.itensVistos.clear();
+    this.coletas.length = 0;
     this.tinta = null;
     this.tintaCtx = null;
     this.anim.pronta = false;
@@ -1490,6 +1808,12 @@ export class IsoRenderer {
     this.vivosB.clear();
     this.kindPorId.clear();
     this.flutuantes.length = 0;
+    // Andar novo = chão novo também para os despojos. A memória dos itens tem
+    // de ir junto: sem isto, TODOS os itens do andar anterior contariam como
+    // "sumidos" no primeiro quadro do novo, e os que por acaso estivessem no
+    // tile de nascimento do jogador soltariam um pop de coleta que não houve.
+    this.itensVistos.clear();
+    this.coletas.length = 0;
     this.mapW = game.map.w;
     // Índices de tile são por mapa: os alphas das paredes do nível anterior
     // não significam nada no novo.
@@ -1593,14 +1917,34 @@ export class IsoRenderer {
     // 'concluida' é terminal até a próxima partida (syncRun a zera).
   }
 
+  /**
+   * Os dois índices tile → entidade, refeitos por quadro (sem alocar: os
+   * buffers só nascem quando o mapa muda de tamanho).
+   *
+   * `entAt` guarda UM inimigo por tile — o engine não deixa dois no mesmo
+   * lugar. `itemAt` guarda ATÉ `PILHA_MAX`, em slots contíguos por tile
+   * (`tile * PILHA_MAX + k`), porque um abate pode largar dois despojos no
+   * mesmo losango e uma sala pode acumular mais.
+   *
+   * A ordem dentro da pilha é por `item.id` CRESCENTE, garantida por inserção
+   * ordenada numa janela de três — não pela ordem de `game.items`, que é ordem
+   * de criação e sobrevive a remoções no meio. Duas consequências que valem o
+   * custo de três comparações por item:
+   *
+   *   - o desenho é ESTÁVEL: o mesmo par de itens empilha na mesma ordem em
+   *     todo quadro e em toda partida, e nada pisca ao trocar de lugar;
+   *   - o corte em três é o determinístico possível: ficam os TRÊS MENORES
+   *     ids, isto é, os três que caíram primeiro. Um item que chega depois não
+   *     desloca quem já estava sendo desenhado.
+   */
   private indexEntities(game: Game): void {
     const map = game.map;
     const n = map.w * map.h;
     let entAt = this.entAt;
     let itemAt = this.itemAt;
-    if (!entAt || !itemAt || entAt.length !== n) {
+    if (!entAt || !itemAt || entAt.length !== n || itemAt.length !== n * PILHA_MAX) {
       entAt = new Int32Array(n);
-      itemAt = new Int32Array(n);
+      itemAt = new Int32Array(n * PILHA_MAX);
       this.entAt = entAt;
       this.itemAt = itemAt;
     }
@@ -1622,7 +1966,22 @@ export class IsoRenderer {
         const o = it[k];
         if (!o) continue;
         i = o.y * map.w + o.x;
-        if (i >= 0 && i < n) itemAt[i] = k;
+        if (i < 0 || i >= n) continue;
+        const base = i * PILHA_MAX;
+        // Onde este item entra: antes do primeiro slot vazio ou do primeiro
+        // ocupante de id MAIOR. Sair do laço em `PILHA_MAX` significa "há três
+        // itens mais antigos aqui" — este simplesmente não é desenhado.
+        let s = 0;
+        while (s < PILHA_MAX) {
+          const ocupante = itemAt[base + s];
+          if (ocupante < 0) break;
+          const outro = it[ocupante];
+          if (!outro || o.id < outro.id) break;
+          s++;
+        }
+        if (s >= PILHA_MAX) continue;
+        for (let j = PILHA_MAX - 1; j > s; j--) itemAt[base + j] = itemAt[base + j - 1];
+        itemAt[base + s] = k;
       }
     }
   }
@@ -2822,6 +3181,186 @@ export class IsoRenderer {
     this.desenharEspadaSolta(ctx, dir, cx, cy, z, t);
   }
 
+  /* ------------------------------------------------------------------ *
+   * Os itens no chão — a poção (geometria) e os despojos (sprite)
+   * ------------------------------------------------------------------ */
+
+  /**
+   * A BIFURCAÇÃO dos itens, gêmea da dos inimigos (§7.3): a poção continua no
+   * caminho geométrico do vanilla, INALTERADO, e todo material é um quadro do
+   * atlas do seu rig. Nenhum dos dois caminhos sabe do outro.
+   *
+   * `ordem` é a posição na pilha do tile (0 = o mais antigo, embaixo). O
+   * deslocamento por item extra é pequeno de propósito: ele existe para o
+   * jogador PERCEBER que há mais de uma coisa ali, não para separar as coisas
+   * — quem quiser o inventário exato tem o registro e a bolsa.
+   *
+   * `indice` é a posição em `game.items`, usada só como semente de reserva do
+   * bob quando o item não tem `id` numérico (save malformado). É o parâmetro
+   * que `drawPotion` já recebia, e ele continua chegando lá intacto.
+   */
+  private drawItem(
+    ctx: CanvasRenderingContext2D, item: Item, sx: number, cyBase: number, z: number,
+    lvl: number, ordem: number, indice: number
+  ): void {
+    if (!item) return;
+    // O empilhamento é em TELA: o tile lógico é o mesmo, só o desenho se
+    // desloca. O leque é o mesmo do pop da coleta — uma regra, dois lugares.
+    const dxPilha = dxDoLeque(ordem, z);
+    const dyPilha = PILHA_DY * ordem * z;
+
+    if (item.kind === 'potion') {
+      this.drawPotion(ctx, item, sx + dxPilha, cyBase + dyPilha, z, lvl, indice);
+      return;
+    }
+
+    // A partir daqui `item.kind` é `MaterialKind` — o compilador já o sabe, e é
+    // por isso que `FICHAS_DE_ITEM` pode ser um Record total.
+    const kind = item.kind;
+    const bob = Math.sin(this.t * 2 + (typeof item.id === 'number' ? item.id : indice)) * 1.2 * z;
+    const cx = sx + dxPilha;
+    const chao = cyBase + dyPilha;
+    const cy = chao + bob;
+
+    // A sombra fica no CHÃO e não sobe com o bob — a mesma regra do inimigo
+    // (§7.4). É ela que impede o despojo de ler como flutuando no vazio.
+    fillEllipse(ctx, cx, chao + 2 * z, 7 * z, 3 * z, COL_SHADOW_ENT);
+
+    const atlas = this.atlasDoItem(kind);
+    if (atlas) {
+      // Coluna ('parado', 0) na direção fixa, MODULADA pela luz do tile: um
+      // despojo caído num corredor escuro tem de escurecer como o resto do
+      // mundo. As cores emissivas do rig (o ponto âmbar do frasco) atravessam a
+      // modulação sozinhas — quem cuida disso é `quadroModulado`.
+      const f = quadroModulado(atlas, DIR_ITEM, 'parado', 0, lvl / (LEVELS - 1));
+      if (f.fonte) {
+        const dx = Math.round(cx - atlas.ancoraX * z);
+        const dy = Math.round(cy - atlas.ancoraY * z);
+        const suave = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
+        ctx.imageSmoothingEnabled = suave;
+        return;
+      }
+    }
+    // Sem atlas (jsdom, Node, qualquer ambiente sem contexto 2D): a reserva.
+    // NUNCA deixar de desenhar — é a regra que mantém esses ambientes vivos.
+    this.desenharItemGeometrico(ctx, RESERVA_DE_ITEM[kind], cx, cy, z, lvl);
+  }
+
+  /**
+   * O atlas de um despojo, forjado SOB DEMANDA e uma vez só, no primeiro
+   * desenho daquele material (o padrão de `atlasDoInimigo`). Sem canvas devolve
+   * `null` E GUARDA o `null`: a forja não pode virar retentativa por quadro.
+   */
+  private atlasDoItem(kind: MaterialKind): AtlasPersonagem | null {
+    const pronto = this.atlasItem.get(kind);
+    // `undefined` = nunca perguntado; `null` = já perguntado e não há atlas.
+    if (pronto !== undefined) return pronto;
+    const ficha = FICHAS_DE_ITEM[kind];
+    const atlas = ficha ? this.forjarSeguro(ficha.modelo, ficha.forja) : null;
+    this.atlasItem.set(kind, atlas);
+    return atlas;
+  }
+
+  /**
+   * O despojo em forma geométrica — a rede de segurança de quem não tem atlas,
+   * e também o corpo do pop de coleta quando ele não tem sprite (a poção).
+   * Deliberadamente ANÔNIMO: uma trouxa de duas elipses na cor de quem largou o
+   * item. Sem canvas não há rig, e fingir silhueta com primitivas custaria
+   * manutenção para um caminho que nenhum jogador vê.
+   */
+  private desenharItemGeometrico(
+    ctx: CanvasRenderingContext2D, chave: ShadeKey, cx: number, cy: number, z: number, lvl: number
+  ): void {
+    const sh = this.luts.SHADES[chave] || this.luts.SHADES.stone;
+    fillEllipse(ctx, cx, cy - 3.4 * z, 5 * z, 3.4 * z, sh.main[lvl]);
+    fillEllipse(ctx, cx, cy - 5 * z, 2.4 * z, 1.5 * z, sh.light[lvl]);
+  }
+
+  /**
+   * O brilho da coleta: o losango do tile pintado de âmbar, esmaecendo em
+   * `DUR_COLETA`. É o âmbar de realce da UI (`COL_HOVER_LINE`) porque é a mesma
+   * frase visual — "olhe para este tile" —, e no auge ele fica bem abaixo da
+   * opacidade do piso: é um clarão, não um bloco de cor.
+   *
+   * Coletas simultâneas no mesmo tile (pisar numa pilha recolhe tudo de uma
+   * vez) tomam o MÁXIMO, nunca a soma: três despojos não podem acender três
+   * vezes mais forte que um.
+   */
+  private desenharBrilhoColeta(
+    ctx: CanvasRenderingContext2D, x: number, y: number,
+    sx: number, sy: number, hw: number, hh: number
+  ): void {
+    let vivo = 0;
+    for (let k = 0; k < this.coletas.length; k++) {
+      const c = this.coletas[k];
+      if (c.x !== x || c.y !== y) continue;
+      const a = 1 - c.t / DUR_COLETA;
+      if (a > vivo) vivo = a;
+    }
+    if (vivo <= 0) return;
+    ctx.save();
+    ctx.globalAlpha = ctx.globalAlpha * vivo * COLETA_BRILHO;
+    ctx.fillStyle = COL_HOVER_LINE;
+    pathDiamond(ctx, sx, sy, hw, hh);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * O "pop" do item recolhido: o sprite sobe `COLETA_SUBIDA`·zoom com ease-out
+   * e esmaece — a mesma mecânica do flutuante de XP (§16), com um terço da
+   * duração, porque isto acompanha uma linha de registro e não uma recompensa.
+   *
+   * BRILHO PLENO, sem modulação de luz, por dois motivos que se reforçam: é
+   * feedback (mesmo estatuto do clarão de dano e do texto de XP), e o tile é o
+   * do jogador — que é sempre o mais iluminado do mapa, já que a fonte de luz é
+   * ele. Não haveria o que escurecer.
+   *
+   * A poção não tem rig e cai na trouxa geométrica: o brilho do tile é que
+   * carrega o feedback dela. Sprite de poção fica para o dia em que ela ganhar
+   * um rig como os despojos ganharam.
+   */
+  private desenharPopColeta(
+    ctx: CanvasRenderingContext2D, c: ColetaVfx,
+    hw: number, hh: number, ox: number, oy: number, z: number
+  ): void {
+    let k = c.t / DUR_COLETA;
+    if (k > 1) k = 1;
+    const ease = 1 - (1 - k) * (1 - k);
+    const alfa = 1 - k;
+    if (alfa <= 0) return;
+
+    const s = c.x + c.y;
+    const sx = hw * (2 * c.x - s) + ox + dxDoLeque(c.ordem, z);
+    const cy = s * hh + oy + hh - COLETA_SUBIDA * ease * z;
+
+    ctx.save();
+    ctx.globalAlpha = ctx.globalAlpha * alfa;
+    const atlas = c.kind === 'potion' ? null : this.atlasDoItem(c.kind);
+    if (atlas && atlas.canvas) {
+      const q = atlas.quadro(DIR_ITEM, 'parado', 0);
+      const suave = ctx.imageSmoothingEnabled;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(
+        atlas.canvas, q.sx, q.sy, atlas.larguraFrame, atlas.alturaFrame,
+        Math.round(sx - atlas.ancoraX * z), Math.round(cy - atlas.ancoraY * z),
+        atlas.larguraFrame * z, atlas.alturaFrame * z
+      );
+      ctx.imageSmoothingEnabled = suave;
+    } else {
+      const chave: ShadeKey = c.kind === 'potion' ? 'potion' : RESERVA_DE_ITEM[c.kind];
+      this.desenharItemGeometrico(ctx, chave, sx, cy, z, LEVELS - 1);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * A poção no chão — o desenho do vanilla, intacto: bob senoidal defasado pelo
+   * `id`, sombra elíptica no chão e o frasco em primitivas. Continua sendo o
+   * caminho da poção por contrato (R7), e não por falta de rig.
+   */
   private drawPotion(
     ctx: CanvasRenderingContext2D, item: Item, sx: number, cyBase: number, z: number,
     lvl: number, seedIdx: number

@@ -54,7 +54,7 @@ O mesmo pipeline do guerreiro, apontado para os inimigos — e uma regra que pro
 
 ## As armadilhas desta pasta
 
-Sete erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando
+Oito erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando
 alguma coisa parece "bug de cor" ou "bug de conversão".
 
 - [[armadilha-do-yaw-isometrico]] — a spec prescrevia `atan2(dy, dx)` e estava **errada**: o
@@ -73,6 +73,9 @@ alguma coisa parece "bug de cor" ou "bug de conversão".
 - [[texto-em-isometrica-cisalha]] — texto deitado no plano X-Z vira emaranhado: a projeção
   cisalha o bitmap ~26°. A cura é a pré-distorção de outdoors — passos-modelo que projetam
   uma grade quadrada na tela. Leia antes de qualquer número de dano futuro.
+- [[o-frasco-que-nao-tinha-gosma]] — duas armadilhas de rig num item só: caixa OPACA não
+  guarda conteúdo (o líquido modelado por dentro não existe na imagem — o conteúdo tem
+  de ser a superfície), e abaixo de ~0,5u a peça não rasteriza e deixa o fundo vazar.
 - [[arma-que-cai-e-continua-na-mao]] — a espada caía e continuava na mão por 0,75 s: o prop
   nascia numa constante de tempo e a troca do rig acontecia em outra. Objeto que sai do
   personagem some do rig no MESMO instante em que passa a existir sozinho — e folha de

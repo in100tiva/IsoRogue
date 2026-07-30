@@ -135,11 +135,13 @@ describe('UI — smoke da casca React (§7.4)', () => {
   it('monta <App/> sob StrictMode com todos os painéis e os id do contrato §9', () => {
     const { container } = montarApp();
 
-    /* Ordem dos blocos fixada pelo §9 do CONTRACTS.md. */
+    /* Ordem dos blocos fixada pelo §9 do CONTRACTS.md — com a Bolsa (fase 1
+     * dos despojos) logo após os Vitais: o que o jogador é e o que ele carrega
+     * ficam juntos, antes de qualquer coisa sobre o andar (ver Sidebar.tsx). */
     const titulos = Array.from(container.ownerDocument.querySelectorAll('.painel .titulo'))
       .map((el) => (el.textContent || '').trim());
     expect(titulos, 'blocos do painel lateral fora de ordem ou ausentes').toEqual([
-      'Vitais', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+      'Vitais', 'Bolsa', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
     ]);
     expect(screen.getByText('Nível'), 'rótulo Nível ausente').toBeTruthy();
     expect(screen.getByText('Turno'), 'rótulo Turno ausente').toBeTruthy();
@@ -468,6 +470,59 @@ describe('UI — smoke da casca React (§7.4)', () => {
 
     /* Conectividade 100% recebe o destaque verde do §9. */
     expect(document.getElementById('map-conect')!.className).toContain('valor-otimo');
+
+    esperarConsoleLimpo();
+  });
+
+  it('a bolsa mostra o que o jogador carrega — e some quando está vazia', () => {
+    /*
+     * Fase 1 dos despojos. O painel lê `player.bag` (materiais) e
+     * `player.potions` (contrato antigo R7), na ordem de `ITEM_KINDS` — que
+     * abre com a poção, e é dela que sai o "poções primeiro" sem ordenação no
+     * componente. Aqui se prova o que o jogador vê: nome no singular OU no
+     * plural conforme a quantidade, a quantidade, e o vazio dito com todas as
+     * letras em vez de um painel em branco.
+     */
+    montarApp();
+    const g = store.getGame();
+
+    /* Bolsa vazia: nada de listar o catálogo com zeros. */
+    act(() => {
+      g.player.potions = 0;
+      g.player.bag = {};
+      store.setHover({ x: g.player.x, y: g.player.y });
+    });
+    expect(document.getElementById('bolsa-vazia')!.textContent,
+      'a bolsa vazia deveria dizer que está vazia').toBe('A bolsa está vazia.');
+    expect(document.getElementById('bolsa'), 'a bolsa vazia não pode listar nada').toBeNull();
+
+    /* Bolsa cheia: uma poção, um frasco e três orelhas. */
+    act(() => {
+      g.player.potions = 1;
+      g.player.bag = { gosma: 1, orelhaGoblin: 3 };
+      /* `setHover` só notifica quando o TILE muda: o primeiro já foi usado. */
+      store.setHover({ x: g.player.x + 1, y: g.player.y });
+    });
+
+    const bolsa = document.getElementById('bolsa') as HTMLElement;
+    expect(bolsa, 'a bolsa com itens deveria listar').toBeTruthy();
+    expect(document.getElementById('bolsa-vazia'), 'a linha de vazio sobreviveu aos itens')
+      .toBeNull();
+
+    /* Quantidades, por id de linha. */
+    expect(document.getElementById('bolsa-potion')!.textContent).toBe('1');
+    expect(document.getElementById('bolsa-gosma')!.textContent).toBe('1');
+    expect(document.getElementById('bolsa-orelhaGoblin')!.textContent).toBe('3');
+    expect(document.getElementById('bolsa-clavaOgro'), 'material que o jogador não tem foi listado')
+      .toBeNull();
+
+    /* Singular com 1, plural com 3 — e o preço unitário da fase 2 já visível. */
+    const nomes = Array.from(bolsa.querySelectorAll('.bolsa-nome'))
+      .map((el) => (el.textContent || '').trim());
+    expect(nomes, 'nome, plural ou ordem errados na bolsa')
+      .toEqual(['Poção', 'Frasco de gosma', 'Orelhas de goblin']);
+    expect(bolsa.textContent, 'o valor unitário do material não apareceu')
+      .toContain('5 moedas cada');
 
     esperarConsoleLimpo();
   });

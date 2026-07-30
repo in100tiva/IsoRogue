@@ -23,7 +23,8 @@ localStorage). Repositório: <https://github.com/in100tiva/IsoRogue>.
 | Balanceamento | níveis de monstro (1/2/3), XP em escala (100×2^Δ), 100 XP plano por nível, spawn por nível do herói |
 | Progressão visível | texto de XP flutuante 3D nos abates; HUD com Andar × Nível do herói × XP |
 | Render | paredes do canto frontal ficam translúcidas para não esconder o herói |
-| Testes | 74 verdes de 77 (3 falhas pré-existentes do ambiente Windows: `find`/`npx` no spawn), com golden test de 12 sementes |
+| Despojos | fase 1: monstros largam itens, herói recolhe pisando, bolsa na barra lateral |
+| Testes | 140, todos verdes nesta máquina (`npm run check`), com oracle de regressão derivado do engine e o oracle vanilla ainda conferido por projeção |
 | Cofre | esta documentação |
 
 Marcos, em ordem: nasceu em JavaScript vanilla → migrado para React 19 + TypeScript com

@@ -16,6 +16,7 @@
  */
 
 import type {
+  Bag,
   Game,
   HistoryEntry,
   LogClass,
@@ -28,6 +29,14 @@ import type {
 } from './types';
 import { Tile } from './types';
 import { CONFIG, normalizeFacing } from './core';
+/*
+ * A tabela de itens entra aqui SÓ pela ordem canônica das chaves da bolsa e
+ * pelo filtro de material — nada de regra de jogo. O ciclo de import que isso
+ * cria (save -> entities -> game -> save) é o mesmo, e igualmente inerte, que
+ * já existe entre game e entities: ninguém lê estes bindings durante a
+ * avaliação do módulo, apenas dentro de funções.
+ */
+import { ITEM_KINDS, ehMaterial } from './entities';
 
 /* ------------------------------------------------------------------ *
  * Armazenamento injetável
@@ -202,6 +211,24 @@ type SaveCru = Omit<SaveData, 'explored'> & { explored: Uint8Array | string | nu
  * Cópias defensivas
  * ------------------------------------------------------------------ */
 
+/**
+ * Cópia defensiva da bolsa: só chaves conhecidas, na ordem de `ITEM_KINDS`, e
+ * só contagens inteiras positivas. Gravar na ordem da tabela não é exigência do
+ * formato (JSON não promete ordem de chave), é higiene: o arquivo fica legível
+ * e dois saves do mesmo estado saem com o mesmo texto.
+ */
+function copiaBolsa(bag: Bag | null | undefined): Bag {
+  const out: Bag = {};
+  if (!bag || typeof bag !== 'object') return out;
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const n = inteiro(bag[kind]);
+    if (n > 0) out[kind] = n;
+  }
+  return out;
+}
+
 function copiaJogador(p: Player | null | undefined): Player {
   const j = p || ({} as Partial<Player>);
   return {
@@ -209,6 +236,7 @@ function copiaJogador(p: Player | null | undefined): Player {
     hp: inteiro(j.hp), maxHp: inteiro(j.maxHp),
     atk: inteiro(j.atk), potions: inteiro(j.potions),
     level: inteiro(j.level), xp: inteiro(j.xp),
+    bag: copiaBolsa(j.bag),
     // `facing` é cosmético, mas gravá-lo evita o guerreiro girar para o sul ao
     // retomar. `normalizeFacing` (e não `inteiro`) porque a ausência tem de cair
     // no padrão 2, não no zero — save antigo carrega sem quebrar.
@@ -240,6 +268,9 @@ function copiaItens(lista: Game['items'] | null | undefined): SavedItem[] {
   for (let i = 0; i < lista.length; i++) {
     const it = lista[i];
     if (!it) continue;
+    /* `kind` já era gravado desde a primeira versão do save (valia sempre
+     * 'potion'); agora ele carrega informação de verdade. Quem valida é o
+     * `restore` — aqui só garantimos que é texto e que a ausência vira poção. */
     out.push({
       id: inteiro(it.id), kind: String(it.kind || 'potion'),
       x: inteiro(it.x), y: inteiro(it.y), heal: inteiro(it.heal)
@@ -279,6 +310,10 @@ function serializar(game: Game): SaveGravado {
   if (game.rngCombat && typeof game.rngCombat.s === 'number') {
     estadoRng = game.rngCombat.s >>> 0;
   }
+  let estadoLoot = 0;
+  if (game.rngLoot && typeof game.rngLoot.s === 'number') {
+    estadoLoot = game.rngLoot.s >>> 0;
+  }
   const explored = game.explored || null;
   return {
     v: 1,
@@ -292,11 +327,13 @@ function serializar(game: Game): SaveGravado {
     player: copiaJogador(game.player),
     enemies: copiaInimigos(game.enemies),
     items: copiaItens(game.items),
+    proxItemId: inteiro(game.proxItemId),
     explored: bytesToBase64(explored),
     exploredLen: explored && typeof explored.length === 'number' ? explored.length : 0,
     stats: copiaStats(game.stats),
     rngCombat: estadoRng,
     rngCombatS: estadoRng,
+    rngLoot: estadoLoot,
     log: copiaLog(game.log, 80)
   };
 }

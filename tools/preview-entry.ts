@@ -2208,6 +2208,144 @@ function secaoPosesCinematicas(alvo: Preparado, zAnim: number, n: () => string):
   return s;
 }
 
+/**
+ * Um despojo na folha: o item que o monstro larga ao morrer (fase 1 do sistema
+ * de loot). Diferente das fases de morte, o rig quase sempre mora em OUTRO
+ * módulo — `itemGosma.ts`, `itemOrelhaGoblin.ts`, `itemPeOgro.ts` —, então a
+ * entrada carrega o arquivo e os nomes dos exports de cor. Quando `arquivo` é
+ * `null`, o rig vem do módulo do próprio personagem: é o caso das duas armas,
+ * que já existiam para a cinemática de morte e são reaproveitadas como item.
+ */
+interface DespojoPreview {
+  readonly rotulo: string;
+  readonly arquivo: string | null;
+  readonly modelo: string;
+  readonly paleta: string | null;
+  readonly rampas: string | null;
+  readonly rampaDaCor: string | null;
+  readonly emissivas: string | null;
+  readonly chance: string;
+}
+
+/**
+ * Os cinco despojos do sistema, por quem os larga. As chances são as da tabela
+ * `DROPS` do engine (src/engine/entities.ts) e aparecem na legenda porque a
+ * pergunta que o revisor faz olhando a folha é "quantas vezes vou ver isto no
+ * chão?" — um item comum precisa ler à primeira vista; um raro pode pedir
+ * atenção.
+ */
+const DESPOJOS_PREVIEW: Readonly<Record<string, readonly DespojoPreview[]>> = {
+  slime: [
+    {
+      rotulo: 'frasco de gosma', arquivo: 'itemGosma.ts', modelo: 'MODELO_GOSMA',
+      paleta: 'PALETA_GOSMA', rampas: 'RAMPAS_GOSMA', rampaDaCor: 'RAMPA_DA_COR_GOSMA',
+      emissivas: 'CORES_EMISSIVAS_GOSMA', chance: '70% · alquimia ou venda (3)'
+    }
+  ],
+  goblin: [
+    {
+      rotulo: 'orelha de goblin', arquivo: 'itemOrelhaGoblin.ts', modelo: 'MODELO_ORELHA_GOBLIN',
+      paleta: 'PALETA_ORELHA_GOBLIN', rampas: 'RAMPAS_ORELHA_GOBLIN',
+      rampaDaCor: 'RAMPA_DA_COR_ORELHA_GOBLIN', emissivas: null,
+      chance: '50% · missão ou venda (5)'
+    },
+    {
+      rotulo: 'cimitarra (reaproveitada da morte)', arquivo: null, modelo: 'MODELO_CIMITARRA',
+      paleta: null, rampas: null, rampaDaCor: null, emissivas: null,
+      chance: '15% · refino (ferro) ou venda (18)'
+    }
+  ],
+  ogro: [
+    {
+      rotulo: 'pé de ogro', arquivo: 'itemPeOgro.ts', modelo: 'MODELO_PE_OGRO',
+      paleta: 'PALETA_PE_OGRO', rampas: 'RAMPAS_PE_OGRO', rampaDaCor: 'RAMPA_DA_COR_PE_OGRO',
+      emissivas: null, chance: '45% · missão ou venda (12)'
+    },
+    {
+      rotulo: 'clava (reaproveitada da morte)', arquivo: null, modelo: 'MODELO_MARRETA',
+      paleta: null, rampas: null, rampaDaCor: null, emissivas: null,
+      chance: '20% · venda alta (40)'
+    }
+  ]
+};
+
+/** Acha um módulo de `characters/` pelo nome do arquivo. */
+function moduloPorArquivo(arquivo: string): Registro | null {
+  const alvo = '/' + arquivo;
+  for (const caminho of Object.keys(MODULOS_PERSONAGEM)) {
+    if (caminho.endsWith(alvo)) {
+      const mod = MODULOS_PERSONAGEM[caminho];
+      if (ehObjeto(mod)) return mod;
+    }
+  }
+  return null;
+}
+
+/**
+ * Os despojos que este personagem larga, forjados como atlas próprio e lidos
+ * na coluna ('parado', 0) — que é exatamente como o renderer vai desenhá-los
+ * caídos no tile.
+ *
+ * Um item ausente é PULADO em vez de derrubar a folha (mesma regra da seção de
+ * fases): permite escrever os rigs por etapas sem mentir na bancada.
+ *
+ * A escala aqui é a mesma dos outros painéis ampliados, e vale a advertência
+ * de sempre: a bancada mostra 4×, o jogo mostra 1×. Um despojo só está aprovado
+ * depois de conferido no painel de tamanho de jogo.
+ */
+function secaoDespojos(alvo: Preparado, zAnim: number, n: () => string): HTMLElement | null {
+  const itens = DESPOJOS_PREVIEW[alvo.ficha.chave];
+  if (!itens || itens.length === 0) return null;
+
+  const s = secao(
+    `${n()} · despojos — o que este bicho larga ao morrer (dir ${DIR_ANIMACAO})`,
+    'cada item é um rig próprio, forjado num atlas próprio e lido na coluna parado/0 · ' +
+      'é assim que o renderer o desenha caído no tile e, depois, como ícone de bolsa'
+  );
+  const f = el('div', 'faixa');
+  let conteudo = 0;
+  for (const item of itens) {
+    const mod = item.arquivo === null ? alvo.mod : moduloPorArquivo(item.arquivo);
+    if (!mod) continue;
+    const modelo = mod[item.modelo];
+    if (!ehRig(modelo)) continue;
+
+    /* Opções de forja: quando o item traz paleta própria (rig autônomo em
+     * `itemX.ts`), ela manda; quando o rig é do próprio bicho (as armas), vale
+     * a do personagem, resolvida pelo caminho de sempre. */
+    let opts: Registro;
+    if (item.paleta === null) {
+      opts = montarOpcoes(mod, alvo.ficha).opts;
+    } else {
+      opts = {};
+      const paleta = mod[item.paleta];
+      if (!ehPaleta(paleta)) continue;
+      opts['paleta'] = paleta;
+      if (item.rampas !== null && mod[item.rampas] !== undefined) opts['rampas'] = mod[item.rampas];
+      if (item.rampaDaCor !== null && mod[item.rampaDaCor] !== undefined) {
+        opts['rampaDaCor'] = mod[item.rampaDaCor];
+      }
+      if (item.emissivas !== null && Array.isArray(mod[item.emissivas])) {
+        opts['emissivas'] = mod[item.emissivas];
+      }
+    }
+
+    const forjar = resolverForja(modForge as unknown as Registro, { ...opts, repouso: {} });
+    const atlas = exigirPixels(forjar(modelo));
+    f.append(
+      cartao(
+        celulaQuadro(atlas, DIR_ANIMACAO, 'parado', 0, zAnim),
+        item.rotulo,
+        item.chance
+      )
+    );
+    conteudo++;
+  }
+  if (conteudo === 0) return null;
+  s.append(f);
+  return s;
+}
+
 function montar(
   raiz: HTMLElement,
   alvo: Preparado,
@@ -2316,6 +2454,10 @@ function montar(
   /* --- fases da cinemática de morte (só entra quem tem ficha em MORTE_PREVIEW) --- */
   const sCine = secaoPosesCinematicas(alvo, zAnim, n);
   if (sCine) colsAnim.append(sCine);
+
+  /* --- despojos que este bicho larga (só entra quem tem ficha em DESPOJOS_PREVIEW) --- */
+  const sDespojos = secaoDespojos(alvo, zAnim, n);
+  if (sDespojos) colsAnim.append(sDespojos);
 
   /* --- 4, 5 e 6. tamanho de jogo, paleta e gates --- */
   const colsBaixo = el('div', 'colunas');
