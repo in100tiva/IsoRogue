@@ -147,6 +147,7 @@ describe('UI — smoke da casca React (§7.4)', () => {
     const ids = [
       'cv', 'seed', 'btn-gerar', 'btn-aleatoria', 'btn-copiar', 'log',
       'hud-vida', 'hud-vida-barra', 'hud-nivel', 'hud-turno', 'hud-atk', 'hud-pocoes',
+      'hud-heroi-nivel', 'hud-xp', 'hud-xp-barra',
       'map-conect', 'map-salas', 'map-inimigos', 'map-itens', 'map-visiveis',
       'tooltip', 'debug', 'morte', 'morte-corpo', 'btn-nova'
     ];
@@ -456,6 +457,9 @@ describe('UI — smoke da casca React (§7.4)', () => {
     expect(document.getElementById('hud-turno')!.textContent).toBe(String(g.turn));
     expect(document.getElementById('hud-atk')!.textContent).toBe(String(g.player.atk));
     expect(document.getElementById('hud-pocoes')!.textContent).toBe(String(g.player.potions));
+    /* §16 — o nível REAL do herói e o XP acumulado, na régua plana de 100. */
+    expect(document.getElementById('hud-heroi-nivel')!.textContent).toBe(String(g.player.level));
+    expect(document.getElementById('hud-xp')!.textContent).toBe(String(g.player.xp) + '/100');
     expect(document.getElementById('hud-vida')!.textContent)
       .toContain(String(g.player.hp));
     expect(document.getElementById('map-salas')!.textContent).toBe(String(g.map.rooms.length));

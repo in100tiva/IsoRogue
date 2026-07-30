@@ -21,6 +21,7 @@ import type {
   Item,
   LogClass,
   LogEntry,
+  Player,
   Room
 } from './types';
 import { Tile } from './types';
@@ -53,7 +54,10 @@ import {
 const PLAYER_BASE = { hp: 42, atk: 7, potions: 3 };
 // A cura da poção vem de `entities.ts` (dono do item, §6), que grava o mesmo
 // número em `item.heal`. Fonte única, como no vanilla.
-const XP_POR_NIVEL = 10;   // xp necessário = level * XP_POR_NIVEL
+// §15 do BESTIARIO — XP PLANO: 100 por nível, para qualquer nível. Ao cruzar
+// 100 o herói sobe e o EXCEDENTE é carregado (decisão do dono na fase de
+// balanceamento — matar um ogro de 400 xp com 0 acumulado rende 4 níveis).
+const XP_POR_NIVEL = 100;
 const HP_POR_DESCIDA = 2;  // §7: maxHp += 2 ao descer
 
 const NOMES: Record<string, string> = {
@@ -279,12 +283,16 @@ function gravarHistorico(game: Game): void {
 // Criação de estado
 // --------------------------------------------------------------------------
 
-export function createState(seedStr: string, depth: number = 1): Game {
+export function createState(seedStr: string, depth: number = 1, heroLevel: number = 1): Game {
   let d = intOr(depth, 1);
   if (d < 1) d = 1;
+  let nivel = intOr(heroLevel, 1);
+  if (nivel < 1) nivel = 1;
   const seed = normalizeSeed(seedStr);
   const map = generate(seed, d);
-  const pop = populate(map, d);
+  // §15 — a mistura de spawn do primeiro andar usa o nível do herói (1 numa
+  // expedição nova; o nível salvo numa retomada — ver `restore`).
+  const pop = populate(map, d, nivel);
 
   const game: Game = {
     seedStr: seed,
@@ -328,7 +336,8 @@ export function createState(seedStr: string, depth: number = 1): Game {
     },
     ui: { hover: null, debug: false, fovProbe: false, follow: true },
     lastRoomId: null,  // sala em que o jogador está (log de movimentação, R49)
-    emTurno: false     // trava de reentrância do fim de turno
+    emTurno: false,    // trava de reentrância do fim de turno
+    abatesRecentes: [] // §16 — fila visual dos flutuantes de XP (o renderer drena)
   };
   game.lastRoomId = idDaSala(map, game.player.x, game.player.y);
 
@@ -343,17 +352,27 @@ export function createState(seedStr: string, depth: number = 1): Game {
 // Ações do jogador
 // --------------------------------------------------------------------------
 
-function xpPorAbate(ent: Enemy): number {
+/**
+ * §15 do BESTIARIO — o XP do abate, na escala do dono: 100 quando o monstro é
+ * do nível do herói, DOBRANDO por nível acima (200/400) e CAINdo pela metade
+ * por nível abaixo (50/25), até zero quando o herói passa três níveis do
+ * monstro — um slime deixa de render XP no nível 4, um goblin no 5, um ogro
+ * no 6.
+ */
+function xpPorAbate(p: Player, ent: Enemy): number {
   const arch = ARCHETYPES[ent.kind];
-  if (arch && isNum(arch.xp)) return Math.max(1, Math.floor(arch.xp));
-  return Math.max(1, Math.floor(intOr(ent.maxHp, 9) / 3));
+  const nivelMonstro = arch && isNum(arch.nivel) ? arch.nivel : 1;
+  const diff = p.level - nivelMonstro;
+  if (diff >= 3) return 0;
+  return Math.round(100 * Math.pow(2, -diff));
 }
 
 function ganharXp(game: Game, quanto: number): void {
   const p = game.player;
   p.xp += quanto;
-  while (p.xp >= p.level * XP_POR_NIVEL) {
-    p.xp -= p.level * XP_POR_NIVEL;
+  // XP plano de 100 por nível, com o excedente CARREGADO (§15).
+  while (p.xp >= XP_POR_NIVEL) {
+    p.xp -= XP_POR_NIVEL;
     p.level += 1;
     p.maxHp += 4;
     p.hp = Math.min(p.maxHp, p.hp + 4);
@@ -383,8 +402,18 @@ function atacarInimigo(game: Game, ent: Enemy): void {
     ent.hp = 0;
     removerInimigo(game, ent);
     game.stats.kills += 1;
-    logMsg(game, 'Você abate ' + artigo(ent) + ' ' + nome + ' com ' + dmg + ' de dano.', 'bom');
-    ganharXp(game, xpPorAbate(ent));
+    // §15 — o XP do abate vai no registro: é o único feedback visível da
+    // escala enquanto a UI não mostra XP (a barra de XP é fase futura).
+    const xp = xpPorAbate(game.player, ent);
+    // §16 — e vai para a fila visual: o renderer faz o texto de XP flutuar do
+    // tile do abate. O valor daqui é o CERTO — lido antes de `ganharXp` poder
+    // subir o nível do herói neste mesmo golpe. Teto de segurança para o jogo
+    // headless (oracle, testes), onde ninguém drena a fila.
+    game.abatesRecentes.push({ x: ent.x, y: ent.y, kind: ent.kind, xp: xp });
+    if (game.abatesRecentes.length > 32) game.abatesRecentes.shift();
+    logMsg(game, 'Você abate ' + artigo(ent) + ' ' + nome + ' com ' + dmg + ' de dano' +
+      (xp > 0 ? ' (+' + xp + ' xp).' : ' (sem xp — monstro muito abaixo do seu nível).'), 'bom');
+    ganharXp(game, xp);
   } else {
     logMsg(game, 'Você atinge ' + artigo(ent) + ' ' + nome + ' por ' + dmg +
       ' de dano (' + ent.hp + '/' + ent.maxHp + ').', 'info');
@@ -679,7 +708,8 @@ export function descend(g: Game): void {
   if (!g || g.over) return;
   const depth = g.depth + 1;
   const map = generate(g.seedStr, depth);
-  const pop = populate(map, depth);
+  // §15 — a mistura de monstros do andar novo sai do nível ATUAL do herói.
+  const pop = populate(map, depth, g.player.level);
   const p = g.player;
 
   g.depth = depth;
@@ -876,7 +906,10 @@ export function restore(dados: unknown): Game | null {
 
   let game: Game;
   try {
-    game = createState(seedBruta, depth);
+    // §15 — a retomada repovoa com o nível SALVO do herói (usado só se o save
+    // não trouxer a lista de inimigos, que é quem manda quando existe).
+    const nivelSalvo = Math.max(1, intOr(objetoDe(obj.player)?.level, 1));
+    game = createState(seedBruta, depth, nivelSalvo);
   } catch (e) {
     return null;
   }

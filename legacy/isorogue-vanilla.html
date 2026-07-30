@@ -2526,8 +2526,7 @@ kbd {
       cor: '#d9534f',
       corDetalhe: '#f2a6a3',
       forma: 'triangulo',
-      xp: 3,
-      peso: 10,
+      nivel: 2,
       desc: 'Avança sem hesitar pelo caminho mais curto e golpeia corpo a corpo.'
     },
     sentinel: {
@@ -2541,8 +2540,7 @@ kbd {
       cor: '#4a90d9',
       corDetalhe: '#a9cbef',
       forma: 'hexagono',
-      xp: 4,
-      peso: 1,
+      nivel: 3,
       desc: 'Avança sem hesitar e esmaga corpo a corpo com a marreta.'
     },
     linker: {
@@ -2556,8 +2554,7 @@ kbd {
       cor: '#b06fd0',
       corDetalhe: '#ddb8ec',
       forma: 'duplo-losango',
-      xp: 6,
-      peso: 100,
+      nivel: 1,
       desc: 'Só parte para o ataque quando outro inimigo já está colado no jogador.'
     }
   };
@@ -2921,16 +2918,30 @@ kbd {
     return placed;
   }
 
-  /* Sorteio do arquétipo: pesos base 10/1/100 (a cada 10 Vinculadores, 1
-   * Perseguidor; a cada 10 Perseguidores, 1 Brutamontes), com leve reforço de
-   * Brutamontes/Vinculador conforme a profundidade. Determinístico (consome o
-   * rng de população). */
-  function pickKind(rng, depth) {
-    var weights = [
-      ARCH.chaser.peso,
-      ARCH.sentinel.peso + Math.floor(depth / 2),
-      ARCH.linker.peso + Math.floor(depth / 3)
-    ];
+  /* §15 do BESTIARIO — a mistura de spawn, dirigida pelo NÍVEL DO HERÓI (não
+   * mais pela profundidade). Cada linha é um degrau do herói; as colunas seguem
+   * KINDS (chaser/sentinel/linker = Goblin/Ogro/Slime):
+   *   herói 1: 10/1/100 — a cada 10 slimes, 1 goblin; a cada 10 goblins, 1 ogro;
+   *   herói 2: goblins dominam;  herói 3: ogros dominam, slimes raros;
+   *   herói 4+: ogros comuns, goblins em minoria, slimes raríssimos (estável). */
+  var PESOS_SPAWN = [
+    [10, 1, 100],   /* herói 1 */
+    [100, 10, 30],  /* herói 2 */
+    [40, 100, 10],  /* herói 3 */
+    [15, 100, 3]    /* herói 4+ */
+  ];
+
+  function pesosSpawn(heroLevel) {
+    var l = Math.floor(heroLevel);
+    if (!isFinite(l) || l < 1) l = 1;
+    if (l > PESOS_SPAWN.length) l = PESOS_SPAWN.length;
+    return PESOS_SPAWN[l - 1];
+  }
+
+  /* Sorteio do arquétipo pela linha de PESOS_SPAWN do nível do herói.
+   * Determinístico (consome o rng de população). */
+  function pickKind(rng, heroLevel) {
+    var weights = pesosSpawn(heroLevel);
     var total = 0;
     var i;
     for (i = 0; i < weights.length; i++) total += weights[i];
@@ -2979,7 +2990,7 @@ kbd {
     };
   };
 
-  Ent.populate = function (map, depth) {
+  Ent.populate = function (map, depth, heroLevel) {
     var d = depth < 1 ? 1 : depth;
     var rng = R.makeRNG(R.hash32(map.seed + '#pop#' + d));
     var enemies = [];
@@ -3003,7 +3014,9 @@ kbd {
     var nextEnemyId = 1;
     distribute(map, rooms, qEnemies, nEnemies, rng, taken, start, stairs,
       function (x, y) {
-        var kind = pickKind(rng, d);
+        /* §15 — a MISTURA sai do nível do herói; a profundidade segue
+         * endurecendo contagem (acima) e hp/atk (makeEnemy). */
+        var kind = pickKind(rng, heroLevel);
         enemies.push(Ent.makeEnemy(nextEnemyId++, kind, x, y, d));
       });
 
@@ -5285,7 +5298,9 @@ kbd {
   // Fonte única da cura da poção: o módulo de entidades é dono do item (§6) e
   // grava o mesmo número em item.heal. Fallback só para carga fora de ordem.
   var POTION_HEAL = (R.Ent && R.Ent.POTION_HEAL) || 12;
-  var XP_POR_NIVEL = 10;     // xp necessário = level * XP_POR_NIVEL
+  // §15 do BESTIARIO — XP PLANO: 100 por nível, para qualquer nível. Ao cruzar
+  // 100 o herói sobe e o EXCEDENTE é carregado.
+  var XP_POR_NIVEL = 100;
   var HP_POR_DESCIDA = 2;    // §7: maxHp += 2 ao descer
   var ZOOM_STEP = 1.12;
 
@@ -5542,12 +5557,16 @@ kbd {
   // Criação de estado
   // --------------------------------------------------------------------------
 
-  function createState(seedStr, depth) {
+  function createState(seedStr, depth, heroLevel) {
     var d = intOr(depth, 1);
     if (d < 1) d = 1;
+    var nivel = intOr(heroLevel, 1);
+    if (nivel < 1) nivel = 1;
     var seed = R.normalizeSeed(seedStr);
     var map = R.MapGen.generate(seed, d);
-    var pop = R.Ent.populate(map, d);
+    // §15 — a mistura de spawn do primeiro andar usa o nível do herói (1 numa
+    // expedição nova; o nível salvo numa retomada — ver `restore`).
+    var pop = R.Ent.populate(map, d, nivel);
 
     var game = {
       seedStr: seed,
@@ -5602,17 +5621,23 @@ kbd {
   // Ações do jogador
   // --------------------------------------------------------------------------
 
-  function xpPorAbate(ent) {
+  /* §15 do BESTIARIO — o XP do abate, na escala do dono: 100 no nível do
+   * herói, DOBRANDO por nível acima (200/400) e CAINDO pela metade por nível
+   * abaixo (50/25), até zero quando o herói passa três níveis do monstro. */
+  function xpPorAbate(p, ent) {
     var arch = (R.Ent && R.Ent.ARCH) ? R.Ent.ARCH[ent.kind] : null;
-    if (arch && isNum(arch.xp)) return Math.max(1, Math.floor(arch.xp));
-    return Math.max(1, Math.floor(intOr(ent.maxHp, 9) / 3));
+    var nivelMonstro = (arch && isNum(arch.nivel)) ? arch.nivel : 1;
+    var diff = p.level - nivelMonstro;
+    if (diff >= 3) return 0;
+    return Math.round(100 * Math.pow(2, -diff));
   }
 
   function ganharXp(game, quanto) {
     var p = game.player;
     p.xp += quanto;
-    while (p.xp >= p.level * XP_POR_NIVEL) {
-      p.xp -= p.level * XP_POR_NIVEL;
+    // XP plano de 100 por nível, com o excedente CARREGADO (§15).
+    while (p.xp >= XP_POR_NIVEL) {
+      p.xp -= XP_POR_NIVEL;
       p.level += 1;
       p.maxHp += 4;
       p.hp = Math.min(p.maxHp, p.hp + 4);
@@ -5642,8 +5667,12 @@ kbd {
       ent.hp = 0;
       removerInimigo(game, ent);
       game.stats.kills += 1;
-      logMsg(game, 'Você abate ' + artigo(ent) + ' ' + nome + ' com ' + dmg + ' de dano.', 'bom');
-      ganharXp(game, xpPorAbate(ent));
+      // §15 — o XP do abate vai no registro: é o único feedback visível da
+      // escala enquanto a UI não mostra XP.
+      var xp = xpPorAbate(game.player, ent);
+      logMsg(game, 'Você abate ' + artigo(ent) + ' ' + nome + ' com ' + dmg + ' de dano' +
+        (xp > 0 ? ' (+' + xp + ' xp).' : ' (sem xp — monstro muito abaixo do seu nível).'), 'bom');
+      ganharXp(game, xp);
     } else {
       logMsg(game, 'Você atinge ' + artigo(ent) + ' ' + nome + ' por ' + dmg +
         ' de dano (' + ent.hp + '/' + ent.maxHp + ').', 'info');
@@ -5928,7 +5957,8 @@ kbd {
     if (!game || game.over) return;
     var depth = game.depth + 1;
     var map = R.MapGen.generate(game.seedStr, depth);
-    var pop = R.Ent.populate(map, depth);
+    // §15 — a mistura de monstros do andar novo sai do nível ATUAL do herói.
+    var pop = R.Ent.populate(map, depth, game.player.level);
     var p = game.player;
 
     game.depth = depth;
@@ -6111,7 +6141,10 @@ kbd {
 
     var game;
     try {
-      game = createState(seed, depth);
+      // §15 — a retomada repovoa com o nível SALVO do herói (usado só se o
+      // save não trouxer a lista de inimigos, que é quem manda quando existe).
+      var nivelSalvo = Math.max(1, intOr(obj.player && obj.player.level, 1));
+      game = createState(seed, depth, nivelSalvo);
     } catch (e) {
       return null;
     }

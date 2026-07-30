@@ -185,6 +185,12 @@ export type ArchetypeShape = 'triangulo' | 'hexagono' | 'duplo-losango';
 /**
  * Definição fixa de arquétipo (`R.Ent.ARCH`). `fem` é o gênero gramatical do
  * nome em pt-BR — o registro concorda artigo e particípio por ele.
+ *
+ * `nivel` é o nível do monstro na escala de balanceamento (§15 do
+ * BESTIARIO): Slime 1, Goblin 2, Ogro 3. É ele que dirige o XP do abate
+ * (100 × 2^(nivelMonstro − nivelHeroi), cortado a zero quando o herói passa
+ * três níveis) e a tabela de spawn, que desloca a mistura conforme o nível
+ * do herói.
  */
 export interface Archetype {
   key: ArchetypeKey;
@@ -198,9 +204,8 @@ export interface Archetype {
   cor: string;
   corDetalhe: string;
   forma: ArchetypeShape;
-  xp: number;
-  /** Peso base de sorteio no spawn. */
-  peso: number;
+  /** Nível do monstro na escala de XP e de spawn (§15 do BESTIARIO). */
+  nivel: number;
   desc: string;
 }
 
@@ -229,10 +234,28 @@ export interface Item {
   heal: number;
 }
 
-/** Retorno de `populate(map, depth)`. */
+/** Retorno de `populate(map, depth, heroLevel)`. */
 export interface Population {
   enemies: Enemy[];
   items: Item[];
+}
+
+/**
+ * Um abate para efeito visual — o flutuante de XP de §16 do BESTIARIO.
+ * Escrito pelo engine em `atacarInimigo` (o único lugar onde o XP do abate é
+ * conhecido com o nível CERTO do herói, antes do level-up que o golpe pode
+ * causar) e DRENADO pelo renderer a cada quadro.
+ *
+ * APENAS ANIMAÇÃO — mesmo estatuto do `bump` dos inimigos e do `facing` do
+ * jogador: nenhuma regra de jogo o lê, ele NÃO entra em `snapshot()`, NÃO
+ * entra no save e NÃO pode chegar ao oracle do golden.
+ */
+export interface AbateVisual {
+  x: number;
+  y: number;
+  kind: ArchetypeKey;
+  /** O XP que o abate rendeu (0 quando a escala cortou — o renderer não mostra). */
+  xp: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -320,6 +343,12 @@ export interface Game {
   lastRoomId: number | null;
   /** Trava de reentrância do fim de turno. */
   emTurno: boolean;
+  /**
+   * Fila de abates para efeito visual (ver `AbateVisual`). APENAS ANIMAÇÃO:
+   * o renderer a drena a cada quadro; fora dele (testes, oracle headless) ela
+   * só acumula até o teto de segurança — nunca cresce sem bound.
+   */
+  abatesRecentes: AbateVisual[];
 }
 
 /**

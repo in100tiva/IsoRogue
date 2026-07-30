@@ -49,6 +49,7 @@
 import { CONFIG, DIRS8 } from '../src/engine/core';
 import * as modForge from '../src/render/spriteForge';
 import * as modModel from '../src/render/model3d';
+import * as xpTexto from '../src/render/characters/xpTexto';
 
 /* ------------------------------------------------------------------ *
  * 1. Formas mínimas esperadas (contrato §7 e §4.1 do PERSONAGEM.md)
@@ -2115,47 +2116,91 @@ function subtituloElenco(faltando: readonly string[]): string {
 }
 
 /**
- * As poses da cinemática de morte do guerreiro (ajoelhada e caída), forjadas
- * como REPUSOS sobre o modelo sem espada e lidas na coluna ('parado', 0) —
- * exatamente o que o IsoRenderer desenha nas fases 3 e 4 da morte.
+ * Uma fase da morte na bancada: o rig e o repouso a forjar, pelo NOME do
+ * export — busca por nome, sem fallback de forma, pelo mesmo motivo da lista
+ * `nomes.modelo` (a ordem alfabética de `Object.values` pegaria a peça errada:
+ * `MODELO_CIMITARRA` viria antes de `MODELO_GOBLIN_SEM_CIMITARRA` e a faixa
+ * mentiria). `repouso: null` = repouso neutro (a arma solta e os estágios do
+ * slime não têm pose própria — o derretido é geometria).
+ */
+interface FaseMortePreview {
+  readonly rotulo: string;
+  readonly modelo: string;
+  readonly repouso: string | null;
+}
+
+/**
+ * As fases da cinemática de morte de cada personagem (docs/BESTIARIO.md §14),
+ * no molde da lista que esta seção sempre teve para o guerreiro: o corpo sem
+ * a arma nas poses congeladas, a arma solta em repouso neutro e — no slime,
+ * que DERRETE em vez de tombar — os três estágios de geometria derretida.
+ * Quem não tem fases declaradas aqui não tem a faixa na folha, como antes.
+ */
+const MORTE_PREVIEW: Readonly<Record<string, readonly FaseMortePreview[]>> = {
+  guerreiro: [
+    { rotulo: 'ajoelhada (~0,9 s)', modelo: 'MODELO_GUERREIRO_SEM_ESPADA', repouso: 'POSE_AJOELHADA' },
+    { rotulo: 'caída (~1,7 s)', modelo: 'MODELO_GUERREIRO_SEM_ESPADA', repouso: 'POSE_CAIDA' }
+  ],
+  goblin: [
+    { rotulo: 'agachado (~0,3 s)', modelo: 'MODELO_GOBLIN_SEM_CIMITARRA', repouso: 'POSE_MORTE_GOBLIN_AGACHADO' },
+    { rotulo: 'caído — o RASTRO (~0,75 s)', modelo: 'MODELO_GOBLIN_SEM_CIMITARRA', repouso: 'POSE_MORTE_GOBLIN_CAIDO' },
+    { rotulo: 'cimitarra solta (cai e some)', modelo: 'MODELO_CIMITARRA', repouso: null }
+  ],
+  ogro: [
+    { rotulo: 'agachado (~0,45 s)', modelo: 'MODELO_OGRO_SEM_MARRETA', repouso: 'POSE_MORTE_OGRO_AGACHADO' },
+    { rotulo: 'caído, antes de esmaecer (~1,0 s)', modelo: 'MODELO_OGRO_SEM_MARRETA', repouso: 'POSE_MORTE_OGRO_CAIDO' },
+    { rotulo: 'marreta pousada — o RASTRO', modelo: 'MODELO_MARRETA', repouso: null }
+  ],
+  slime: [
+    { rotulo: 'achatou (~0,25 s)', modelo: 'MODELO_SLIME_DERRETIDO_1', repouso: null },
+    { rotulo: 'desabou (~0,6 s)', modelo: 'MODELO_SLIME_DERRETIDO_2', repouso: null },
+    { rotulo: 'a poça — o RASTRO (~0,95 s)', modelo: 'MODELO_SLIME_DERRETIDO_3', repouso: null }
+  ]
+};
+
+/**
+ * As fases da cinemática de morte, forjadas como REPUSOS sobre os modelos
+ * secundários e lidas na coluna ('parado', 0) — exatamente o que o
+ * IsoRenderer desenha nas sequências de abate.
  *
- * A faixa só existe quando o módulo exporta as três peças pelo NOME
- * (`MODELO_GUERREIRO_SEM_ESPADA`, `POSE_AJOELHADA`, `POSE_CAIDA`): os outros
- * personagens não as têm e a folha de nenhum deles muda por causa desta seção.
- * Busca por nome, sem fallback de forma — `ehPose` casaria com `POSE_PARADA` e
- * a faixa mentiria. Erro de forja sobe: a folha principal falha alto (o
- * capturador publica `data-erro`), como em qualquer seção dela.
+ * A faixa só existe para personagens com entrada em `MORTE_PREVIEW`, e cada
+ * fase só entra se o módulo exportar as peças pelo NOME: uma fase ausente é
+ * pulada em vez de derrubar a folha — é o que permite escrever os rigs por
+ * etapas sem mentir na bancada. Erro de forja sobe: a folha principal falha
+ * alto (o capturador publica `data-erro`), como em qualquer seção dela.
  */
 function secaoPosesCinematicas(alvo: Preparado, zAnim: number, n: () => string): HTMLElement | null {
   const mod = alvo.mod;
-  const modelo = mod['MODELO_GUERREIRO_SEM_ESPADA'];
-  const ajoelhada = mod['POSE_AJOELHADA'];
-  const caida = mod['POSE_CAIDA'];
-  if (!ehRig(modelo) || !ehPose(ajoelhada) || !ehPose(caida)) return null;
+  const fases = MORTE_PREVIEW[alvo.ficha.chave];
+  if (!fases || fases.length === 0) return null;
 
   const { opts } = montarOpcoes(mod, alvo.ficha);
   const s = secao(
-    `${n()} · cinemática de morte — poses ajoelhada e caída (dir ${DIR_ANIMACAO})`,
-    'forjadas como repouso sobre o modelo SEM espada e lidas na coluna parado/0, ' +
-      'como o IsoRenderer faz nas fases 3 e 4 da morte · a espada solta, o sangue ' +
-      'e o fade são desenho de tela do renderer, não desta folha'
+    `${n()} · cinemática de morte — as fases congeladas (dir ${DIR_ANIMACAO})`,
+    'cada fase é um atlas secundário lido na coluna parado/0, como o IsoRenderer ' +
+      'desenha na sequência de abate (docs/BESTIARIO.md §14) · o sangue, a geleia, ' +
+      'a queda da arma e o esmaecimento do corpo são desenho de tela do renderer, ' +
+      'não desta folha'
   );
   const f = el('div', 'faixa');
-  const pares: readonly (readonly [string, unknown])[] = [
-    ['ajoelhada (~0,9 s)', ajoelhada],
-    ['caída (~1,7 s)', caida]
-  ];
-  for (const [rotulo, pose] of pares) {
+  let conteudo = 0;
+  for (const fase of fases) {
+    const modelo = mod[fase.modelo];
+    if (!ehRig(modelo)) continue;
+    const pose: unknown = fase.repouso === null ? {} : mod[fase.repouso];
+    if (fase.repouso !== null && !ehPose(pose)) continue;
     const forjar = resolverForja(modForge as unknown as Registro, { ...opts, repouso: pose });
     const atlas = exigirPixels(forjar(modelo));
     f.append(
       cartao(
         celulaQuadro(atlas, DIR_ANIMACAO, 'parado', 0, zAnim),
-        rotulo,
-        `repouso forjado · parado/0 · dir ${DIR_ANIMACAO}`
+        fase.rotulo,
+        `${fase.repouso === null ? 'repouso neutro' : 'repouso forjado'} · parado/0 · dir ${DIR_ANIMACAO}`
       )
     );
+    conteudo++;
   }
+  if (conteudo === 0) return null;
   s.append(f);
   return s;
 }
@@ -2265,7 +2310,7 @@ function montar(
     colsAnim.append(s);
   }
 
-  /* --- poses da cinemática de morte (só entra quem as exporta: o guerreiro) --- */
+  /* --- fases da cinemática de morte (só entra quem tem ficha em MORTE_PREVIEW) --- */
   const sCine = secaoPosesCinematicas(alvo, zAnim, n);
   if (sCine) colsAnim.append(sCine);
 
@@ -2496,6 +2541,31 @@ function montarElenco(
   const sTira = secao(`${n()} · o elenco (G9 e G10)`, subtituloElenco(faltando));
   sTira.append(pilhaDeCanvas(...faixaDoElenco(elenco, 4, true)));
   raiz.append(sTira);
+
+  /* --- §16 — a faixa do texto de XP flutuante: os cinco valores da escala
+   * de §15 como rigs de caixas, na mesma técnica dos personagens. --- */
+  const sXp = secao(
+    `${n()} · o texto de XP flutuante (§16)`,
+    'os cinco valores da escala de §15 (100 × 2^(nivelMonstro − nivelHeroi), ' +
+      'cortada a zero) como rigs de caixas, lidos em parado/0 na linha dir 2 (a ' +
+      'frente) — exatamente o que o IsoRenderer desenha subindo do tile do abate · ' +
+      'a subida e o esmaecimento são desenho de tela do renderer, não desta folha'
+  );
+  const fXp = el('div', 'faixa');
+  for (const v of [25, 50, 100, 200, 400]) {
+    const modelo = xpTexto.modeloDeXp(v);
+    if (!modelo) continue;
+    const forjar = resolverForja(modForge as unknown as Registro, {
+      paleta: xpTexto.PALETA_XP,
+      rampas: xpTexto.RAMPAS_XP,
+      rampaDaCor: xpTexto.RAMPA_DA_COR_XP,
+      repouso: {}
+    });
+    const atlas = exigirPixels(forjar(modelo));
+    fXp.append(cartao(celulaQuadro(atlas, 2, 'parado', 0, 4), `+${v} xp`, 'parado/0 · dir 2'));
+  }
+  sXp.append(fXp);
+  raiz.append(sXp);
 
   const colsBaixo = el('div', 'colunas');
 

@@ -1234,3 +1234,110 @@ export const POSE_PARADA_GOBLIN: Pose = {
     ry: grausParaRad(A.bracoEsqRy)
   }
 };
+
+/* ------------------------------------------------------------------ *
+ * 8. Morte do Goblin (fase das cinemáticas de abate — docs/BESTIARIO.md §14)
+ *
+ * A MESMA técnica da morte do Guerreiro (§8 de `./warrior`): as poses abaixo
+ * NÃO passam pela animação de §6 — são REPUSOS de forja congelados na coluna
+ * ('parado', 0) de atlases secundários, lidos na direção do facing. A queda da
+ * cimitarra é rotação de TELA no renderer, não de pose. Nada aqui toca o
+ * engine (R54): quem detecta o abate é o IsoRenderer, por observação.
+ *
+ * O RASTRO do goblin é o CORPO caído sobre a poça de sangue — a cimitarra cai
+ * junto, mas some (afunda fora da tela): é o contraste deliberado com o Ogro,
+ * cuja marca é a arma, e com o Slime, cuja marca é a geleia.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Variante SEM a cimitarra, para a sequência de morte: `criarModeloGoblin()`
+ * (árvore NOVA — `MODELO_GOBLIN` nunca é tocado) com o filho `cimitarra` de
+ * `bracoDir` podado pelo nome. Mesmo molde de `criarModeloGuerreiroSemEspada`:
+ * o corpo é o mesmo, e duas declarações do mesmo corpo divergem no primeiro
+ * ajuste visual.
+ */
+export function criarModeloGoblinSemCimitarra(): No {
+  const modelo = criarModeloGoblin();
+  const filhos = modelo.filhos ?? [];
+  return {
+    ...modelo,
+    filhos: filhos.map((no) =>
+      no.nome === NOS_GOBLIN.bracoDir
+        ? {
+          ...no,
+          filhos: (no.filhos ?? []).filter((f) => f.nome !== NOS_GOBLIN.cimitarra)
+        }
+        : no
+    )
+  };
+}
+
+/**
+ * A cimitarra SOZINHA, como mini-rig: um nó raiz com as caixas de
+ * `criarCimitarra()` em pé a partir da origem (a base do punho em z ≈ 0 — a
+ * âncora do atlas é o punho, que é por onde a sequência de morte a faz girar).
+ * Forjada com repouso neutro e lida na coluna ('parado', 0): a rotação da
+ * queda é de TELA (`ctx.rotate` no renderer), não de pose.
+ */
+export function criarModeloCimitarra(): No {
+  return {
+    nome: NOS_GOBLIN.raiz,
+    pivo: [0, 0, 0],
+    caixas: criarCimitarra().caixas
+  };
+}
+
+/** Mesmo padrão de `MODELO_GOBLIN`: constantes de módulo, não mutar. */
+export const MODELO_GOBLIN_SEM_CIMITARRA: No = criarModeloGoblinSemCimitarra();
+export const MODELO_CIMITARRA: No = criarModeloCimitarra();
+
+/**
+ * POSE_MORTE_GOBLIN_AGACHADO — o cambaleio (fase intermediária, ~0,3–0,75 s).
+ *
+ * No molde de `POSE_AJOELHADA` do Guerreiro, com o tempero do bicho: o goblin
+ * é baixo e cartunesco, então o tronco fecha MAIS (+32° — ele desaba para a
+ * frente, não se ajoelha com dignidade). `pernaDir` dobrada para trás (rx
+ * −75°: a leitura do joelho que tocou o chão), `pernaEsq` plantada à frente.
+ * Braços pendentes, abertos só o bastante para não fundirem no tronco. As
+ * ORELHAS caem para a frente junto com a cabeça (rx +28° somados à inclinação
+ * de geometria): são o traço I2, e é o desabamento delas que vende o apagar
+ * dos olhos. Sem `cimitarra`: esta pose é forjada sobre
+ * `MODELO_GOBLIN_SEM_CIMITARRA`.
+ */
+export const POSE_MORTE_GOBLIN_AGACHADO: Pose = {
+  [NOS_GOBLIN.pernaDir]: { rx: grausParaRad(-75) },
+  [NOS_GOBLIN.pernaEsq]: { rx: grausParaRad(25) },
+  [NOS_GOBLIN.torso]: { rx: grausParaRad(32) },
+  [NOS_GOBLIN.cabeca]: { rx: grausParaRad(25) },
+  [NOS_GOBLIN.bracoDir]: { rx: grausParaRad(12), ry: grausParaRad(15) },
+  [NOS_GOBLIN.bracoEsq]: { rx: grausParaRad(14), ry: grausParaRad(-18) },
+  [NOS_GOBLIN.orelhaEsq]: { rx: grausParaRad(28) },
+  [NOS_GOBLIN.orelhaDir]: { rx: grausParaRad(28) }
+};
+
+/**
+ * POSE_MORTE_GOBLIN_CAIDO — deitado no chão (fase final, PERSISTENTE: é o
+ * rastro do abate).
+ *
+ * A via do Guerreiro (`POSE_CAIDA`): girar a `raiz` em rx +85° tomba o corpo
+ * INTEIRO de COSTAS — em `matPivoRotacao`, `rx` positivo leva o topo (+Z)
+ * para −Y, as costas — e o corpo se estende a partir da âncora (os pés ficam
+ * na origem), de face para CIMA. Torso −8° e cabeça −12° erguem peito e rosto
+ * para fora do plano do chão, com rz +25° na cabeça — o elmo tombado de lado
+ * separa "deitado" de "agachado". Braços abertos (ry ±40°), pernas levemente
+ * dobradas e assimétricas (cadáver simétrico lê como manequim). As orelhas
+ * abrem em leque (ry ∓35°): no chão, elas são a silhueta que continua lendo
+ * "goblin morto" a três tiles — sem elas o corpo caído seria um monte verde
+ * anônimo.
+ */
+export const POSE_MORTE_GOBLIN_CAIDO: Pose = {
+  [NOS_GOBLIN.raiz]: { rx: grausParaRad(85) },
+  [NOS_GOBLIN.torso]: { rx: grausParaRad(-8) },
+  [NOS_GOBLIN.cabeca]: { rx: grausParaRad(-12), rz: grausParaRad(25) },
+  [NOS_GOBLIN.bracoDir]: { rx: grausParaRad(10), ry: grausParaRad(40) },
+  [NOS_GOBLIN.bracoEsq]: { rx: grausParaRad(10), ry: grausParaRad(-40) },
+  [NOS_GOBLIN.pernaDir]: { rx: grausParaRad(15) },
+  [NOS_GOBLIN.pernaEsq]: { rx: grausParaRad(-10) },
+  [NOS_GOBLIN.orelhaEsq]: { ry: grausParaRad(-35) },
+  [NOS_GOBLIN.orelhaDir]: { ry: grausParaRad(35) }
+};

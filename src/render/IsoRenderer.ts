@@ -91,8 +91,12 @@ import {
 import {
   ARCO_GOLPE_GOBLIN,
   CORES_EMISSIVAS_GOBLIN,
+  MODELO_CIMITARRA,
   MODELO_GOBLIN,
+  MODELO_GOBLIN_SEM_CIMITARRA,
   PALETA_GOBLIN,
+  POSE_MORTE_GOBLIN_AGACHADO,
+  POSE_MORTE_GOBLIN_CAIDO,
   POSE_PARADA_GOBLIN,
   RAMPAS_GOBLIN,
   RAMPA_DA_COR_GOBLIN
@@ -101,6 +105,9 @@ import {
   ARCO_GOLPE_SLIME,
   CORES_EMISSIVAS_SLIME,
   MODELO_SLIME,
+  MODELO_SLIME_DERRETIDO_1,
+  MODELO_SLIME_DERRETIDO_2,
+  MODELO_SLIME_DERRETIDO_3,
   PALETA_SLIME,
   POSE_PARADA_SLIME,
   RAMPAS_SLIME,
@@ -109,12 +116,22 @@ import {
 import {
   ARCO_GOLPE_OGRO,
   CORES_EMISSIVAS_OGRO,
+  MODELO_MARRETA,
   MODELO_OGRO,
+  MODELO_OGRO_SEM_MARRETA,
   PALETA_OGRO,
+  POSE_MORTE_OGRO_AGACHADO,
+  POSE_MORTE_OGRO_CAIDO,
   POSE_PARADA_OGRO,
   RAMPAS_OGRO,
   RAMPA_DA_COR_OGRO
 } from './characters/ogre';
+import {
+  PALETA_XP,
+  RAMPA_DA_COR_XP,
+  RAMPAS_XP,
+  modeloDeXp
+} from './characters/xpTexto';
 import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -342,6 +359,117 @@ const RETRATOS: Readonly<Partial<Record<ArchetypeKey, FichaDeSprite>>> = {
   sentinel: { modelo: MODELO_OGRO, forja: FORJA_OGRO }
 };
 
+/* ------------------------------------------------------------------ *
+ * As MORTES do bestiário (docs/BESTIARIO.md §14)
+ *
+ * A MESMA técnica da cinemática de morte do Guerreiro, generalizada para os
+ * três monstros: poses/estágios congelados na coluna ('parado', 0) de atlases
+ * secundários (a chave de cache do forge já inclui o repouso E o modelo), a
+ * queda da arma por rotação de TELA, o sangue e a geleia como decalques de
+ * chão em primitivas de canvas, e o relógio por `dt` — tudo por OBSERVAÇÃO
+ * do `Game`, sem uma letra no engine (R54). Cada bicho deixa um RASTRO
+ * persistente e distinto no tile do abate:
+ *
+ *   - GOBLIN  → o CORPO caído sobre o sangue (a cimitarra cai e some);
+ *   - OGRO    → a MARRETA pousada sobre o sangue (o corpo cai e some);
+ *   - SLIME   → a GELEIA no chão (o estágio 3 do derretimento, com a bolinha
+ *               âmbar afogada — emissiva, acesa até no escuro).
+ *
+ * Lendo o chão da masmorra, o jogador sabe QUEM morreu ali sem ter visto o
+ * abate. Os rastros vivem até a troca de mapa (`syncRun` os zera), como o
+ * sangue do Guerreiro vive até a próxima expedição.
+ * ------------------------------------------------------------------ */
+
+/** Forjas da morte do Goblin — corpo sem cimitarra em duas poses + a arma solta. */
+const FORJA_MORTE_GOBLIN_AGACHADO: OpcoesForja = { ...FORJA_GOBLIN, repouso: POSE_MORTE_GOBLIN_AGACHADO };
+const FORJA_MORTE_GOBLIN_CAIDO: OpcoesForja = { ...FORJA_GOBLIN, repouso: POSE_MORTE_GOBLIN_CAIDO };
+const FORJA_CIMITARRA: OpcoesForja = { ...FORJA_GOBLIN, repouso: POSE_NEUTRA };
+
+/** Forjas da morte do Ogro — corpo sem marreta em duas poses + a arma solta. */
+const FORJA_MORTE_OGRO_AGACHADO: OpcoesForja = { ...FORJA_OGRO, repouso: POSE_MORTE_OGRO_AGACHADO };
+const FORJA_MORTE_OGRO_CAIDO: OpcoesForja = { ...FORJA_OGRO, repouso: POSE_MORTE_OGRO_CAIDO };
+const FORJA_MARRETA: OpcoesForja = { ...FORJA_OGRO, repouso: POSE_NEUTRA };
+
+/** Forja dos estágios de derretimento do Slime — o derretido é GEOMETRIA, não pose. */
+const FORJA_SLIME_DERRETIDA: OpcoesForja = { ...FORJA_SLIME, repouso: POSE_NEUTRA };
+
+/* --- tempos da morte do GOBLIN (sequência de 1,1 s) --- */
+/** Sangue: a poça cresce de 0 até aqui e persiste. Valor compartilhado com o Ogro. */
+const MORTE_MOB_SANGUE = 0.9;
+/** Cimitarra: solta-se da mão neste instante, pousa e esmaece até sumir. */
+const GOB_MORTE_ARMA_INICIO = 0.1;
+const GOB_MORTE_ARMA_FIM = 0.55;
+const GOB_MORTE_ARMA_SOME = 0.85;
+/** Troca dura para a pose agachada, depois para a caída (que persiste). */
+const GOB_MORTE_AGACHADO = 0.3;
+const GOB_MORTE_CAIDO = 0.75;
+const DUR_MORTE_GOBLIN = 1.1;
+/** Raio final da poça do goblin, em px a zoom 1 (bicho pequeno, poça pequena). */
+const SANGUE_RAIO_GOBLIN = 16;
+
+/* --- tempos da morte do OGRO (sequência de 1,7 s — ele é PESADO) --- */
+/** Sangue do ogro: cresce mais devagar e maior. */
+const OGRO_MORTE_SANGUE = 1.1;
+/** Marreta: solta-se da mão, pousa na poça e FICA (é o rastro). */
+const OGRO_MORTE_ARMA_INICIO = 0.2;
+const OGRO_MORTE_ARMA_FIM = 0.95;
+/** Troca dura para a pose agachada, depois para a caída. */
+const OGRO_MORTE_AGACHADO = 0.45;
+const OGRO_MORTE_CAIDO = 1.0;
+/** O corpo caído ESMAECE e some: o rastro do ogro é a arma, não o corpo. */
+const OGRO_MORTE_CORPO_SOME_INICIO = 1.25;
+const OGRO_MORTE_CORPO_SOME_FIM = 1.65;
+const DUR_MORTE_OGRO = 1.7;
+const SANGUE_RAIO_OGRO = 24;
+
+/* --- tempos da morte do SLIME (sequência de 1,0 s — derretimento) --- */
+/** Geleia: a poça verde cresce de 0 até aqui e persiste. */
+const SLIME_MORTE_GOSMA = 1.0;
+/** Cortes duros entre os estágios de derretimento (o 3º é a poça persistente). */
+const SLIME_MORTE_ESTAGIO_1 = 0.25;
+const SLIME_MORTE_ESTAGIO_2 = 0.6;
+const SLIME_MORTE_ESTAGIO_3 = 0.95;
+const DUR_MORTE_SLIME = 1.0;
+const GOSMA_RAIO_SLIME = 18;
+
+/** Giro total das armas na queda, em radianos (~70°). O giro pixelado é desejado. */
+const ARMA_GIRO_MORTE = (70 * Math.PI) / 180;
+
+/* ------------------------------------------------------------------ *
+ * O texto de XP flutuante (docs/BESTIARIO.md §16)
+ *
+ * O abate chega pela fila VISUAL `game.abatesRecentes` (o engine escreve no
+ * instante do golpe, com o nível do herói ainda certo; o renderer drena a
+ * cada quadro — mesmo estatuto do `bump`). O texto é o rig de caixas de
+ * `./characters/xpTexto` forjado sob demanda por valor, lido na linha `dir 2`
+ * (a frente) da coluna ('parado', 0) — estático, quem se move é a POSIÇÃO de
+ * tela: sobe com ease-out e esmaece no último terço. Brilho pleno sempre: é
+ * feedback de recompensa, não cenário (o mesmo estatuto do clarão de dano).
+ * ------------------------------------------------------------------ */
+
+/** Forja do texto de XP — repouso neutro: o rig é um nó único sem pose. */
+const FORJA_XP: OpcoesForja = {
+  paleta: PALETA_XP,
+  rampas: RAMPAS_XP,
+  rampaDaCor: RAMPA_DA_COR_XP,
+  repouso: POSE_NEUTRA
+};
+
+/** Duração total da subida do texto, em segundos. */
+const DUR_FLUTUA_XP = 1.1;
+/** Deslocamento vertical total, em px a zoom 1 (da âncora do tile para cima). */
+const FLUTUA_XP_SUBIDA = 38;
+/** Fração final em que o texto esmaece (antes disso, alpha 1). */
+const FLUTUA_XP_FADE = 0.65;
+
+/** Um flutuante de XP vivo, puramente visual. */
+interface FlutuanteXp {
+  x: number;
+  y: number;
+  xp: number;
+  t: number;
+}
+
 /**
  * §6 — a troca de tile leva ~120 ms NA TELA. O estado lógico já mudou antes do
  * primeiro quadro desta interpolação: o turno não espera animação (R54).
@@ -450,8 +578,29 @@ interface Vfx {
   facing: number;
   /** Segundos restantes do deslize entre tiles — alimenta o ciclo de marcha. */
   passo: number;
-  /** 0/1 — qual metade do ciclo de 4 quadros o próximo passo usa. */
+  /** 0/1 — qual metade do ciclo de 4 quadros o próximo passo usa (perna alternada). */
   pe: number;
+}
+
+/**
+ * Um abate registrado, puramente visual (docs/BESTIARIO.md §14). O gatilho é
+ * OBSERVAÇÃO: um id que o renderer conhecia some de `game.enemies` dentro do
+ * mesmo mapa — e a única via de saída é `removerInimigo`, chamada só por
+ * `atacarInimigo` quando o golpe do jogador mata. Nenhum campo novo em
+ * `Enemy`, em `snapshot()`, no save ou no oracle.
+ *
+ * `t` avança por `dt` em `update` e para na duração da sequência: a partir
+ * daí o desenho é o estado final — o RASTRO persistente do abate, que fica
+ * no tile até a troca de mapa. Posição e `facing` são os últimos conhecidos
+ * do `Vfx` da entidade (o corpo cai olhando para onde olhava).
+ */
+interface MorteInimigo {
+  id: number;
+  kind: ArchetypeKey;
+  x: number;
+  y: number;
+  facing: number;
+  t: number;
 }
 
 /* ------------------------------------------------------------------ *
@@ -608,6 +757,42 @@ export class IsoRenderer {
   private readonly atlasInimigo = new Map<ArchetypeKey, AtlasPersonagem | null>();
   /** Último `game.turn` em que as regras de §0.2 rodaram (−1 = nenhum ainda). */
   private turnoOrientado = -1;
+
+  /* --- os abates do bestiário (docs/BESTIARIO.md §14) --- */
+  /**
+   * Abates registrados, por id da entidade. Vivem até a troca de mapa: o
+   * rastro é persistente por contrato, não por esquecimento.
+   */
+  private readonly mortes = new Map<number, MorteInimigo>();
+  /**
+   * Índice tile → abates, preenchido no REGISTRO (evento raro — alocação fora
+   * do laço quente) e lido no passe das entidades por índice de tile, como
+   * `entAt`/`itemAt`. Dois abates no mesmo tile empilham na ordem de registro.
+   */
+  private readonly mortesPorTile = new Map<number, MorteInimigo[]>();
+  /**
+   * Ids vistos no `update` anterior e neste, em double-buffer: os conjuntos se
+   * TROCAM a cada quadro em vez de se alocar — a diferença entre eles é o
+   * gatilho do abate, e ela não pode custar um `Set` novo por frame.
+   */
+  private vivosA = new Set<number>();
+  private vivosB = new Set<number>();
+  /** O `kind` de cada id vivo — a ficha de identidade consultada na hora do abate. */
+  private readonly kindPorId = new Map<number, ArchetypeKey>();
+  /** Largura do mapa corrente, para o índice de tile dos abates. Vinda de `syncRun`. */
+  private mapW = 0;
+  /**
+   * Atlases secundários da morte dos monstros (agachado/caído/arma/estágios),
+   * memoizados sob demanda no padrão de `atlasMorte`: chave `kind:qual`,
+   * `undefined` = nunca tentado, `null` guardado = já tentou e não há canvas.
+   */
+  private readonly atlasMorteInimigo = new Map<string, AtlasPersonagem | null>();
+
+  /* --- o texto de XP flutuante (docs/BESTIARIO.md §16) --- */
+  /** Flutuantes vivos. Poucos e de vida curta — varridos por quadro sem índice. */
+  private readonly flutuantes: FlutuanteXp[] = [];
+  /** Atlas do texto por VALOR (o conjunto é fechado: 25/50/100/200/400). */
+  private readonly atlasXp = new Map<number, AtlasPersonagem | null>();
   /** Buffer de tingimento do clarão de dano (o sprite não é um caminho, não dá para preencher). */
   private tinta: HTMLCanvasElement | null = null;
   private tintaCtx: CanvasRenderingContext2D | null = null;
@@ -834,9 +1019,14 @@ export class IsoRenderer {
       // quadro seguinte ao passo, invertendo a precedência que o contrato fixa.
       const turno = typeof game.turn === 'number' ? game.turn : 0;
       const novoTurno = turno !== this.turnoOrientado;
+      // §14 — o conjunto deste quadro, no conjunto RESERVA (double-buffer: a
+      // diferença entre os dois não pode custar uma alocação por frame).
+      const vistos = this.vivosB;
       for (let i = 0; i < en.length; i++) {
         const e = en[i];
         if (!e) continue;
+        vistos.add(e.id);
+        this.kindPorId.set(e.id, e.kind);
         const v = this.vfxOf('e' + e.id, e.x, e.y, e.hp);
         // ANTES do trackVfx: é ele que sincroniza `v.x/v.y` com o tile novo, e a
         // regra (a) precisa justamente do delta entre os dois.
@@ -848,7 +1038,44 @@ export class IsoRenderer {
           if (e.bump < 0) e.bump = 0;
         }
       }
+      // §14 — quem estava no quadro anterior e não está neste foi abatido.
+      this.registrarAbates(vistos);
+      this.vivosB = this.vivosA;
+      this.vivosA = vistos;
+      this.vivosB.clear();
       this.turnoOrientado = turno;
+    }
+
+    // §14 — os relógios dos abates avançam SEMPRE, tile visto ou não: a morte
+    // não congela quando o jogador vira o corredor. O estado final (o rastro)
+    // é desenhado sob a mesma regra de visão dos itens (R31 — só dentro do FOV).
+    for (const m of this.mortes.values()) {
+      const dur = m.kind === 'chaser' ? DUR_MORTE_GOBLIN
+        : m.kind === 'sentinel' ? DUR_MORTE_OGRO
+          : DUR_MORTE_SLIME;
+      if (m.t < dur) {
+        m.t += d;
+        if (m.t > dur) m.t = dur;
+      }
+    }
+
+    // §16 — a fila de abates é do RENDER: o engine escreve no golpe, aqui se
+    // drena. Sem quadro (testes, oracle headless) ela acumula até o teto de
+    // lá — aqui nunca passa de uma rajada de abates por frame.
+    const filaAbates = game.abatesRecentes;
+    if (filaAbates && filaAbates.length > 0) {
+      for (let i = 0; i < filaAbates.length; i++) {
+        const a = filaAbates[i];
+        if (a && a.xp > 0) {
+          this.flutuantes.push({ x: a.x, y: a.y, xp: a.xp, t: 0 });
+        }
+      }
+      filaAbates.length = 0;
+    }
+    for (let i = this.flutuantes.length - 1; i >= 0; i--) {
+      const f = this.flutuantes[i];
+      f.t += d;
+      if (f.t >= DUR_FLUTUA_XP) this.flutuantes.splice(i, 1);
     }
 
     /*
@@ -914,6 +1141,37 @@ export class IsoRenderer {
       if (i >= 0) v.facing = i; // (b)
     }
     // (c) — silêncio de propósito: `v.facing` já é o último conhecido.
+  }
+
+  /**
+   * §14 — o gatilho do abate, por OBSERVAÇÃO: todo id presente no quadro
+   * anterior e ausente deste dentro do mesmo mapa foi morto pelo jogador (a
+   * única via de saída de `game.enemies` é `removerInimigo`, chamada só de
+   * `atacarInimigo` no golpe fatal — ver src/engine/game.ts). Não há outra:
+   * `syncRun` zera os conjuntos na troca de mapa, então descida e retomada de
+   * save não geram abates fantasmas.
+   *
+   * O registro captura o último `Vfx` conhecido (tile, facing) e o `kind` da
+   * ficha de identidade. `prefers-reduced-motion` pula a sequência direto
+   * para o rastro, como `pularCinematica` faz com a morte do Guerreiro.
+   */
+  private registrarAbates(vistos: ReadonlySet<number>): void {
+    for (const id of this.vivosA) {
+      if (vistos.has(id)) continue;
+      const v = this.vfx.get('e' + id);
+      const kind = this.kindPorId.get(id);
+      this.kindPorId.delete(id);
+      if (!v || !kind) continue;
+      const m: MorteInimigo = { id: id, kind: kind, x: v.x, y: v.y, facing: v.facing, t: 0 };
+      if (prefereReduzirMovimento()) {
+        m.t = kind === 'chaser' ? DUR_MORTE_GOBLIN : kind === 'sentinel' ? DUR_MORTE_OGRO : DUR_MORTE_SLIME;
+      }
+      this.mortes.set(id, m);
+      const ti = m.y * this.mapW + m.x;
+      const lista = this.mortesPorTile.get(ti);
+      if (lista) lista.push(m);
+      else this.mortesPorTile.set(ti, [m]);
+    }
   }
 
   /* ------------------------------------------------------------------ *
@@ -1044,6 +1302,17 @@ export class IsoRenderer {
         d2 = dx * dx + dy * dy;
         lvl = d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0;
         const cy = sy + hh;
+        // §14 — os abates do tile: decalques (sangue/geleia) e corpos PRIMEIRO,
+        // para que qualquer coisa viva (item, inimigo, o próprio jogador
+        // pisando no rastro) seja desenhada POR CIMA deles.
+        if (seen && this.mortesPorTile.size > 0) {
+          const ms = this.mortesPorTile.get(i);
+          if (ms) {
+            for (let k = 0; k < ms.length; k++) {
+              this.desenharMorteInimigo(ctx, ms[k], sx, cy, z, lvl);
+            }
+          }
+        }
         if (seen && this.itemAt) {
           const ii = this.itemAt[i];
           if (ii >= 0) this.drawPotion(ctx, game.items[ii], sx, cy, z, lvl, ii);
@@ -1053,6 +1322,22 @@ export class IsoRenderer {
           if (ei >= 0) this.drawEnemy(ctx, game.enemies[ei], sx, cy, z, lvl, p);
         }
         if (isPlayer) this.drawPlayer(ctx, p, sx, cy, z);
+      }
+    }
+
+    /*
+     * §16 — os flutuantes de XP, DEPOIS do mundo: são feedback de recompensa
+     * (o mesmo estatuto do clarão de dano), não cenário — ficam por cima até
+     * das paredes, porque um "+100" escondido atrás de uma parede não cumpre
+     * a função dele. Mas seguem a regra de visão dos itens (R31): um abate que
+     * o jogador não viu acontecer não solta texto — quem conta essa história é
+     * o rastro (§14), não o flutuante.
+     */
+    if (this.flutuantes.length > 0) {
+      for (let i = 0; i < this.flutuantes.length; i++) {
+        const f = this.flutuantes[i];
+        if (!vis.has(f.y * w + f.x)) continue;
+        this.desenharFlutuanteXp(ctx, f, hw, hh, ox, oy, z);
       }
     }
 
@@ -1105,6 +1390,14 @@ export class IsoRenderer {
     this.atlas = null;
     this.atlasInimigo.clear();
     this.atlasMorte.clear();
+    this.atlasMorteInimigo.clear();
+    this.mortes.clear();
+    this.mortesPorTile.clear();
+    this.vivosA.clear();
+    this.vivosB.clear();
+    this.kindPorId.clear();
+    this.flutuantes.length = 0;
+    this.atlasXp.clear();
     this.tinta = null;
     this.tintaCtx = null;
     this.anim.pronta = false;
@@ -1180,6 +1473,16 @@ export class IsoRenderer {
     if (this.lastMap === game.map) return;
     this.lastMap = game.map;
     this.vfx = new Map<string, Vfx>();
+    // Mapa novo = chão novo. Os rastros dos abates são do andar que ficou para
+    // trás — como o sangue do Guerreiro, eles não descem a escada. Os ATLASES
+    // da morte ficam: são memoizados pelo forge e não mudam com o mapa.
+    this.mortes.clear();
+    this.mortesPorTile.clear();
+    this.vivosA.clear();
+    this.vivosB.clear();
+    this.kindPorId.clear();
+    this.flutuantes.length = 0;
+    this.mapW = game.map.w;
     // Índices de tile são por mapa: os alphas das paredes do nível anterior
     // não significam nada no novo.
     this.alfaParedes.clear();
@@ -1682,6 +1985,334 @@ export class IsoRenderer {
     }
 
     return cy - TOPO_BARRA_INIMIGO * z;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * As MORTES do bestiário (docs/BESTIARIO.md §14) — desenho por fase
+   *
+   * Mesma técnica da cinemática de morte do Guerreiro (ver `desenharMorte`):
+   * decalque de chão em primitivas de canvas, corpo em coluna ('parado', 0)
+   * de atlas secundário modulado pela luz do tile, arma solta por rotação de
+   * TELA. Sem atlas (jsdom, sem contexto 2D) nada quebra: quem desenha checa
+   * `f.fonte` antes do `drawImage`, e os decalques saem mesmo assim.
+   * ------------------------------------------------------------------ */
+
+  /** O despachante: uma linha por bicho, como `RETRATOS` faz com os vivos. */
+  private desenharMorteInimigo(
+    ctx: CanvasRenderingContext2D, m: MorteInimigo, sx: number, cy: number, z: number, lvl: number
+  ): void {
+    if (m.kind === 'chaser') this.desenharMorteGoblin(ctx, m, sx, cy, z, lvl);
+    else if (m.kind === 'sentinel') this.desenharMorteOgro(ctx, m, sx, cy, z, lvl);
+    else if (m.kind === 'linker') this.desenharMorteSlime(ctx, m, sx, cy, z, lvl);
+  }
+
+  /**
+   * Atlas secundário da morte de um monstro, sob demanda e uma vez só — o
+   * padrão de `atlasDeMorte` do Guerreiro, com a chave `kind:qual` porque aqui
+   * são três bichos. `qual`: 'agachado' | 'caido' | 'arma' (goblin/ogro),
+   * 'estagio1' | 'estagio2' | 'estagio3' (slime).
+   */
+  private atlasMorteDe(kind: ArchetypeKey, qual: string): AtlasPersonagem | null {
+    const chave = kind + ':' + qual;
+    const pronto = this.atlasMorteInimigo.get(chave);
+    if (pronto !== undefined) return pronto;
+    let atlas: AtlasPersonagem | null = null;
+    if (kind === 'chaser') {
+      if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_MORTE_GOBLIN_AGACHADO);
+      else if (qual === 'caido') atlas = this.forjarSeguro(MODELO_GOBLIN_SEM_CIMITARRA, FORJA_MORTE_GOBLIN_CAIDO);
+      else if (qual === 'arma') atlas = this.forjarSeguro(MODELO_CIMITARRA, FORJA_CIMITARRA);
+    } else if (kind === 'sentinel') {
+      if (qual === 'agachado') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_MORTE_OGRO_AGACHADO);
+      else if (qual === 'caido') atlas = this.forjarSeguro(MODELO_OGRO_SEM_MARRETA, FORJA_MORTE_OGRO_CAIDO);
+      else if (qual === 'arma') atlas = this.forjarSeguro(MODELO_MARRETA, FORJA_MARRETA);
+    } else if (kind === 'linker') {
+      if (qual === 'estagio1') atlas = this.forjarSeguro(MODELO_SLIME_DERRETIDO_1, FORJA_SLIME_DERRETIDA);
+      else if (qual === 'estagio2') atlas = this.forjarSeguro(MODELO_SLIME_DERRETIDO_2, FORJA_SLIME_DERRETIDA);
+      else if (qual === 'estagio3') atlas = this.forjarSeguro(MODELO_SLIME_DERRETIDO_3, FORJA_SLIME_DERRETIDA);
+    }
+    this.atlasMorteInimigo.set(chave, atlas);
+    return atlas;
+  }
+
+  /**
+   * A poça (sangue ou geleia), a generalização de `desenharSangue`: elipse no
+   * plano do piso crescendo de 0 a `raio`·zoom com ease-out e persistindo,
+   * mais respingos determinísticos de um LCG semeado pelo tile (nada de
+   * `Math.random` no render — tools/check-boundaries.mjs). `alfaLuz` modula o
+   * decalque pela luz do tile: uma poça no limite do campo de visão não pode
+   * brilhar como se estivesse aos pés do jogador (§1 do BESTIARIO, mesmo
+   * espírito). O Guerreiro não precisa disto — ele É a fonte de luz.
+   */
+  private desenharPoca(
+    ctx: CanvasRenderingContext2D, sementeX: number, sementeY: number,
+    cx: number, cy: number, z: number, k: number, raio: number,
+    corA: string, corB: string, alfaLuz: number
+  ): void {
+    if (k <= 0) return;
+    if (k > 1) k = 1;
+    const ease = 1 - (1 - k) * (1 - k);
+    const r = raio * z * ease;
+    const by = cy + 2 * z;
+    const alfaAntes = ctx.globalAlpha;
+    ctx.globalAlpha = alfaAntes * alfaLuz;
+    fillEllipse(ctx, cx, by, r, r * 0.42, corA);
+    fillEllipse(ctx, cx - 2 * z, by - 0.5 * z, r * 0.6, r * 0.25, corB);
+
+    /* Respingos determinísticos em torno da poça (LCG semeado pelo tile). */
+    let s = ((sementeX * 374761393) ^ (sementeY * 668265263) ^ 0x9e3779b9) >>> 0;
+    if (s === 0) s = 1;
+    for (let i = 0; i < 8; i++) {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const ang = (s / 4294967296) * TAU;
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const dist = (0.5 + (s / 4294967296) * 0.65) * raio * z * ease;
+      s = (s * 1664525 + 1013904223) >>> 0;
+      const rr = (0.8 + (s / 4294967296) * 1.6) * z;
+      fillEllipse(
+        ctx, cx + Math.cos(ang) * dist, by + Math.sin(ang) * dist * 0.42,
+        rr, rr * 0.42, i % 2 === 0 ? corA : corB
+      );
+    }
+    ctx.globalAlpha = alfaAntes;
+  }
+
+  /**
+   * O corpo morto: a coluna ('parado', 0) do atlas dado — a pose EXATA do
+   * repouso forjado — MODULADA pela luz do tile (os monstros não são fonte de
+   * luz, §1 do BESTIARIO; as cores emissivas atravessam acesas, §1.1) e com
+   * alfa opcional (o esmaecimento final do Ogro). Sem flash e sem barra de
+   * vida: morto não tem vida a mostrar.
+   */
+  private desenharCorpoMorto(
+    ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem, dir: number,
+    cx: number, cy: number, z: number, lvl: number, alfa: number
+  ): void {
+    const f = quadroModulado(atlas, dir, 'parado', 0, lvl / (LEVELS - 1));
+    if (!f.fonte) return;
+    const dx = Math.round(cx - atlas.ancoraX * z);
+    const dy = Math.round(cy - atlas.ancoraY * z);
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    if (alfa < 1) {
+      const alfaAntes = ctx.globalAlpha;
+      ctx.globalAlpha = alfaAntes * alfa;
+      ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
+      ctx.globalAlpha = alfaAntes;
+    } else {
+      ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
+    }
+    ctx.imageSmoothingEnabled = suave;
+  }
+
+  /**
+   * A arma solta, a generalização de `desenharEspadaSolta`: sai da altura da
+   * mão (`x0`,`y0`) e cai para o lado (`x1`,`y1`) girando até `ARMA_GIRO_MORTE`
+   * ·k, acelerando (queda, não deslize); ao pousar fica como decalque — ou
+   * esmaece, conforme `alfa`. O giro é de TELA (`ctx.rotate` com suavização
+   * desligada — o giro pixelado é desejado), então o atlas é sempre a coluna
+   * ('parado', 0) na direção do facing, modulada pela luz como o corpo.
+   */
+  private desenharArmaCaida(
+    ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem, dir: number,
+    x0: number, y0: number, x1: number, y1: number,
+    z: number, lvl: number, k: number, alfa: number
+  ): void {
+    if (k <= 0 || alfa <= 0) return;
+    if (k > 1) k = 1;
+    const queda = k * k;
+    const px = x0 + (x1 - x0) * queda;
+    const py = y0 + (y1 - y0) * queda;
+    const f = quadroModulado(atlas, dir, 'parado', 0, lvl / (LEVELS - 1));
+    if (!f.fonte) return;
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.globalAlpha = ctx.globalAlpha * alfa;
+    ctx.translate(px, py);
+    ctx.rotate(ARMA_GIRO_MORTE * k);
+    ctx.drawImage(
+      f.fonte, f.sx, f.sy, f.largura, f.altura,
+      Math.round(-atlas.ancoraX * z), Math.round(-atlas.ancoraY * z),
+      f.largura * z, f.altura * z
+    );
+    ctx.restore();
+    ctx.imageSmoothingEnabled = suave;
+  }
+
+  /**
+   * GOBLIN (`chaser`) — sequência de 1,1 s: o sangue cresce, a cimitarra cai
+   * girando e SOME, o corpo desaba (parado → agachado → caído) e FICA. O
+   * rastro é o CORPO sobre a poça: quem passar depois vê o cadáver verde e
+   * sabe que ali morreu um goblin.
+   */
+  private desenharMorteGoblin(
+    ctx: CanvasRenderingContext2D, m: MorteInimigo, sx: number, cy: number, z: number, lvl: number
+  ): void {
+    const t = m.t;
+    const cx = sx;
+    const dir = normalizeFacing(m.facing);
+    const alfaLuz = 0.35 + 0.65 * (lvl / (LEVELS - 1));
+
+    // 1. SANGUE (0→0,9 s, persiste) — as cores da poça do Guerreiro: sangue é sangue.
+    this.desenharPoca(ctx, m.x, m.y, cx, cy, z, t / MORTE_MOB_SANGUE, SANGUE_RAIO_GOBLIN, '#6e1414', '#4a0d0d', alfaLuz);
+
+    // A sombra elíptica continua: o cadáver também está no chão.
+    fillEllipse(ctx, cx, cy + 2 * z, 10 * z, 4.2 * z, COL_SHADOW_ENT);
+
+    // 2. CORPO — parado (até 0,3) → AGACHADO → CAÍDO (persiste: é o rastro).
+    let corpo: AtlasPersonagem | null;
+    if (t >= GOB_MORTE_CAIDO) corpo = this.atlasMorteDe('chaser', 'caido');
+    else if (t >= GOB_MORTE_AGACHADO) corpo = this.atlasMorteDe('chaser', 'agachado');
+    else corpo = this.atlasDoInimigo('chaser');
+    if (corpo) this.desenharCorpoMorto(ctx, corpo, dir, cx, cy, z, lvl, 1);
+
+    // 3. CIMITARRA (0,1→0,55 cai; 0,55→0,85 esmaece e some — o rastro é o CORPO).
+    if (t >= GOB_MORTE_ARMA_INICIO && t < GOB_MORTE_ARMA_SOME) {
+      const arma = this.atlasMorteDe('chaser', 'arma');
+      if (arma) {
+        let k = (t - GOB_MORTE_ARMA_INICIO) / (GOB_MORTE_ARMA_FIM - GOB_MORTE_ARMA_INICIO);
+        if (k > 1) k = 1;
+        let alfa = 1;
+        if (t > GOB_MORTE_ARMA_FIM) {
+          alfa = 1 - (t - GOB_MORTE_ARMA_FIM) / (GOB_MORTE_ARMA_SOME - GOB_MORTE_ARMA_FIM);
+        }
+        this.desenharArmaCaida(ctx, arma, dir, cx - 7 * z, cy - 12 * z, cx - 15 * z, cy + 1 * z, z, lvl, k, alfa);
+      }
+    }
+  }
+
+  /**
+   * OGRO (`sentinel`) — sequência de 1,7 s, a mais longa: ele é PESADO. O
+   * sangue cresce maior, a marreta cai girando e POUSA na poça — e FICA —, o
+   * corpo desaba (parado → agachado → caído) e ESMAECE até sumir. O rastro é
+   * a ARMA sobre o sangue: o corpo some, a marreta fica — quem passar depois
+   * vê o montante abandonado e sabe que ali morreu um ogro.
+   */
+  private desenharMorteOgro(
+    ctx: CanvasRenderingContext2D, m: MorteInimigo, sx: number, cy: number, z: number, lvl: number
+  ): void {
+    const t = m.t;
+    const cx = sx;
+    const dir = normalizeFacing(m.facing);
+    const alfaLuz = 0.35 + 0.65 * (lvl / (LEVELS - 1));
+
+    // 1. SANGUE (0→1,1 s, persiste) — poça grande, de bicho grande.
+    this.desenharPoca(ctx, m.x, m.y, cx, cy, z, t / OGRO_MORTE_SANGUE, SANGUE_RAIO_OGRO, '#6e1414', '#4a0d0d', alfaLuz);
+
+    // 2. MARRETA (0,2→0,95 cai e POUSA — é o rastro; desenhada antes do corpo:
+    // no chão ela fica sob a massa dele enquanto ele cai por cima).
+    if (t >= OGRO_MORTE_ARMA_INICIO) {
+      const arma = this.atlasMorteDe('sentinel', 'arma');
+      if (arma) {
+        let k = (t - OGRO_MORTE_ARMA_INICIO) / (OGRO_MORTE_ARMA_FIM - OGRO_MORTE_ARMA_INICIO);
+        if (k > 1) k = 1;
+        this.desenharArmaCaida(ctx, arma, dir, cx - 9 * z, cy - 20 * z, cx - 15 * z, cy + 2 * z, z, lvl, k, 1);
+      }
+    }
+
+    // A sombra acompanha o corpo enquanto ele existe (some junto com ele).
+    if (t < OGRO_MORTE_CORPO_SOME_FIM) {
+      fillEllipse(ctx, cx, cy + 2 * z, 13 * z, 5 * z, COL_SHADOW_ENT);
+
+      // 3. CORPO — parado → AGACHADO → CAÍDO → ESMAECE e some (o rastro é a ARMA).
+      let corpo: AtlasPersonagem | null;
+      if (t >= OGRO_MORTE_CAIDO) corpo = this.atlasMorteDe('sentinel', 'caido');
+      else if (t >= OGRO_MORTE_AGACHADO) corpo = this.atlasMorteDe('sentinel', 'agachado');
+      else corpo = this.atlasDoInimigo('sentinel');
+      let alfa = 1;
+      if (t >= OGRO_MORTE_CORPO_SOME_INICIO) {
+        alfa = 1 - (t - OGRO_MORTE_CORPO_SOME_INICIO) / (OGRO_MORTE_CORPO_SOME_FIM - OGRO_MORTE_CORPO_SOME_INICIO);
+        if (alfa < 0) alfa = 0;
+      }
+      if (corpo) this.desenharCorpoMorto(ctx, corpo, dir, cx, cy, z, lvl, alfa);
+    }
+  }
+
+  /**
+   * SLIME (`linker`) — sequência de 1,0 s, o DERRETIMENTO: a geleia cresce sob
+   * ele enquanto o domo desaba em três estágios de geometria (achatou →
+   * desabou → POÇA), os olhos âmbar afogam por último e a bolinha da antena
+   * fica boiando na poça — EMISSIVA, acesa até no escuro (§1.1). O rastro é
+   * a GELEIA: quem passar depois vê a mancha verde brilhando e sabe que ali
+   * morreu um slime.
+   */
+  private desenharMorteSlime(
+    ctx: CanvasRenderingContext2D, m: MorteInimigo, sx: number, cy: number, z: number, lvl: number
+  ): void {
+    const t = m.t;
+    const cx = sx;
+    const dir = normalizeFacing(m.facing);
+    const alfaLuz = 0.35 + 0.65 * (lvl / (LEVELS - 1));
+
+    // 1. GELEIA (0→1,0 s, persiste) — os verdes da própria paleta do bicho
+    // (§11.2): a poça é feita do que ele era.
+    this.desenharPoca(
+      ctx, m.x, m.y, cx, cy, z, t / SLIME_MORTE_GOSMA, GOSMA_RAIO_SLIME,
+      PALETA_SLIME.gosmaSombra, PALETA_SLIME.gosmaFundo, alfaLuz
+    );
+
+    // 2. CORPO — parado → ESTÁGIO 1 → ESTÁGIO 2 → ESTÁGIO 3 (a POÇA, que
+    // persiste: é o rastro). Sem sombra elíptica: a geleia no chão já o assenta.
+    let corpo: AtlasPersonagem | null;
+    if (t >= SLIME_MORTE_ESTAGIO_3) corpo = this.atlasMorteDe('linker', 'estagio3');
+    else if (t >= SLIME_MORTE_ESTAGIO_2) corpo = this.atlasMorteDe('linker', 'estagio2');
+    else if (t >= SLIME_MORTE_ESTAGIO_1) corpo = this.atlasMorteDe('linker', 'estagio1');
+    else corpo = this.atlasDoInimigo('linker');
+    if (corpo) this.desenharCorpoMorto(ctx, corpo, dir, cx, cy, z, lvl, 1);
+  }
+
+  /**
+   * §16 — o atlas do texto de um valor de XP, forjado sob demanda e uma vez
+   * só (o padrão de `atlasDoInimigo`): o conjunto é fechado, então no máximo
+   * cinco atlases existem por instância. Valor fora da escala (§15) guarda
+   * `null` e o flutuante simplesmente não sai — degradar sem lançar.
+   */
+  private atlasDoXp(xp: number): AtlasPersonagem | null {
+    const pronto = this.atlasXp.get(xp);
+    if (pronto !== undefined) return pronto;
+    const modelo = modeloDeXp(xp);
+    const atlas = modelo ? this.forjarSeguro(modelo, FORJA_XP) : null;
+    this.atlasXp.set(xp, atlas);
+    return atlas;
+  }
+
+  /**
+   * §16 — o texto subindo do tile do abate: estático (a linha `dir 2` da
+   * coluna ('parado', 0) — a frente, que é onde o texto lê na ordem certa),
+   * quem se move é a posição de tela. Sobe `FLUTUA_XP_SUBIDA`·zoom com
+   * ease-out e esmaece no último terço. Brilho pleno e por cima do mundo —
+   * feedback, não cenário.
+   */
+  private desenharFlutuanteXp(
+    ctx: CanvasRenderingContext2D, f: FlutuanteXp,
+    hw: number, hh: number, ox: number, oy: number, z: number
+  ): void {
+    const atlas = this.atlasDoXp(f.xp);
+    if (!atlas || !atlas.canvas) return;
+    let k = f.t / DUR_FLUTUA_XP;
+    if (k > 1) k = 1;
+    const ease = 1 - (1 - k) * (1 - k);
+    let alfa = 1;
+    if (k > FLUTUA_XP_FADE) alfa = 1 - (k - FLUTUA_XP_FADE) / (1 - FLUTUA_XP_FADE);
+    if (alfa <= 0) return;
+
+    const s = f.x + f.y;
+    const sx = hw * (2 * f.x - s) + ox;
+    const cy = s * hh + oy + hh - (10 + FLUTUA_XP_SUBIDA * ease) * z;
+    const q = atlas.quadro(2, 'parado', 0);
+    const lw = atlas.larguraFrame;
+    const lh = atlas.alturaFrame;
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.globalAlpha = ctx.globalAlpha * alfa;
+    ctx.drawImage(
+      atlas.canvas, q.sx, q.sy, lw, lh,
+      Math.round(sx - atlas.ancoraX * z), Math.round(cy - atlas.ancoraY * z),
+      lw * z, lh * z
+    );
+    ctx.restore();
+    ctx.imageSmoothingEnabled = suave;
   }
 
   /* ------------------------------------------------------------------ *

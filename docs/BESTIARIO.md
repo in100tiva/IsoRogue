@@ -528,3 +528,231 @@ Os mesmos G1–G8 do §8, mais:
   distintas, não três manchas verdes? A bancada precisa mostrar os três juntos, com o
   Guerreiro, para este gate ser julgável.
 - **G10** O tamanho relativo conta a história certa? Slime < Goblin < Guerreiro < Ogro.
+
+---
+
+# As mortes do bestiário (cinemáticas de abate)
+
+> Extensão desta página e da cinemática de morte do Guerreiro: **mesmo método, mesmo
+> pipeline, mesmas regras** — §0 vale aqui inteiro (nada de campo em `Enemy`, nada de
+> `snapshot()`, nada de oracle; o `npm run check` tem de terminar 100% verde).
+
+## 14. A sequência de abate e o rastro persistente
+
+Quando o golpe do jogador mata um monstro, ele merece mais do que sumir entre um quadro e
+outro. Esta fase dá a cada um dos três uma sequência de morte própria e — o pedido central —
+um **rastro que fica no tile** pelo resto do andar: quem passar depois sabe QUEM morreu ali
+sem ter visto o abate.
+
+### 14.1 O gatilho é observação, como tudo nesta página
+
+`atacarInimigo` (`src/engine/game.ts`) remove o inimigo de `game.enemies` no golpe fatal, e
+essa é a **única** via de saída da lista dentro de um mapa. O renderer já guarda um `Vfx`
+por id; o abate é detectado pelo **diff entre o conjunto de ids do quadro anterior e o
+deste** (double-buffer de `Set`s — a diferença não pode custar uma alocação por frame).
+`syncRun` zera os conjuntos na troca de mapa, então descida e retomada de save não geram
+abates fantasmas.
+
+O registro captura tile, `facing` (o último conhecido — o corpo cai olhando para onde
+olhava) e `kind`. O relógio avança por `dt` em `update`, tile visto ou não (R54: a morte não
+congela quando o jogador vira o corredor), e para na duração da sequência — a partir daí o
+desenho é o estado final, o rastro. `prefers-reduced-motion` pula direto para ele, como
+`pularCinematica` faz com o Guerreiro. Os rastros vivem até a troca de mapa e são desenhados
+sob a mesma regra de visão dos itens (R31: só dentro do FOV), **antes** de itens, inimigos e
+jogador no passe do tile — qualquer coisa viva pisa POR CIMA deles.
+
+### 14.2 A técnica é a do Guerreiro, com um desvio
+
+Sangue e geleia são **decalques de chão** em primitivas de canvas (a poça de
+`desenharSangue` generalizada: elipse com ease-out + respingos de LCG semeado pelo tile,
+modulada pela luz do tile — os monstros não são fonte de luz, §1). Corpos e armas são
+**atlases secundários** lidos na coluna `('parado', 0)`, modulados por `quadroModulado()`
+(as emissivas atravessam acesas, §1.1). A queda da arma é **rotação de tela**
+(`ctx.rotate`, o giro pixelado é desejado) em torno da âncora do mini-rig.
+
+O desvio é o Slime: um repouso só **rotaciona** nós, e derreter é **deformar geometria**.
+Os três estágios dele são variantes de MODELO (`criarModeloSlimeDerretido`), no molde de
+`criarModeloGuerreiroSemEspada` — a "variante de equipamento" em vez da "pose de repouso".
+
+### 14.3 As três sequências
+
+| Monstro | Duração | Sequência | RASTRO (persistente) |
+|---|---|---|---|
+| **Goblin** | 1,1 s | sangue cresce → cimitarra cai girando e **some** → corpo desaba (parado → agachado → caído de costas, face para cima) | **o CORPO** sobre a poça de sangue |
+| **Ogro** | 1,7 s | sangue cresce maior → marreta cai girando e **pousa na poça** → corpo desaba (parado → agachado → caído) e **esmaece até sumir** | **a MARRETA** sobre a poça de sangue |
+| **Slime** | 1,0 s | geleia verde cresce sob ele → o domo derrete em três estágios (achatou 62% → desabou 34%, olhos afogando → poça 16%) | **a GELEIA** no chão, com a bolinha âmbar afogada — **emissiva**, acesa até no escuro |
+
+Os contrastes são deliberados e didáticos: corpo (goblin) ≠ arma (ogro) ≠ geleia (slime).
+O Goblin morre como o Guerreiro — arma caindo, sangue, corpo no chão. O Ogro é o irmão
+dessa morte com a assinatura trocada: a carcaça some, o que denuncia o abate é o montante
+abandonado no sangue. O Slime não tem sangue nem ossos: vira a poça do que ele era, e a
+bolinha da antena afoga por último — é o adeus do bicho, e o ponto luminoso que o jogador
+encontra no escuro antes de ler a poça.
+
+### 14.4 Gates desta fase
+
+A bancada (`npm run preview:personagem -- <bicho>`) ganhou a faixa "cinemática de morte —
+as fases congeladas", dirigida pela tabela `MORTE_PREVIEW` de `tools/preview-entry.ts`:
+cada fase é o atlas secundário em `parado/0`, como o renderer desenha. Os gates G1–G10
+valem para ela, mais:
+
+- **G11** A sequência CONTA a morte certa? Goblin desaba e fica; Ogro desaba e some,
+  sobra a marreta; Slime derrete até a poça. Sem trocar fase, sem pose viva no meio.
+- **G12** Os três rastros são distinguíveis à distância um do outro — corpo verde caído,
+  marreta no sangue, geleia brilhando? (É o G9 dos mortos.)
+
+Rodada 1: aprovados visualmente nas quatro folhas (a do Guerreiro, que a generalização da
+seção tinha de preservar, saiu idêntica — ajoelhada e caída nas mesmas poses).
+
+---
+
+# Balanceamento (a fase que a §10 anunciava)
+
+## 15. Níveis de monstro, XP em escala e spawn por nível do herói
+
+> **Emenda 2026-07-30.** Esta é a fase de "balanceamento de níveis e dificuldade" que a
+> §10 reservava — feita com o dono, com o oracle **regenerado de propósito** pelo mesmo
+> processo da emenda de 2026-07-29: mudança espelhada no vanilla congelado
+> (`legacy/isorogue-vanilla.html`) → `npm run golden` → `npm run check` verde (49/49 no
+> oracle; T11 novo cobre a escala). O que a §10 e a emenda anterior dizem sobre pesos de
+> spawn e XP por arquétipo fica como registro do estado anterior — esta seção manda.
+
+### 15.1 Os níveis dos monstros
+
+| Monstro | Arquétipo | `nivel` |
+|---|---|---|
+| Slime | `linker` | **1** |
+| Goblin | `chaser` | **2** |
+| Ogro | `sentinel` | **3** |
+
+`nivel` substitui os campos `xp` e `peso` de `ARCHETYPES`, abolidos. É um dado do
+ARQUÉTIPO, não da entidade — `Enemy` continua com os mesmos campos de sempre.
+
+### 15.2 O XP do abate, na escala do dono
+
+```
+xp = 100 × 2^(nivelMonstro − nivelHeroi)     — zero quando nivelHeroi ≥ nivelMonstro + 3
+```
+
+| herói \ monstro | slime (1) | goblin (2) | ogro (3) |
+|---|---|---|---|
+| 1 | 100 | **200** | **400** |
+| 2 | 50 | 100 | 200 |
+| 3 | 25 | 50 | 100 |
+| 4 | **0** | 25 | 50 |
+| 5 | 0 | **0** | 25 |
+| 6 | 0 | 0 | **0** |
+
+Dobra por nível ACIMA (matar bicho mais forte recompensa o risco — decisão do dono) e
+cai pela metade por nível abaixo, até parar de render. O registro do abate mostra o XP
+(`+100 xp`, ou `sem xp — monstro muito abaixo do seu nível`): é o único feedback da
+escala enquanto a UI não tem barra de XP.
+
+### 15.3 Nível do herói: 100 XP plano, excedente carrega
+
+`XP_POR_NIVEL = 100` para QUALQUER nível (antes: `level × 10`). Ao cruzar 100 o herói
+sobe e o **excedente é carregado** — as duas decisões são do dono: um ogro de 400 xp
+com 0 acumulado rende 4 níveis de uma vez. Os bônus por nível (+4 maxHp/+4 hp/+1 atk)
+ficaram INALTERADOS nesta fase: o que cada nível dá em status é a próxima conversa.
+
+### 15.4 A mistura de spawn, pelo nível do herói
+
+`populate(map, depth, heroLevel)` — a mistura sai da linha do herói em `PESOS_SPAWN`
+(colunas em `KINDS`: chaser/sentinel/linker). A profundidade segue endurecendo
+**contagem** e **hp/atk** (intocados); ela não mexe mais na mistura.
+
+| herói | goblin | ogro | slime | leitura |
+|---|---|---|---|---|
+| 1 | 10 | 1 | 100 | a cada 10 slimes, 1 goblin; a cada 10 goblins, 1 ogro |
+| 2 | 100 | 10 | 30 | goblins dominam; ogros aparecem; slimes recuam |
+| 3 | 40 | 100 | 10 | ogros dominam; slimes raros |
+| 4+ | 15 | 100 | 3 | ogros comuns, goblins em minoria, slimes raríssimos |
+
+A linha 4 é a régua de todos os níveis seguintes (com XP plano o herói pode subir
+indefinidamente; a mistura estabiliza no estado final descrito pelo dono).
+
+### 15.5 O que NÃO se fez nesta fase
+
+- Bônus de status por nível do herói (+4 maxHp, +1 atk) — **próxima conversa**, como o
+  dono marcou ("depois vamos abordar o que cada nível vai dar").
+- Escalonamento de hp/atk dos monstros por profundidade — intocado.
+- Barra/número de XP na UI — o registro do abate carrega o XP por ora.
+- `stats.xp` acumulado na run — as estatísticas de morte continuam as mesmas.
+
+---
+
+## 16. O XP visível: texto flutuante 3D e o nível do herói na HUD
+
+> **Emenda 2026-07-30 (noite).** A escala de §15 nasceu cega: o XP só aparecia no
+> registro textual, e o "NÍVEL" do cabeçalho — que sempre foi a PROFUNDIDADE da
+> masmorra (`game.depth`) — era lido como o nível do herói ("matei vários e o nível
+> continuou em 1"). Esta fase torna a progressão visível nos dois lugares em que o
+> jogador procura: o mundo (o texto que sobe do abate) e o painel (nível e XP do
+> herói).
+
+### 16.1 A fila `game.abatesRecentes` (o canal, e por que ele existe)
+
+O texto precisa do XP **com o nível do herói de ANTES do golpe** — e o level-up
+acontece dentro do mesmo comando que mata. O renderer, que só observa o estado DEPOIS,
+não tem como recomputar o valor certo. A solução é uma fila VISUAL escrita pelo engine
+em `atacarInimigo` (o único lugar onde o XP é conhecido na hora certa) e drenada pelo
+renderer a cada quadro: `AbateVisual { x, y, kind, xp }`.
+
+Mesmo estatuto do `bump` dos inimigos e do `facing` do jogador: **apenas animação** —
+não entra em `snapshot()`, não entra no save, não chega ao oracle (o golden 49/49 verde
+com a fila prova as três coisas). Teto de 32 entradas para o jogo headless, onde
+ninguém drena. Abate com `xp: 0` (a escala cortou) não solta texto — o "sem xp" fica
+no registro.
+
+### 16.2 O texto como rig de caixas (a técnica dos monstros, e a armadilha)
+
+`src/render/characters/xpTexto.ts`: cada pixel de uma fonte 3×5 vira um **cubo de ouro**
+de 0,7u, rasterizado pelo mesmo pipeline de §4 (projeção, quantização, snap de paleta,
+contorno por máscara) e lido na coluna ('parado', 0) da linha `dir 2` — estático; quem
+se move é a posição de tela (sobe 38px·zoom com ease-out, esmaece no último terço,
+~1,1 s, brilho pleno por cima do mundo porque é feedback, não cenário; some fora do FOV,
+R31).
+
+A **armadilha** (rodada 1 reprovada na bancada): glifos deitados no plano X-Z ficam
+ilegíveis — a projeção cisalha a grade da fonte ~26° e o bitmap vira um emaranhado. A
+cura é a **pré-distorção de outdoors**: da álgebra de §4.2 saem os dois passos-modelo
+`(e, −e, 0)` e `(−f, −f, 2f)` que, projetados, formam uma grade QUADRADA na tela. O
+bitmap lê perfeito e cada pixel continua um cubo isométrico — a leitura vem do bitmap,
+o volume vem do cubo. Fica registrado para o próximo texto do jogo.
+
+O conjunto de valores é FECHADO (25/50/100/200/400, da fórmula de §15): um atlas por
+valor, forjado sob demanda. Valor fora do conjunto não desenha nada (degradar sem
+lançar) — uma escala futura que gere outro valor só precisa de um modelo a mais em
+`MODELO_XP`.
+
+### 16.3 O painel: ANDAR × NÍVEL × XP
+
+O cabeçalho agora diz o que cada número é:
+
+- **ANDAR** — a profundidade (`game.depth`), com o `id="hud-nivel"` de sempre (o
+  contrato §9 do CONTRACTS.md intacto);
+- **TURNO** — inalterado;
+- **NÍVEL** — o nível REAL do herói (`player.level`), `id="hud-heroi-nivel"`;
+- **XP** — `player.xp`/100 na régua plana de §15, `id="hud-xp"`, com a barra âmbar
+  de progresso (`id="hud-xp-barra"`, o mesmo idioma visual da barra de vida).
+
+Os testes de UI cobrem os três ids novos junto dos antigos (`test/ui.test.tsx`).
+
+### 16.4 O que NÃO se fez nesta fase
+
+- O texto flutuante é só XP: dano recebido/causado, cura e level-up não ganham
+  flutuantes (o level-up já tem o registro; os demais são a próxima conversa de juice).
+- Nenhuma mudança de balanceamento: §15 continua mandando nos números.
+- A pré-distorção de outdoors não virou utilitário do forge: ela vive em
+  `xpTexto.ts` até um segundo texto precisar dela.
+
+### 14.5 O que NÃO se fez nesta fase
+
+- Nenhum campo em `Enemy`, em `snapshot()`, no save ou no oracle — o gatilho é o diff de
+  ids por observação, na camada de render.
+- Nenhuma mudança de balanceamento, dano, alcance ou quantidade de inimigos.
+- Os rastros não persistem ENTRE andares (o sangue do Guerreiro também não persiste entre
+  expedições) e não viram obstáculo: são decalques cosméticos, e qualquer vivo pisa por cima.
+- O tempero de animação dos vivos (`ANIMACAO_GOBLIN`/`SLIME`/`OGRO` sem consumidor,
+  `TODO(tempero-goblin)`) continua de pé — é outra fase, e ela abre canais em
+  `OpcoesForja`, não aqui.

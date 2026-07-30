@@ -1,6 +1,6 @@
 ---
 tipo: indice
-atualizado: 2026-07-28
+atualizado: 2026-07-30
 tags: [indice, render, arte, personagem, moc]
 ---
 
@@ -48,7 +48,9 @@ O mesmo pipeline do guerreiro, apontado para os inimigos — e uma regra que pro
   para a fase de balanceamento.
 - [[bestiario-monstros]] — a tabela `RETRATOS` como ponto de extensão (três passos para o
   próximo bicho), a modulação do sprite pela luz do tile, o cache LRU de 64 slots e as cores
-  emissivas que fazem um goblin no escuro virar dois pontos vermelhos.
+  emissivas que fazem um goblin no escuro virar dois pontos vermelhos. **2026-07-30:** ganhou
+  as cinemáticas de abate (cada monstro morre em cena e deixa rastro no tile) e o texto de
+  XP flutuante em rig de caixas.
 
 ## As armadilhas desta pasta
 
@@ -68,6 +70,9 @@ alguma coisa parece "bug de cor" ou "bug de conversão".
 - [[legibilidade-em-40px]] — a cimitarra do goblin foi construída **fiel à referência** e por
   isso mesmo ficou errada: no tamanho do jogo virou uma tábua cinza sem dono. Leia antes de
   copiar qualquer pose de uma ilustração — e antes de aceitar um traço por área medida.
+- [[texto-em-isometrica-cisalha]] — texto deitado no plano X-Z vira emaranhado: a projeção
+  cisalha o bitmap ~26°. A cura é a pré-distorção de outdoors — passos-modelo que projetam
+  uma grade quadrada na tela. Leia antes de qualquer número de dano futuro.
 
 ## Olhar para o resultado
 

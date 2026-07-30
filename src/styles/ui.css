@@ -130,6 +130,10 @@
 .barra-alerta { background: var(--ambar); }
 .barra-critico { background: var(--vermelho); }
 
+/* §16 — a barra de XP do cabeçalho: ouro de recompensa, como o texto
+ * flutuante dos abates (`characters/xpTexto`). */
+.barra-xp { background: var(--ambar); }
+
 /* ---------------------------------------------------------------- semente */
 
 .campo {
