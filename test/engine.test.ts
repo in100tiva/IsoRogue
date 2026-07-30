@@ -29,6 +29,7 @@ import {
   ALQUIMIA_EXTRAS_MAX,
   ARCHETYPES,
   ARMA_NIVEL_MAX,
+  CRIATURAS,
   DROPS,
   ITEM_KINDS,
   ITENS,
@@ -37,8 +38,12 @@ import {
   PRECO_POCAO,
   RECEITAS,
   RECEITA_KINDS,
+  descDaMissao,
   ehMaterial,
+  gerarMissoes,
+  itemPrincipal,
   makeItem,
+  nomeDaMissao,
   pesosSpawn,
   populate
 } from '../src/engine/entities';
@@ -54,6 +59,7 @@ import type {
   GameMap,
   Item,
   MaterialKind,
+  Missao,
   Point
 } from '../src/engine/types';
 
@@ -1036,7 +1042,7 @@ describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', ()
  *   · bolsa e `kind` sobrevivem ao save, e um save legado (sem nenhum dos dois)
  *     ainda carrega (T12.5);
  *   · o `snapshot()` expõe kind, bolsa (em ordem de TABELA) e rngLoot (T12.6) —
- *     garantias da fase 1 que a etiqueta v4 da fase 2.1 não pode ter perdido.
+ *     garantias da fase 1 que as etiquetas seguintes não podem ter perdido.
  * ================================================================== */
 
 /** Armazenamento de memória: o save do teste não encosta em disco nem em DOM. */
@@ -1432,11 +1438,10 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
     const game = createState('T12-SNAP', 1);
     const inicial = String(snapshot(game));
 
-    /* A etiqueta subiu para v4 na fase 2.1 (a estação de alquimia). O que este
-     * teste guarda são as garantias que a fase 1 introduziu e que NÃO podem se
-     * perder na troca de versão — o formato do bloco de itens, da bolsa e do
-     * rngLoot. */
-    expect(inicial.indexOf('v4|'), 'T12.6: o snapshot não é v4').toBe(0);
+    /* A etiqueta subiu para v5 na fase 3 (as caçadas). O que este teste guarda
+     * são as garantias que a fase 1 introduziu e que NÃO podem se perder na
+     * troca de versão — o formato do bloco de itens, da bolsa e do rngLoot. */
+    expect(inicial.indexOf('v5|'), 'T12.6: o snapshot não é v5').toBe(0);
     expect(inicial.indexOf('|B[]|') >= 0, 'T12.6: bolsa vazia devia sair como B[]').toBe(true);
     expect(
       /\|I\[\d+:potion:\d+:\d+(\|\d+:potion:\d+:\d+)*\]\|/.test(inicial),
@@ -1491,7 +1496,7 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
  *     ainda carrega (T13.8);
  *   · negociar e forjar não consomem sorteio nenhum (T13.9);
  *   · a forma textual dos três comandos é a do protocolo, ida e volta (T13.10);
- *   · o `snapshot()` v4 mostra moedas, refino e os dois pontos (T13.11);
+ *   · o `snapshot()` mostra moedas, refino e os dois pontos (T13.11);
  *   · pisar no ponto anuncia o balcão no registro (T13.12).
  * ================================================================== */
 
@@ -2009,12 +2014,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
     expect(parseCommand('descend'), 'T13.10: descend').toEqual({ kind: 'descend' });
   });
 
-  it('o snapshot v4 traz moedas, refino e os dois pontos de parada', () => {
+  it('o snapshot v5 traz moedas, refino e os dois pontos de parada', () => {
     const semente = sementeComParadas();
     const game = createState(semente, 1);
     const inicial = String(snapshot(game));
 
-    expect(inicial.indexOf('v4|'), 'T13.11: o snapshot não é v4').toBe(0);
+    expect(inicial.indexOf('v5|'), 'T13.11: o snapshot não é v5').toBe(0);
     expect(inicial.indexOf(',mo0,arm0|') >= 0,
       'T13.11: moedas e refino não aparecem no bloco do jogador — ' + inicial).toBe(true);
     expect(
@@ -2111,7 +2116,7 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
  *   · a estação é do ANDAR e se refaz na descida (T14.6);
  *   · o save leva os extras, e um save antigo retoma sem eles em vez de
  *     inventar mobília no lugar errado (T14.7);
- *   · o `snapshot()` v4 mostra a estação inteira, com `alq=` entre `banc=` e o
+ *   · o `snapshot()` mostra a estação inteira, com `alq=` entre `banc=` e o
  *     checksum de tiles (T14.8).
  * ================================================================== */
 
@@ -2430,7 +2435,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       .toBe(JSON.stringify(game.bancada));
   }, LENTO);
 
-  it('o snapshot v4 traz a estação inteira em alq=, logo depois de banc=', () => {
+  it('o snapshot v5 traz a estação inteira em alq=, logo depois de banc=', () => {
     let game: Game | null = null;
     for (let i = 0; i < 32 && !game; i++) {
       const candidata = createState('T14-SNAP-' + pad(i, 4), 1);
@@ -2442,7 +2447,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
     if (!game) return;
 
     const inicial = String(snapshot(game));
-    expect(inicial.indexOf('v4|'), 'T14.8: o snapshot não é v4').toBe(0);
+    expect(inicial.indexOf('v5|'), 'T14.8: o snapshot não é v5').toBe(0);
 
     const esperado = game.alquimiaExtras.map((p) => p.x + ',' + p.y).join(';');
     expect(inicial.indexOf('|alq=' + esperado + '|') >= 0,
@@ -2459,5 +2464,517 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
     game.alquimiaExtras = [];
     expect(String(snapshot(game)).indexOf('|alq=-|map=') >= 0,
       'T14.8: estação sem decoração devia sair como "-" — ' + String(snapshot(game))).toBe(true);
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T15 — missões (fase 3): a caçada tem duas partes, e só fecha no balcão
+ *
+ * POR QUE ESTE BLOCO EXISTE: a missão é o primeiro sistema que junta o que
+ * as fases 1 e 2 criaram separadas — o ABATE (que alimenta a bolsa) e o
+ * MERCADOR (que a esvazia). Os dois requisitos se acumulam e só valem
+ * JUNTOS: matar sem entregar não paga, entregar sem matar não fecha.
+ *
+ * O que cada teste protege, em uma frase:
+ *   · a geração é determinística pela semente, 1 a 3 caçadas por andar, sem
+ *     arquétipo repetido, na ordem de `KINDS`, com a recompensa na fórmula
+ *     documentada (T15.1);
+ *   · o abate conta só para a caçada do arquétipo certo — e o registro fica
+ *     MUDO até a missão inteira fechar (T15.2);
+ *   · a entrega exige as DUAS partes e consome o TOTAL somando os tipos da
+ *     missão, pagando moedas e bônus (T15.3);
+ *   · entregar longe do mercador, ou sem a parte de abate, é recusa sem
+ *     turno e sem mexer no estado (T15.4);
+ *   · o lembrete do balcão sai uma vez por encontro — sem spam — e torna a
+ *     sair quando o jogador volta (T15.5);
+ *   · as caçadas atravessam a descida e o save, com progresso, completa e
+ *     entregue intactos; save antigo sem o campo degrada para lista vazia
+ *     (T15.6);
+ *   · o `snapshot()` v5 grava a receita inteira de cada missão, na ordem de
+ *     geração (T15.7);
+ *   · 'entregar' vai e volta pelo protocolo textual, e a entrega não toca o
+ *     stream de despojos (T15.8).
+ * ================================================================== */
+
+/**
+ * Projeção do que uma ENTREGA pode mudar. Recusa tem de deixar isto intacto:
+ * as missões inteiras (progresso e flags), as moedas, a bolsa, o turno e os
+ * dois streams — a entrega é conferência, não sorteio.
+ */
+function estadoDeMissoes(game: Game): string {
+  return [
+    JSON.stringify(game.missoes),
+    't=' + game.turn,
+    'moedas=' + game.player.moedas,
+    'B[' + bolsaEmTexto(game.player.bag) + ']',
+    'rng=' + (game.rngCombat.s >>> 0),
+    'rngL=' + (game.rngLoot.s >>> 0)
+  ].join('|');
+}
+
+/**
+ * Uma caçada sob medida: a receita explícita nos argumentos, o resto na
+ * fórmula de geração. É como os outros testes montam bolsa e moedas — a
+ * mecânica da entrega é assunto do teste, o sorteio da caçada é assunto do
+ * T15.1.
+ */
+function missaoSobMedida(alvo: ArchetypeKey, op?: {
+  matar?: number;
+  entregar?: number;
+  progressoMatar?: number;
+  moedas?: number;
+  bonus?: { kind: MaterialKind; n: number } | null;
+}): Missao {
+  const o = op || {};
+  const itens: MaterialKind[] = DROPS[alvo].map((d) => d.item);
+  const matar = o.matar !== undefined ? o.matar : 2;
+  const entregar = o.entregar !== undefined ? o.entregar : 2;
+  return {
+    key: 'abate-' + alvo,
+    alvo: alvo,
+    matar: matar,
+    itens: itens,
+    entregar: entregar,
+    progressoMatar: o.progressoMatar !== undefined ? o.progressoMatar : 0,
+    recompensaMoedas: o.moedas !== undefined ? o.moedas :
+      matar * 4 + entregar * ITENS[itemPrincipal(alvo)].valor,
+    recompensaItem: o.bonus !== undefined ? o.bonus : null,
+    nome: nomeDaMissao(alvo),
+    desc: descDaMissao(alvo, matar, entregar, itens),
+    completa: false,
+    entregue: false
+  };
+}
+
+/** Vizinhos ORTOGONAIS caminháveis do ponto (a diagonal tem corte de canto). */
+function vizinhosOrtogonais(game: Game, p: Point): Point[] {
+  const out: Point[] = [];
+  for (const d of DIRS8) {
+    if (d[0] !== 0 && d[1] !== 0) continue;
+    const x = p.x + d[0];
+    const y = p.y + d[1];
+    if (isWalkable(game.map, x, y)) out.push({ x: x, y: y });
+  }
+  return out;
+}
+
+describe('T15 — missões: geração por andar, abate, entrega e travessia', () => {
+  it('geração: 1 a 3 por andar, sem arquétipo repetido, determinística pela semente', () => {
+    /* Unidade pura: no MESMO stream, o gerador isolado repete a caçada. */
+    const r1 = makeRng(hash32('T15-GER-UNIT'));
+    const r2 = makeRng(hash32('T15-GER-UNIT'));
+    expect(JSON.stringify(gerarMissoes(r1)), 'T15.1: gerarMissoes divergiu no mesmo stream')
+      .toBe(JSON.stringify(gerarMissoes(r2)));
+
+    const contagem = [0, 0, 0, 0];
+    let comBonus = 0;
+    let semBonus = 0;
+
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T15-GER-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const a = populate(map, depth, 1);
+        const b = populate(map, depth, 1);
+        const onde = ondeEsta('T15.1', { semente, depth });
+
+        /* Determinismo: duas chamadas, as mesmas caçadas — alvos, quantias e
+         * recompensas, byte a byte. E pelo caminho de verdade, `createState`. */
+        expect(JSON.stringify(b.missoes), onde + ': as missões divergiram entre chamadas')
+          .toBe(JSON.stringify(a.missoes));
+        const game = createState(semente, depth);
+        expect(JSON.stringify(game.missoes), onde + ': createState ≠ populate (missões)')
+          .toBe(JSON.stringify(a.missoes));
+
+        expect(a.missoes.length >= 1 && a.missoes.length <= 3,
+          onde + ': ' + a.missoes.length + ' missões — fora da faixa 1..3').toBe(true);
+        contagem[a.missoes.length]++;
+
+        const vistos = new Set<ArchetypeKey>();
+        let anterior = -1;
+        for (const m of a.missoes) {
+          /* Sem repetir arquétipo no mesmo andar, e na ordem de KINDS — o
+           * painel não balança de andar para andar. */
+          expect(vistos.has(m.alvo), onde + ': arquétipo repetido — ' + m.alvo).toBe(false);
+          vistos.add(m.alvo);
+          const pos = KINDS.indexOf(m.alvo);
+          expect(pos > anterior, onde + ': missões fora da ordem de KINDS').toBe(true);
+          anterior = pos;
+
+          expect(m.key, onde + ': a chave não é abate-<alvo>').toBe('abate-' + m.alvo);
+          expect(m.matar >= 2 && m.matar <= 4,
+            onde + ': matar ' + m.matar + ' fora de 2..4').toBe(true);
+          expect(m.entregar >= 1 && m.entregar <= 3,
+            onde + ': entregar ' + m.entregar + ' fora de 1..3').toBe(true);
+          /* Os tipos da entrega são a tabela de despojos do alvo, inteira e
+           * na ordem da tabela — nem um tipo a mais, nem outra ordem. */
+          expect(m.itens, onde + ': itens ≠ DROPS[' + m.alvo + ']')
+            .toEqual(DROPS[m.alvo].map((d) => d.item));
+          /* A fórmula documentada: matar × 4 + entregar × valor do principal. */
+          expect(m.recompensaMoedas, onde + ': recompensa fora da fórmula')
+            .toBe(m.matar * 4 + m.entregar * ITENS[itemPrincipal(m.alvo)].valor);
+          /* O bônus é do alvo ou não existe — nunca um item de outra tabela. */
+          if (m.recompensaItem) {
+            comBonus++;
+            expect(m.itens.indexOf(m.recompensaItem.kind) >= 0,
+              onde + ': bônus ' + m.recompensaItem.kind + ' não é despojo de ' + m.alvo)
+              .toBe(true);
+            expect(m.recompensaItem.n, onde + ': bônus com n ≠ 1').toBe(1);
+          } else {
+            semBonus++;
+          }
+          expect(m.progressoMatar, onde + ': caçada nova com progresso').toBe(0);
+          expect(m.completa, onde + ': caçada nova já completa').toBe(false);
+          expect(m.entregue, onde + ': caçada nova já entregue').toBe(false);
+          expect(m.nome, onde + ': o título não é o da criatura')
+            .toBe('Caça ao ' + CRIATURAS[m.alvo].nome);
+          expect(m.desc.indexOf('Mate ' + m.matar + ' ') === 0 && m.desc.length > 20,
+            onde + ': a descrição não narra a caçada — ' + m.desc).toBe(true);
+        }
+      }
+    }
+
+    /* Contraprova: os dois lados da moeda de 50% existem na amostra — se um
+     * deles sumisse, o sorteio do bônus teria morrido e o teste passaria
+     * verde sem exercitá-lo. */
+    expect(contagem[1] + contagem[2] + contagem[3], 'T15.1: a varredura não rodou os 72 andares')
+      .toBe(72);
+    expect(comBonus, 'T15.1: nenhuma missão com bônus na amostra (50%)').toBeGreaterThan(0);
+    expect(semBonus, 'T15.1: nenhuma missão sem bônus na amostra (50%)').toBeGreaterThan(0);
+  }, LENTO);
+
+  it('o abate conta só para a caçada do arquétipo certo — e o registro fica mudo', () => {
+    const game = createState('T15-ABATE', 1);
+    game.player.maxHp = 999;
+    game.player.hp = 999;
+    game.player.atk = 99;
+    game.missoes = [
+      missaoSobMedida('chaser', { matar: 2 }),
+      missaoSobMedida('linker', { matar: 2 })
+    ];
+    const marcaLog = game.log.length;
+
+    let id = 9100;
+    const matarUm = (kind: ArchetypeKey): void => {
+      const ent = plantarInimigo(game, id++, kind);
+      expect(ent, 'T15.2: sem tile livre ao redor do jogador para plantar ' + kind)
+        .not.toBe(null);
+      if (!ent) return;
+      game.player.hp = game.player.maxHp;
+      const aceito = aplicar(game, 'move:' + (ent.x - game.player.x) + ',' + (ent.y - game.player.y));
+      expect(aceito, 'T15.2: o golpe em ' + kind + ' não foi aceito').toBe(true);
+    };
+
+    matarUm('chaser');
+    expect(game.missoes[0].progressoMatar, 'T15.2: o abate do Goblin não contou').toBe(1);
+    expect(game.missoes[1].progressoMatar, 'T15.2: a caçada do Slime avançou com abate alheio')
+      .toBe(0);
+
+    matarUm('linker');
+    expect(game.missoes[1].progressoMatar, 'T15.2: o abate do Slime não contou').toBe(1);
+    expect(game.missoes[0].progressoMatar, 'T15.2: a caçada do Goblin avançou com abate alheio')
+      .toBe(1);
+
+    matarUm('chaser');
+    expect(game.missoes[0].progressoMatar, 'T15.2: o segundo Goblin não fechou a parte de abate')
+      .toBe(2);
+    /* A parte de abate FECHOU e a missão continua ABERTA: sem a entrega não
+     * há completa — as duas partes ou nada. */
+    expect(game.missoes[0].completa, 'T15.2: completou sem a entrega').toBe(false);
+    expect(game.missoes[0].entregue, 'T15.2: entregou sem o balcão').toBe(false);
+
+    /* O registro fica MUDO sobre caçada até ela inteira fechar: o progresso
+     * é do painel, não do log. */
+    const falouDeMissao = game.log.slice(marcaLog).some((l) =>
+      l.text.indexOf('Missão') >= 0 || l.text.indexOf('Caça ao') >= 0);
+    expect(falouDeMissao, 'T15.2: o registro falou de missão antes da entrega — ' +
+      JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))).toBe(false);
+  }, LENTO);
+
+  it('a entrega exige as DUAS partes: consome o total somando os tipos, paga moedas e bônus', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'mercador');
+    game.missoes = [missaoSobMedida('chaser', {
+      matar: 2, entregar: 3, progressoMatar: 2, moedas: 26,
+      bonus: { kind: 'espadaGoblin', n: 1 }
+    })];
+
+    /* Abate feito, mas 2 orelhas para uma entrega de 3: recusa, sem turno e
+     * sem comer um item sequer. */
+    game.player.bag.orelhaGoblin = 2;
+    const antes = estadoDeMissoes(game);
+    const marcaFalta = game.log.length;
+    expect(aplicar(game, 'entregar'), 'T15.3: entregou com 2 de 3 despojos').toBe(false);
+    expect(estadoDeMissoes(game), 'T15.3: a recusa por falta mexeu no estado').toBe(antes);
+    expect(
+      game.log.slice(marcaFalta).some((l) =>
+        l.cls === 'aviso' && l.text.indexOf('aguarda os despojos') >= 0),
+      'T15.3: a recusa por falta saiu fora do padrão — ' +
+        JSON.stringify(game.log.slice(marcaFalta).map((l) => l.text))
+    ).toBe(true);
+
+    /* A terceira peça é de OUTRO tipo da tabela: a entrega é um TOTAL, e uma
+     * cimitarra fecha a mesma conta que uma orelha. */
+    game.player.bag.espadaGoblin = 1;
+    const turnoAntes = game.turn;
+    const marcaLog = game.log.length;
+    expect(aplicar(game, 'entregar'), 'T15.3: a entrega pronta não foi aceita').toBe(true);
+
+    const m = game.missoes[0];
+    expect(m.completa, 'T15.3: a missão não fechou com as duas partes feitas').toBe(true);
+    expect(m.entregue, 'T15.3: fechou sem marcar o prêmio pago').toBe(true);
+    expect(game.turn, 'T15.3: a entrega tem de consumir turno').toBe(turnoAntes + 1);
+    expect(game.player.moedas, 'T15.3: as moedas da recompensa não caíram').toBe(26);
+    /* Consumo na ordem da TABELA: as 2 orelhas primeiro, a cimitarra depois —
+     * e a chave zerada SOME da bolsa (ausência é zero). Sobrou só o bônus. */
+    expect(Object.prototype.hasOwnProperty.call(game.player.bag, 'orelhaGoblin'),
+      'T15.3: a orelha zerada devia sumir da bolsa').toBe(false);
+    expect(game.player.bag.espadaGoblin, 'T15.3: 1 consumida + 1 de bônus = 1').toBe(1);
+    expect(somaBolsa(game.player.bag), 'T15.3: a entrega devia consumir exatamente 3 itens')
+      .toBe(1);
+    expect(
+      game.log.slice(marcaLog).some((l) =>
+        l.cls === 'bom' && l.text === 'Missão cumprida: Caça ao Goblin! O mercador paga ' +
+          '26 moedas e uma cimitarra de goblin de bônus. Total: 26 moedas.'),
+      'T15.3: a linha da entrega saiu fora do padrão — ' +
+        JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
+    ).toBe(true);
+
+    /* Entregar de novo: caçada paga não paga duas vezes. */
+    const depois = estadoDeMissoes(game);
+    expect(aplicar(game, 'entregar'), 'T15.3: a mesma caçada foi paga duas vezes').toBe(false);
+    expect(estadoDeMissoes(game), 'T15.3: a segunda entrega mexeu no estado').toBe(depois);
+  }, LENTO);
+
+  it('entregar longe do mercador, ou sem a parte de abate, é recusa sem turno', () => {
+    const semente = sementeComParadas();
+
+    /* Longe do balcão: o jogador começa no start, que nunca é parada (T13.1)
+     * — e mesmo pronta, a caçada não sai dele. */
+    const longe = createState(semente, 1);
+    longe.player.bag.orelhaGoblin = 5;
+    longe.missoes = [missaoSobMedida('chaser', { matar: 1, entregar: 2, progressoMatar: 1 })];
+    const estadoLonge = estadoDeMissoes(longe);
+    const marcaLonge = longe.log.length;
+    expect(aplicar(longe, 'entregar'), 'T15.4: entregou LONGE do mercador').toBe(false);
+    expect(estadoDeMissoes(longe), 'T15.4: a recusa de longe mexeu no estado').toBe(estadoLonge);
+    expect(
+      longe.log.slice(marcaLonge).map((l) => l.text)
+        .indexOf('Você precisa estar ao lado do mercador.') >= 0,
+      'T15.4: a recusa de longe saiu fora do padrão — ' +
+        JSON.stringify(longe.log.slice(marcaLonge).map((l) => l.text))
+    ).toBe(true);
+
+    /* Ao lado, com os despojos na bolsa, mas sem UM abate sequer: a caçada
+     * ainda é caçada — a entrega não fecha a parte que falta. */
+    const semAbate = partidaNoPonto(semente, 'mercador');
+    semAbate.player.bag.orelhaGoblin = 5;
+    semAbate.missoes = [missaoSobMedida('chaser', { matar: 1, entregar: 2, progressoMatar: 0 })];
+    const estadoSem = estadoDeMissoes(semAbate);
+    const marcaSem = semAbate.log.length;
+    expect(aplicar(semAbate, 'entregar'), 'T15.4: entregou sem a parte de abate').toBe(false);
+    expect(estadoDeMissoes(semAbate), 'T15.4: a recusa sem abate mexeu no estado')
+      .toBe(estadoSem);
+    expect(
+      semAbate.log.slice(marcaSem).some((l) =>
+        l.cls === 'aviso' && l.text.indexOf('o abate vem primeiro') >= 0),
+      'T15.4: a recusa sem abate saiu fora do padrão — ' +
+        JSON.stringify(semAbate.log.slice(marcaSem).map((l) => l.text))
+    ).toBe(true);
+  }, LENTO);
+
+  it('o lembrete do balcão sai uma vez por encontro, e torna a sair na volta', () => {
+    /* Palco: um mercador com um corredor ortogonal livre N → T → T2, onde T e
+     * T2 são ao lado dele e N não. Sem inimigos: o lembrete é do balcão. */
+    let game: Game | null = null;
+    let merc: Point | null = null;
+    let N: Point | null = null;
+    let T: Point | null = null;
+    let T2: Point | null = null;
+    for (let i = 0; i < 64 && !game; i++) {
+      const candidata = createState('T15-LEMBRETE-' + pad(i, 4), 1);
+      const ponto = candidata.mercador;
+      if (!ponto) continue;
+      for (const t of vizinhosOrtogonais(candidata, ponto)) {
+        for (const t2 of vizinhosOrtogonais(candidata, t)) {
+          const colado2 = Math.max(Math.abs(t2.x - ponto.x), Math.abs(t2.y - ponto.y));
+          if (colado2 > 1 || (t2.x === ponto.x && t2.y === ponto.y)) continue;
+          for (const n of vizinhosOrtogonais(candidata, t)) {
+            const coladoN = Math.max(Math.abs(n.x - ponto.x), Math.abs(n.y - ponto.y));
+            if (coladoN <= 1) continue;
+            game = candidata; merc = ponto; N = n; T = t; T2 = t2;
+            break;
+          }
+          if (game) break;
+        }
+        if (game) break;
+      }
+    }
+    expect(game, 'T15.5: nenhuma das 64 sementes montou o palco do lembrete').not.toBe(null);
+    if (!game || !merc || !N || !T || !T2) return;
+
+    game.player.maxHp = 999;
+    game.player.hp = 999;
+    game.enemies = [];
+    game.missoes = [missaoSobMedida('chaser', { matar: 1, entregar: 1, progressoMatar: 1 })];
+    game.player.bag.orelhaGoblin = 1;
+    game.player.x = N.x;
+    game.player.y = N.y;
+    const lembretes = (): number =>
+      game.log.filter((l) => l.text.indexOf('quadro de caçadas') >= 0).length;
+    const passo = (para: Point): void => {
+      const aceito = aplicar(game, 'move:' + (para.x - game.player.x) + ',' + (para.y - game.player.y));
+      expect(aceito, 'T15.5: o passo para (' + para.x + ',' + para.y + ') não foi aceito').toBe(true);
+    };
+
+    passo(T);
+    expect(lembretes(), 'T15.5: chegar ao lado com a caçada pronta devia lembrar').toBe(1);
+    passo(T2);
+    expect(lembretes(), 'T15.5: passear AO REDOR do mercador repetiu o lembrete').toBe(1);
+    passo(T);
+    expect(lembretes(), 'T15.5: voltar um tile dentro do mesmo encontro repetiu').toBe(1);
+    /* Saiu do lado do balcão, o encontro fechou: a próxima chegada merece o
+     * lembrete de novo — é a volta que o jogador faz com a bolsa cheia. */
+    passo(N);
+    expect(lembretes(), 'T15.5: sair do balcão não devia lembrar de nada').toBe(1);
+    passo(T);
+    expect(lembretes(), 'T15.5: a volta ao balcão devia lembrar de novo').toBe(2);
+  }, LENTO);
+
+  it('as caçadas atravessam a descida e o save; save antigo degrada para lista vazia', () => {
+    const armazem = armazemDeMemoria();
+    const game = createState('T15-TRAVESSIA', 1);
+    const pendente = missaoSobMedida('chaser', { matar: 3, entregar: 2, progressoMatar: 1 });
+    const paga = missaoSobMedida('linker', { matar: 2, entregar: 1, progressoMatar: 2 });
+    paga.completa = true;
+    paga.entregue = true;
+    game.missoes = [pendente, paga];
+    const antes = JSON.stringify(game.missoes);
+
+    /* A descida SOMA: as do andar 1 continuam, na frente, com progresso e
+     * flags — e as do andar novo chegam atrás, zeradas. */
+    descend(game);
+    expect(game.missoes.length > 2, 'T15.6: o andar 2 não ofereceu caçada nova').toBe(true);
+    expect(game.missoes.length <= 2 + 3, 'T15.6: o andar 2 ofereceu mais de 3').toBe(true);
+    expect(JSON.stringify(game.missoes.slice(0, 2)),
+      'T15.6: a descida perdeu progresso, completa ou entregue').toBe(antes);
+    for (const m of game.missoes.slice(2)) {
+      expect(m.progressoMatar, 'T15.6: caçada do andar novo já nasceu com progresso').toBe(0);
+      expect(m.completa, 'T15.6: caçada do andar novo já nasceu completa').toBe(false);
+    }
+
+    /* Save/restore: a lista inteira sobrevive — e o snapshot fecha, porque é
+     * a prova de que a retomada é o MESMO jogo, não um parecido. */
+    expect(escreverSave(game, armazem), 'T15.6: o save não foi gravado').toBe(true);
+    const voltou = restore(lerSave(armazem));
+    expect(voltou, 'T15.6: restore recusou um save válido').not.toBe(null);
+    if (!voltou) return;
+    expect(JSON.stringify(voltou.missoes), 'T15.6: as caçadas não sobreviveram ao save')
+      .toBe(JSON.stringify(game.missoes));
+    expect(String(snapshot(voltou)), 'T15.6: o snapshot da retomada divergiu')
+      .toBe(String(snapshot(game)));
+
+    /* Save adulterado: alvo desconhecido é descartado, itens apagados voltam
+     * à tabela do alvo, e 'entregue' sem 'completa' é lido da forma coerente. */
+    const adulterado = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    adulterado.missoes = [
+      { key: 'abate-dragon', alvo: 'dragon', matar: 9, itens: ['escama'], entregar: 9,
+        progressoMatar: 9, recompensaMoedas: 999, recompensaItem: null,
+        nome: 'Caça ao Dragão', desc: '.', completa: false, entregue: false },
+      { key: 'abate-chaser', alvo: 'chaser', matar: 2, itens: ['banana'], entregar: 2,
+        progressoMatar: 1, recompensaMoedas: 18, recompensaItem: null,
+        nome: 'Caça ao Goblin', desc: '.', completa: false, entregue: true }
+    ];
+    const limpo = restore(adulterado);
+    expect(limpo, 'T15.6: restore recusou o save adulterado em vez de degradar').not.toBe(null);
+    if (limpo) {
+      expect(limpo.missoes.length, 'T15.6: a caçada de arquétipo desconhecido entrou').toBe(1);
+      expect(limpo.missoes[0].itens, 'T15.6: itens apagados deviam voltar à tabela do alvo')
+        .toEqual(DROPS.chaser.map((d) => d.item));
+      expect(limpo.missoes[0].entregue, 'T15.6: o entregue salvo se perdeu').toBe(true);
+      expect(limpo.missoes[0].completa, 'T15.6: entregue sem completa é leitura incoerente')
+        .toBe(true);
+    }
+
+    /* Save LEGADO (anterior à fase 3): sem o campo, retoma com a LISTA VAZIA —
+     * nunca recusa a run, nunca inventa caçada a meio da partida. */
+    const legado = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    delete legado.missoes;
+    const retomado = restore(legado);
+    expect(retomado, 'T15.6: restore recusou um save legado').not.toBe(null);
+    if (retomado) {
+      expect(retomado.missoes, 'T15.6: save sem o campo devia retomar com lista vazia')
+        .toEqual([]);
+    }
+  }, LENTO);
+
+  it('o snapshot v5 grava a receita inteira de cada caçada, na ordem de geração', () => {
+    const game = createState('T15-SNAP', 1);
+    const inicial = String(snapshot(game));
+
+    expect(inicial.indexOf('v5|'), 'T15.7: o snapshot não é v5').toBe(0);
+    /* O bloco fica entre a bolsa e as estatísticas: "o que eu tenho", "o que
+     * me pediram", "o que eu fiz". */
+    expect(/\|B\[[^\]]*\]\|M\[/.test(inicial),
+      'T15.7: M[...] fora do lugar (tem de vir depois de B[...]) — ' + inicial).toBe(true);
+    expect(/\|M\[[^\]]*\]\|S=/.test(inicial),
+      'T15.7: M[...] fora do lugar (tem de vir antes de S=) — ' + inicial).toBe(true);
+
+    /* A receita INTEIRA, campo a campo — duas 'abate-chaser' de andares
+     * diferentes só se distinguem por ela. */
+    const m = game.missoes[0];
+    expect(m, 'T15.7: a semente não gerou caçada nenhuma').not.toBe(undefined);
+    const esperado = m.key + ':' + m.alvo + ':' + m.matar + ':' + m.entregar + ':' +
+      m.itens.join('+') + ':0:' + m.recompensaMoedas + ':' +
+      (m.recompensaItem ? m.recompensaItem.kind + '*' + m.recompensaItem.n : '-') + ':0:0';
+    expect(inicial.indexOf('M[' + esperado) >= 0,
+      'T15.7: a receita da caçada não aparece em M[...] — ' + inicial).toBe(true);
+
+    /* O snapshot ACOMPANHA a caçada: mudou progresso ou flag, mudou o resumo. */
+    game.missoes[0].progressoMatar = 1;
+    const depois = String(snapshot(game));
+    expect(depois, 'T15.7: mudar o progresso tem de mudar o snapshot').not.toBe(inicial);
+    game.missoes[0].completa = true;
+    game.missoes[0].entregue = true;
+    expect(String(snapshot(game)).indexOf(m.key + ':' + m.alvo + ':' + m.matar + ':' +
+      m.entregar + ':' + m.itens.join('+') + ':1:' + m.recompensaMoedas + ':') >= 0 &&
+      String(snapshot(game)).indexOf(':1:1') >= 0,
+      'T15.7: as flags completa/entregue não aparecem como 1:1 — ' + String(snapshot(game)))
+      .toBe(true);
+
+    /* A ordem é a de GERAÇÃO, sem reordenação: uma lista montada fora da
+     * ordem de KINDS sai exatamente como está — o snapshot grava a ordem que
+     * o painel lê. */
+    game.missoes = [missaoSobMedida('linker'), missaoSobMedida('chaser')];
+    const foraDeOrdem = String(snapshot(game));
+    expect(foraDeOrdem.indexOf('M[abate-linker:linker') >= 0 &&
+      foraDeOrdem.indexOf('abate-linker') < foraDeOrdem.indexOf('abate-chaser'),
+      'T15.7: o snapshot reordenou as caçadas — ' + foraDeOrdem).toBe(true);
+
+    /* Sem caçada, traço vazio: 'M[]', como a bolsa vazia sai 'B[]'. */
+    game.missoes = [];
+    expect(String(snapshot(game)).indexOf('|M[]|') >= 0,
+      'T15.7: lista vazia devia sair como M[] — ' + String(snapshot(game))).toBe(true);
+  }, LENTO);
+
+  it("'entregar' vai e volta pelo protocolo textual, e a entrega não toca o rngLoot", () => {
+    expect(parseCommand('entregar'), 'T15.8: parse de "entregar"').toEqual({ kind: 'entregar' });
+    expect(formatCommand({ kind: 'entregar' }), 'T15.8: format de "entregar"').toBe('entregar');
+
+    /* O que NÃO é comando: a palavra é nua, sem parâmetro — o engine é quem
+     * sabe quais caçadas estão prontas. */
+    for (const texto of ['entregar:', 'entregar:abate-chaser', 'entregar:1', 'entregaar', 'ENTREGAR']) {
+      expect(parseCommand(texto), 'T15.8: "' + texto + '" NÃO devia virar comando').toBe(null);
+    }
+
+    /* A entrega é conferência, não sorteio: o turno passa e os monstros
+     * agem, mas o stream de despojos fica EXATAMENTE onde estava. */
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'mercador');
+    game.missoes = [missaoSobMedida('linker', { matar: 1, entregar: 2, progressoMatar: 1 })];
+    game.player.bag.gosma = 3;
+    const lootAntes = game.rngLoot.s >>> 0;
+    expect(aplicar(game, 'entregar'), 'T15.8: a entrega pronta não foi aceita').toBe(true);
+    expect(game.rngLoot.s >>> 0, 'T15.8: a entrega mexeu no stream de despojos').toBe(lootAntes);
   }, LENTO);
 });

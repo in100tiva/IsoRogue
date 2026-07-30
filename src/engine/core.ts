@@ -372,6 +372,9 @@ export function parseCommand(s: string): Command | null {
   if (c === 'wait') return { kind: 'wait' };
   if (c === 'use') return { kind: 'use' };
   if (c === 'descend') return { kind: 'descend' };
+  /* Palavra nua, sem parâmetro (fase 3): o engine é quem sabe quais missões
+   * estão prontas — não existe 'entregar:abate-chaser' (ver `Command`). */
+  if (c === 'entregar') return { kind: 'entregar' };
   return null;
 }
 
@@ -392,5 +395,7 @@ export function formatCommand(c: Command): string {
       return 'comprar:' + c.item + ',' + c.quantidade;
     case 'criar':
       return 'criar:' + c.receita;
+    case 'entregar':
+      return 'entregar';
   }
 }

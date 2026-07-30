@@ -52,6 +52,10 @@ O mesmo pipeline do guerreiro, apontado para os inimigos — e uma regra que pro
   as cinemáticas de abate (cada monstro morre em cena e deixa rastro no tile) e o texto de
   XP flutuante em rig de caixas.
 
+- [[tilesets-por-nivel]] — o terreno virou rig 3D como o resto do elenco, e mora isolado em
+  `src/render/tilesets/`, um arquivo por nível. A calibração (lado do tile = 12,8u) e por que
+  a água está modelada mas desligada.
+
 ## As armadilhas desta pasta
 
 Oito erros reais, com sintoma, causa e lição. Valem mais que a documentação do módulo quando

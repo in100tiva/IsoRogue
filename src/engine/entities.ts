@@ -31,6 +31,7 @@ import type {
   ItemKind,
   LogClass,
   MaterialKind,
+  Missao,
   Point,
   Population,
   ReceitaKind,
@@ -288,6 +289,148 @@ export function sortearDespojos(rng: Rng, kind: ArchetypeKey): MaterialKind[] {
   if (!tabela) return out;
   for (let i = 0; i < tabela.length; i++) {
     if (rng.chance(tabela[i].chance)) out.push(tabela[i].item);
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Missões — as caçadas do quadro do mercador (fase 3)
+ * ------------------------------------------------------------------ */
+
+/**
+ * O nome POPULAR da criatura, com plural — o do bestiário do jogador, não o
+ * nome de exibição do arquétipo. `ARCHETYPES[chaser].nome` é 'Perseguidor',
+ * mas a caçada se chama 'Caça ao Goblin' porque é assim que os despojos já o
+ * chamam ('orelha de goblin', 'pé de ogro', 'gosma de Slime'): missão e
+ * despojo têm de falar da mesma criatura com a mesma palavra, ou o jogador
+ * não descobre que a orelha na bolsa é a prova que o quadro pede.
+ */
+export const CRIATURAS: Record<ArchetypeKey, { nome: string; plural: string }> = {
+  chaser: { nome: 'Goblin', plural: 'Goblins' },
+  sentinel: { nome: 'Ogro', plural: 'Ogros' },
+  linker: { nome: 'Slime', plural: 'Slimes' }
+};
+
+/** Título pt-BR da caçada: 'Caça ao Goblin'. Todos masculinos hoje. */
+export function nomeDaMissao(alvo: ArchetypeKey): string {
+  return 'Caça ao ' + (CRIATURAS[alvo] ? CRIATURAS[alvo].nome : 'monstro');
+}
+
+/**
+ * A descrição pt-BR da caçada, gerada UMA vez na criação e gravada na missão.
+ *
+ * `matar` nasce na faixa 2..4, então a criatura sai sempre no plural. A
+ * entrega é mais sutil: ela pede um TOTAL somando os tipos de `itens`, então
+ *   · um tipo só (o Slime) pode nomear o item direto ('2 frascos de gosma');
+ *   · dois tipos (Goblin, Ogro) não podem dizer '2 orelhas' — seria mentira,
+ *     porque uma orelha e uma cimitarra também fecham a conta. Por isso a
+ *     frase diz 'despojos' e lista os tipos aceitos entre parênteses.
+ */
+export function descDaMissao(
+  alvo: ArchetypeKey,
+  matar: number,
+  entregar: number,
+  itens: MaterialKind[]
+): string {
+  const criatura = CRIATURAS[alvo] ? CRIATURAS[alvo].plural : 'monstros';
+  let entrega: string;
+  if (itens.length === 1) {
+    const def = ITENS[itens[0]];
+    entrega = entregar === 1
+      ? (def.fem ? 'uma' : 'um') + ' ' + def.nome
+      : entregar + ' ' + def.plural;
+  } else {
+    const nomes: string[] = [];
+    for (let i = 0; i < itens.length; i++) nomes.push(ITENS[itens[i]].nome);
+    const bicho = CRIATURAS[alvo] ? CRIATURAS[alvo].nome.toLowerCase() : 'monstro';
+    entrega = entregar + ' ' + (entregar === 1 ? 'despojo' : 'despojos') +
+      ' de ' + bicho + ' (' + nomes.join(' ou ') + ')';
+  }
+  return 'Mate ' + matar + ' ' + criatura + ' e entregue ' + entrega + '.';
+}
+
+/**
+ * O item MAIS COMUM do alvo — a linha de maior `chance` da tabela de despojos
+ * (gosma do Slime, orelha do Goblin, pé do Ogro). Empate resolve pela ordem
+ * da tabela, que é congelada.
+ *
+ * É ele que precifica a entrega na fórmula da recompensa: a missão cobra um
+ * TOTAL que o jogador fecha na maioria com o despojo comum, então a moeda de
+ * conta da caçada é o valor dele — usar o item raro (a clava de 40) pagaria
+ * fortuna por uma entrega que quase nunca inclui a clava.
+ */
+export function itemPrincipal(alvo: ArchetypeKey): MaterialKind {
+  const tabela = DROPS[alvo];
+  let melhor: MaterialKind = 'gosma';
+  let melhorChance = -1;
+  for (let i = 0; i < tabela.length; i++) {
+    if (tabela[i].chance > melhorChance) {
+      melhorChance = tabela[i].chance;
+      melhor = tabela[i].item;
+    }
+  }
+  return melhor;
+}
+
+/** A moeda de conta da recompensa: quanto vale um abate, em moedas. */
+const MOEDAS_POR_ABATE = 4;
+
+/**
+ * Gera as caçadas de UM andar, consumindo SÓ o stream de população.
+ *
+ * A ordem de consumo do stream é contrato (mudá-la muda todas as missões de
+ * todas as sementes):
+ *   1. `int(1, 3)` — quantas missões o andar oferece;
+ *   2. `shuffle` de `KINDS` — QUAIS arquétipos (sem repetição: um shuffle
+ *      cortado nos primeiros N nunca repete), reordenados de volta à ordem
+ *      de `KINDS` para a leitura do painel — o sorteio decide o CONJUNTO, a
+ *      tabela decide a ORDEM, e o painel não balança de andar para andar;
+ *   3. por missão, na ordem de `KINDS`: `int(2, 4)` de abates, `int(1, 3)`
+ *      de entrega (total somando os tipos), `chance(0.5)` de bônus e, se
+ *      houver bônus, um `pick` entre os tipos do alvo.
+ *
+ * A FÓRMULA DA RECOMPENSA: `matar * MOEDAS_POR_ABATE + entregar * valor do
+ * item principal do alvo`. O esforço tem duas pernas — os abates contam no
+ * primeiro termo e a coleta no segundo, pesada pelo preço de tabela do
+ * despojo comum. Faixas resultantes: Slime 11..24 moedas, Goblin 13..31,
+ * Ogro 20..52 (contra os 15 da poção do mercador) — o ogro paga mais porque
+ * o pé vale mais e o brutamontes bate mais, e é essa a escala que a fórmula
+ * captura sem uma tabela nova.
+ */
+export function gerarMissoes(rng: Rng): Missao[] {
+  const out: Missao[] = [];
+  const quantas = rng.int(1, 3);
+  const sorteados = rng.shuffle(KINDS.slice()).slice(0, quantas);
+  /* De volta à ordem de KINDS: o painel lê sempre Goblin, Ogro, Slime. */
+  sorteados.sort(function (a, b) { return KINDS.indexOf(a) - KINDS.indexOf(b); });
+
+  for (let i = 0; i < sorteados.length; i++) {
+    const alvo = sorteados[i];
+    const matar = rng.int(2, 4);
+    const itens: MaterialKind[] = [];
+    const tabela = DROPS[alvo];
+    for (let k = 0; k < tabela.length; k++) itens.push(tabela[k].item);
+    const entregar = rng.int(1, 3);
+    let bonus: { kind: MaterialKind; n: number } | null = null;
+    if (rng.chance(0.5)) {
+      const kind = rng.pick(itens);
+      if (kind) bonus = { kind: kind, n: 1 };
+    }
+    const recompensa = matar * MOEDAS_POR_ABATE + entregar * ITENS[itemPrincipal(alvo)].valor;
+    out.push({
+      key: 'abate-' + alvo,
+      alvo: alvo,
+      matar: matar,
+      itens: itens,
+      entregar: entregar,
+      progressoMatar: 0,
+      recompensaMoedas: recompensa,
+      recompensaItem: bonus,
+      nome: nomeDaMissao(alvo),
+      desc: descDaMissao(alvo, matar, entregar, itens),
+      completa: false,
+      entregue: false
+    });
   }
   return out;
 }
@@ -1123,7 +1266,8 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
   const start = map.start;
   const stairs: Point | null = map.stairs ?? null;
   if (!rooms.length || !start) {
-    return { enemies: enemies, items: items, mercador: null, bancada: null, alquimiaExtras: [] };
+    return { enemies: enemies, items: items, mercador: null, bancada: null,
+      alquimiaExtras: [], missoes: [] };
   }
 
   /* Um único conjunto de tiles tomados: nada de sobreposição entre inimigos,
@@ -1207,12 +1351,24 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
     }
   }
 
+  /* ---------------------------------------------------------------- *
+   * Missões (fase 3) — depois de TUDO, sempre.
+   *
+   * Última por disciplina de stream, não por importância: gerar as caçadas
+   * aqui mantém o consumo do rng de população das fases 1 e 2 INTACTO — todo
+   * inimigo, item, mercador e estação de todo andar já gerado continua saindo
+   * no mesmo tile, e o custo da fase 3 no oracle é só o acréscimo do campo
+   * novo (a mesma contabilidade que as paradas fizeram em relação à fase 1).
+   * ---------------------------------------------------------------- */
+  const missoes = gerarMissoes(rng);
+
   return {
     enemies: enemies,
     items: items,
     mercador: mercador,
     bancada: bancada,
-    alquimiaExtras: alquimiaExtras
+    alquimiaExtras: alquimiaExtras,
+    missoes: missoes
   };
 }
 

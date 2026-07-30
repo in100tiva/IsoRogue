@@ -19,6 +19,14 @@
  * maior parte do tempo, a ordem fixada pelo teste é a de sempre — e há um caso
  * próprio para a ordem COM o painel aberto.
  *
+ * As MISSÕES (fase 3) são o terceiro bloco fora da lista do §9, e entram
+ * ENTRE a bolsa e a troca: a missão é o porquê de carregar, a bolsa é o que se
+ * carrega e o balcão é onde isso vira moeda — nessa ordem de leitura. Ao
+ * contrário da troca, o `QuestPanel` NUNCA devolve `null`: andar sem contrato
+ * mostra a linha "Sem missões neste andar.", porque um quadro de avisos vazio
+ * ainda é um quadro de avisos (e um painel que some daria ao jogador um bloco
+ * a menos para procurar). A ordem está fixada no teste (test/ui.test.tsx).
+ *
  * A única peça de estado desta casca é `forcarAtualizacao`: o painel de semente
  * escreve no registro (mesmas mensagens do vanilla, `registrarCopia` de
  * 70-game.js) sem passar por um comando de jogo, e o `store` — por contrato do
@@ -35,6 +43,7 @@ import { Header } from './panels/Header';
 import { HelpPanel } from './panels/HelpPanel';
 import { LogPanel } from './panels/LogPanel';
 import { MapStats } from './panels/MapStats';
+import { QuestPanel } from './panels/QuestPanel';
 import { SeedPanel } from './panels/SeedPanel';
 import { TradePanel } from './panels/TradePanel';
 import { Vitals } from './panels/Vitals';
@@ -47,6 +56,7 @@ export function Sidebar() {
       <Header />
       <Vitals />
       <BagPanel />
+      <QuestPanel />
       <TradePanel />
       <SeedPanel aoRegistrar={forcarAtualizacao} />
       <MapStats />
