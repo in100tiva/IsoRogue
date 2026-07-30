@@ -148,21 +148,44 @@ function faltaEmTexto(partes: string[], plural: boolean): string {
   return 'Falta' + (plural ? 'm' : '') + ' ' + listaEmTexto(partes) + '.';
 }
 
-/** O jogador está EXATAMENTE sobre o ponto? `null` responde `false`. */
-function sobreOPonto(p: Point, ponto: Point | null): boolean {
+/**
+ * O jogador está AO LADO (Chebyshev ≤ 1) do ponto? Móvel e NPC são sólidos
+ * desde a fase 2.2, então interagir é encostar, nunca pisar.
+ */
+function aoLadoDa(p: Point, ponto: Point | null): boolean {
   if (!ponto) return false;
-  return p.x === ponto.x && p.y === ponto.y;
+  const dx = Math.abs(p.x - ponto.x);
+  const dy = Math.abs(p.y - ponto.y);
+  return (dx > dy ? dx : dy) <= 1;
+}
+
+/**
+ * O jogador está ao lado de ALGUMA peça da estação de alquimia? Ela é uma
+ * coisa só de três tiles — o painel abre a partir de qualquer uma.
+ */
+function aoLadoDaEstacao(g: Game): boolean {
+  const p = g.player;
+  if (aoLadoDa(p, g.bancada)) return true;
+  const extras = g.alquimiaExtras;
+  if (extras) {
+    for (let i = 0; i < extras.length; i++) {
+      if (aoLadoDa(p, extras[i])) return true;
+    }
+  }
+  return false;
 }
 
 /**
  * Em que balcão o jogador está — a única decisão de estado deste arquivo.
- * Ver o cabeçalho para a razão de a precedência ser inofensiva.
+ * Se por acaso ele estiver ao lado dos dois, o mercador tem precedência: a
+ * regra é declarada, determinística, e na prática inofensiva porque o
+ * populate reserva os tiles de forma que eles não se tocam.
  */
 function modoDaParada(g: Game): ModoTroca | null {
   const p = g.player;
   if (!p) return null;
-  if (sobreOPonto(p, g.mercador)) return 'mercador';
-  if (sobreOPonto(p, g.bancada)) return 'bancada';
+  if (aoLadoDa(p, g.mercador)) return 'mercador';
+  if (aoLadoDaEstacao(g)) return 'bancada';
   return null;
 }
 

@@ -592,7 +592,7 @@ describe('UI — smoke da casca React (§7.4)', () => {
     esperarConsoleLimpo();
   });
 
-  it('os tiles de cenário da estação não abrem balcão nenhum', () => {
+  it('ao lado de QUALQUER peça da estação, o painel de alquimia abre (fase 2.2)', () => {
     /*
      * Fase 2.1: a estante e a mesa (`game.alquimiaExtras`) ocupam território e
      * não têm interação — `criar` só é aceito sobre `game.bancada` (o
@@ -605,17 +605,17 @@ describe('UI — smoke da casca React (§7.4)', () => {
 
     act(() => {
       g.mercador = null;
-      /* O caldeirão fica ao LADO; o jogador está sobre o primeiro extra. */
-      g.bancada = { x: g.player.x + 1, y: g.player.y };
+      /* Ao lado do primeiro extra (a estante): a estação é uma coisa só. */
+      g.bancada = { x: g.player.x + 2, y: g.player.y };
       g.alquimiaExtras = [
-        { x: g.player.x, y: g.player.y },
-        { x: g.player.x + 2, y: g.player.y }
+        { x: g.player.x + 1, y: g.player.y },
+        { x: g.player.x + 3, y: g.player.y }
       ];
       acordar(0);
     });
 
-    expect(document.getElementById('troca'), 'a estante abriu a oficina')
-      .toBeNull();
+    expect(document.getElementById('troca'),
+      'ao lado da estante, a oficina não abriu — a estação é uma coisa só').not.toBeNull();
 
     /* E o caldeirão, ao lado, continua abrindo — o caso não passou por engano. */
     act(() => {

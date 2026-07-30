@@ -543,7 +543,14 @@ export interface Game {
   /** Sala em que o jogador está (log de movimentação, R49). */
   lastRoomId: number | null;
   /** Trava de reentrância do fim de turno. */
-  emTurno: boolean;
+  emTurno: boolean
+  /**
+   * Último tipo de parada em que o jogador esbarrou ('mercador' | 'alquimia').
+   * Campo TRANSITÓRIO, não serializado: existe só para a mensagem de esbarrão
+   * não repetir enquanto o jogador martela a mesma direção. Sai do snapshot
+   * de propósito — é rumo de diálogo, não de estado.
+   */
+  ultimoEsbarrao?: 'mercador' | 'alquimia' | null;
   /**
    * Fila de abates para efeito visual (ver `AbateVisual`). APENAS ANIMAÇÃO:
    * o renderer a drena a cada quadro; fora dele (testes, oracle headless) ela
