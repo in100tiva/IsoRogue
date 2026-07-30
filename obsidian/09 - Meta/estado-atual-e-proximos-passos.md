@@ -24,7 +24,8 @@ localStorage). Repositório: <https://github.com/in100tiva/IsoRogue>.
 | Progressão visível | texto de XP flutuante 3D nos abates; HUD com Andar × Nível do herói × XP |
 | Render | paredes do canto frontal ficam translúcidas para não esconder o herói |
 | Despojos | fase 1: monstros largam itens, herói recolhe pisando, bolsa na barra lateral |
-| Testes | 140, todos verdes nesta máquina (`npm run check`), com oracle de regressão derivado do engine e o oracle vanilla ainda conferido por projeção |
+| Economia | fase 2: mercador compra/vende, bancada faz alquimia e refino, moedas e nível de arma |
+| Testes | 114, todos verdes nesta máquina (`npm run check`), com oracle de regressão derivado do engine (o teste vanilla projetado foi aposentado — ver ADR-008) |
 | Cofre | esta documentação |
 
 Marcos, em ordem: nasceu em JavaScript vanilla → migrado para React 19 + TypeScript com

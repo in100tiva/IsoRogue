@@ -21,6 +21,8 @@
 import type {
   Archetype,
   ArchetypeKey,
+  Bag,
+  CustoReceita,
   Enemy,
   EnemyState,
   Game,
@@ -31,15 +33,38 @@ import type {
   MaterialKind,
   Point,
   Population,
+  ReceitaKind,
   Rng,
   Room,
   Step
 } from './types';
 import { CONFIG, DIRS8, cheb, hash32, idx, makeRng } from './core';
-import { inBounds as mapInBounds, isWalkable } from './mapgen';
+import { inBounds as mapInBounds, isWalkable, roomAt } from './mapgen';
+import {
+  ITEM_KINDS,
+  RECEITA_KINDS,
+  normalizeItemKind,
+  normalizeMaterialKind,
+  normalizeReceita
+} from './vocab';
 import { isVisibleFrom } from './fov';
 import { bestStep, computeDijkstra, fleeMap as computeFleeMap } from './dijkstra';
 import { logMsg } from './game';
+
+/*
+ * O vocabulário do contrato (as listas de nomes que viajam em texto) mora em
+ * vocab.ts para que core.ts possa validar comandos sem fechar um ciclo de
+ * import — a razão está escrita por extenso lá. Entities continua sendo a PORTA
+ * DE ENTRADA do domínio: quem já importava estas cinco coisas daqui (game.ts,
+ * save.ts, a UI, os testes) não precisa saber que elas se mudaram de arquivo.
+ */
+export {
+  ITEM_KINDS,
+  RECEITA_KINDS,
+  normalizeItemKind,
+  normalizeMaterialKind,
+  normalizeReceita
+};
 
 /* ------------------------------------------------------------------ *
  * Arquétipos
@@ -111,9 +136,9 @@ export const KINDS: ArchetypeKey[] = ['chaser', 'sentinel', 'linker'];
  * monstro que o largou: 'O Vinculador larga UM frasco de gosma', 'O
  * Perseguidor larga UMA orelha de goblin'.
  *
- * `valor` é moeda e NÃO é usado por nada nesta fase — a venda é a fase 2. Está
- * aqui porque o número é decisão de design (foi dado junto com a tabela) e
- * espalhá-lo depois custaria mais do que guardá-lo agora.
+ * `valor` é o preço em moedas que o mercador paga pelo item (fase 2). O número
+ * é decisão de design e nasceu junto com a tabela, na fase 1; a venda só passou
+ * a lê-lo agora.
  */
 export interface ItemDef {
   key: ItemKind;
@@ -122,7 +147,7 @@ export interface ItemDef {
   plural: string;
   /** Gênero gramatical do NOME (não do monstro): 'uma orelha', 'um pé'. */
   fem: boolean;
-  /** Preço de referência em moedas. Reservado para a fase 2 (venda). */
+  /** Quanto o mercador PAGA por uma unidade, em moedas (fase 2). */
   valor: number;
   /** `true` = vai para `player.bag`; `false` = tem regra própria (a poção). */
   material: boolean;
@@ -132,10 +157,10 @@ export interface ItemDef {
 /**
  * Tabela canônica dos itens.
  *
- * A ORDEM desta tabela é contrato: `ITEM_KINDS` a espelha e é ela que ordena a
- * bolsa no `snapshot()`, no save e nas linhas de registro da coleta. Nunca leia
- * a bolsa por `Object.keys` — a ordem de um objeto aberto é acidental, e o
- * oracle não perdoa acidente.
+ * A ORDEM de declaração desta tabela é contrato: `ITEM_KINDS` (vocab.ts) a
+ * espelha, e é `ITEM_KINDS` que ordena a bolsa no `snapshot()`, no save e nas
+ * linhas de registro da coleta. Nunca leia a bolsa por `Object.keys` — a ordem
+ * de um objeto aberto é acidental, e o oracle não perdoa acidente.
  */
 export const ITENS: Record<ItemKind, ItemDef> = {
   potion: {
@@ -143,8 +168,9 @@ export const ITENS: Record<ItemKind, ItemDef> = {
     nome: 'poção',
     plural: 'poções',
     fem: true,
-    /* Sem preço declarado: a poção é consumível e a fase 2 decide se o
-     * mercador a compra. Zero aqui significa "não precificada", não "de graça". */
+    /* Zero porque a poção NÃO se vende: `valor` é o que o mercador PAGA, e ele
+     * só compra material. O que o jogador paga para levar uma é `PRECO_POCAO`,
+     * que é outro número (e maior, que é como mercador vive). */
     valor: 0,
     material: false,
     desc: 'Frasco de cura. Restaura vida na hora em que é bebido.'
@@ -199,37 +225,10 @@ export const ITENS: Record<ItemKind, ItemDef> = {
   }
 };
 
-/**
- * Ordem fixa de iteração dos itens — o análogo de `KINDS` para a tabela acima.
- * Toda varredura de bolsa (snapshot, save, registro) passa por aqui.
- */
-export const ITEM_KINDS: readonly ItemKind[] = [
-  'potion',
-  'gosma',
-  'orelhaGoblin',
-  'espadaGoblin',
-  'peOgro',
-  'clavaOgro'
-];
-
 /** `true` para tudo que vai para a bolsa — hoje, tudo menos a poção. */
 export function ehMaterial(kind: ItemKind): kind is MaterialKind {
   const def = ITENS[kind];
   return !!def && def.material;
-}
-
-/**
- * Normaliza um `kind` vindo de fora (save antigo, JSON de terceiro).
- * Desconhecido ou ausente vira `'potion'`: antes desta fase TODO item era
- * poção, então essa é a leitura correta de um save legado — e degradar é
- * sempre melhor do que recusar a run (mesmo espírito de `normalizeFacing`).
- */
-export function normalizeItemKind(v: unknown): ItemKind {
-  if (typeof v !== 'string') return 'potion';
-  for (let i = 0; i < ITEM_KINDS.length; i++) {
-    if (ITEM_KINDS[i] === v) return ITEM_KINDS[i];
-  }
-  return 'potion';
 }
 
 /* ------------------------------------------------------------------ *
@@ -783,6 +782,104 @@ export function makeEnemy(
 // nunca mente sobre o que a poção faz.
 export const POTION_HEAL = 12;
 
+/* ------------------------------------------------------------------ *
+ * Economia e oficina (fase 2)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Quanto o mercador COBRA por uma poção, em moedas.
+ *
+ * Mora ao lado de `POTION_HEAL` porque é o outro lado do mesmo item, e os dois
+ * são a mesma decisão de balanceamento: 15 moedas por 12 de cura significa
+ * cinco frascos de gosma (3 cada) por um gole — o material mais barato da
+ * masmorra não paga a saída fácil, mas o despojo de goblin (18) paga.
+ */
+export const PRECO_POCAO = 15;
+
+/** Teto de refinos da arma. Cada degrau vale +1 de ataque, permanente. */
+export const ARMA_NIVEL_MAX = 5;
+
+/** Quanto de ataque cada degrau de refino soma. */
+export const ATK_POR_REFINO = 1;
+
+/**
+ * Ficha de uma receita da bancada. Mesma natureza de `ITENS` e `DROPS`: tabela
+ * fixa, lida por todo mundo (inclusive pela interface, que MONTA A LISTA a
+ * partir daqui), escrita por ninguém.
+ *
+ * O que a ficha NÃO carrega é o EFEITO: consumir os materiais é regra comum
+ * (está em `custo`), mas o que sai da bancada mexe no jogador e é decisão de
+ * jogo — mora em game.ts, num lugar só. `produz` é a descrição em pt-BR desse
+ * efeito, para a UI listar sem precisar conhecê-lo.
+ */
+export interface ReceitaDef {
+  key: ReceitaKind;
+  /** Nome exibido, em pt-BR. */
+  nome: string;
+  /** Ofício, para a UI agrupar: o caldeirão ou a bigorna. */
+  oficio: 'alquimia' | 'refino';
+  /** Materiais consumidos. Leia SEMPRE pela ordem de `ITEM_KINDS`. */
+  custo: CustoReceita;
+  /** O que sai da bancada, em uma frase. */
+  produz: string;
+  desc: string;
+}
+
+/** Alquimia: três gosmas viram uma poção. */
+export const RECEITA_POCAO: CustoReceita = { gosma: 3 };
+
+/** Refino: duas cimitarras viram um degrau de arma. */
+export const RECEITA_REFINO: CustoReceita = { espadaGoblin: 2 };
+
+/**
+ * Tabela canônica das receitas — FONTE ÚNICA.
+ *
+ * Nenhum outro ponto do código pode escrever "3 gosmas" ou "2 cimitarras": a
+ * validação, o consumo, o log de falta e a lista da interface leem todos daqui.
+ * É a mesma disciplina de `ITENS`, e pela mesma razão: uma receita duplicada é
+ * uma receita que um dia vai divergir.
+ */
+export const RECEITAS: Record<ReceitaKind, ReceitaDef> = {
+  pocao: {
+    key: 'pocao',
+    nome: 'Poção de cura',
+    oficio: 'alquimia',
+    custo: RECEITA_POCAO,
+    produz: '1 poção',
+    desc: 'Fervida no caldeirão, a gosma de Slime coalha numa cura decente.'
+  },
+  refino: {
+    key: 'refino',
+    nome: 'Refino de arma',
+    oficio: 'refino',
+    custo: RECEITA_REFINO,
+    produz: '+1 de ataque (até ' + ARMA_NIVEL_MAX + ' refinos)',
+    desc: 'O aço mole das cimitarras de goblin, batido na bigorna, vira gume.'
+  }
+};
+
+/* A ordem fixa de iteração das receitas é `RECEITA_KINDS` (vocab.ts),
+ * reexportado no topo deste módulo. A UI lista por ela. */
+
+/**
+ * A bolsa cobre o custo? Varre pela ordem de `ITEM_KINDS` (jamais
+ * `Object.keys`) e devolve o que FALTA, na mesma ordem — lista vazia significa
+ * "dá para fazer". Devolver a falta, e não um booleano, é o que permite ao
+ * registro dizer o que está faltando sem recalcular nada.
+ */
+export function faltasDaReceita(bag: Bag, custo: CustoReceita): Array<{ item: MaterialKind; falta: number }> {
+  const out: Array<{ item: MaterialKind; falta: number }> = [];
+  for (let i = 0; i < ITEM_KINDS.length; i++) {
+    const kind = ITEM_KINDS[i];
+    if (!ehMaterial(kind)) continue;
+    const pedido = custo[kind] || 0;
+    if (pedido <= 0) continue;
+    const tem = bag[kind] || 0;
+    if (tem < pedido) out.push({ item: kind, falta: pedido - tem });
+  }
+  return out;
+}
+
 /**
  * Cria um item no chão. `kind` é o ÚLTIMO parâmetro e tem padrão `'potion'`
  * para que as chamadas antigas — `populate`, que só semeia poções — continuem
@@ -802,6 +899,111 @@ export function makeItem(id: number, x: number, y: number, kind: ItemKind = 'pot
   };
 }
 
+/* ------------------------------------------------------------------ *
+ * Pontos de parada — mercador e bancada (fase 2)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Faixa Chebyshev entre o mercador e a escada. "Perto da escada" é a regra de
+ * design: o jogador decide o que fazer com a bolsa no instante em que pode
+ * descer. Dois é o mínimo para o mercador não bloquear a escada nem ficar
+ * colado nela; quatro é o máximo para ele continuar no mesmo bolso de mapa.
+ */
+const MERCADOR_DIST_MIN = 2;
+const MERCADOR_DIST_MAX = 4;
+
+/**
+ * A escolha determinística dos dois pontos, num lugar só.
+ *
+ * O contrato é: candidatos coletados em ordem CANÔNICA pelo chamador (índice
+ * linear crescente — varredura linha a linha), embaralhados pelo rng de
+ * POPULAÇÃO e escolhido o de menor índice do resultado, isto é, `cand[0]`. É a
+ * mesma disciplina de `distribute`, e é o que faz a colocação depender só da
+ * semente: a ordem de entrada não é acidente de iteração, e o sorteio não é
+ * `pick` (que consumiria o stream de forma diferente conforme o tamanho da
+ * lista... e, pior, deixaria a ordem de entrada invisível na leitura).
+ *
+ * Lista vazia devolve `null`: mapa sem tile elegível não inventa ponto.
+ */
+function escolherParada(rng: Rng, cand: Candidate[]): Candidate | null {
+  if (cand.length === 0) return null;
+  rng.shuffle(cand);
+  return cand[0];
+}
+
+/** Tiles elegíveis para o mercador: perto da escada e livres. Ordem canônica. */
+function candidatosMercador(
+  map: GameMap,
+  taken: Set<number>,
+  start: Point,
+  stairs: Point
+): Candidate[] {
+  const out: Candidate[] = [];
+  const y0 = stairs.y - MERCADOR_DIST_MAX;
+  const y1 = stairs.y + MERCADOR_DIST_MAX;
+  const x0 = stairs.x - MERCADOR_DIST_MAX;
+  const x1 = stairs.x + MERCADOR_DIST_MAX;
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const d = cheb(x, y, stairs.x, stairs.y);
+      if (d < MERCADOR_DIST_MIN || d > MERCADOR_DIST_MAX) continue;
+      if (!inBounds(map, x, y)) continue;
+      if (!walkable(map, x, y)) continue;
+      if (x === start.x && y === start.y) continue;
+      if (x === stairs.x && y === stairs.y) continue;
+      const i = idx(map.w, x, y);
+      /* `taken` já carrega início, escada, todo inimigo e todo item deste
+       * andar — é ele que garante "nunca sobre start, escada, item ou
+       * inimigo" sem uma segunda varredura das listas. */
+      if (taken.has(i)) continue;
+      out.push({ x: x, y: y, i: i });
+    }
+  }
+  return out;
+}
+
+/**
+ * Tiles elegíveis para a bancada: qualquer sala que NÃO seja a da escada nem a
+ * do início. A regra é de design — a oficina é um desvio do caminho, não uma
+ * conveniência à beira da saída (que é o papel do mercador).
+ *
+ * Salas varridas por `id` crescente e tiles linha a linha: ordem canônica, do
+ * mesmo jeito que `distribute` ordena as salas antes de repartir cotas.
+ * Corredor não conta como sala (`roomAt` devolve `null`), então uma escada em
+ * corredor não exclui sala nenhuma — e continua valendo que a bancada nasce
+ * dentro de uma sala.
+ */
+function candidatosBancada(
+  map: GameMap,
+  taken: Set<number>,
+  start: Point,
+  stairs: Point | null
+): Candidate[] {
+  const out: Candidate[] = [];
+  const salaInicio = roomAt(map, start.x, start.y);
+  const salaEscada = stairs ? roomAt(map, stairs.x, stairs.y) : null;
+  const salas = (map.rooms || []).slice().sort(function (a, b) { return a.id - b.id; });
+  for (let r = 0; r < salas.length; r++) {
+    const room = salas[r];
+    if (salaInicio && room.id === salaInicio.id) continue;
+    if (salaEscada && room.id === salaEscada.id) continue;
+    const y1 = room.y + room.h;
+    const x1 = room.x + room.w;
+    for (let y = room.y; y < y1; y++) {
+      for (let x = room.x; x < x1; x++) {
+        if (!inBounds(map, x, y)) continue;
+        if (!walkable(map, x, y)) continue;
+        if (x === start.x && y === start.y) continue;
+        if (stairs && x === stairs.x && y === stairs.y) continue;
+        const i = idx(map.w, x, y);
+        if (taken.has(i)) continue;
+        out.push({ x: x, y: y, i: i });
+      }
+    }
+  }
+  return out;
+}
+
 export function populate(map: GameMap, depth: number, heroLevel: number): Population {
   const d = depth < 1 ? 1 : depth;
   const rng = makeRng(hash32(map.seed + '#pop#' + d));
@@ -814,7 +1016,9 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
   const rooms = map.rooms || [];
   const start = map.start;
   const stairs: Point | null = map.stairs ?? null;
-  if (!rooms.length || !start) return { enemies: enemies, items: items };
+  if (!rooms.length || !start) {
+    return { enemies: enemies, items: items, mercador: null, bancada: null };
+  }
 
   /* Um único conjunto de tiles tomados: nada de sobreposição entre inimigos,
    * itens, início ou escada (R23/R24). */
@@ -839,7 +1043,35 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
       items.push(makeItem(nextItemId++, x, y));
     });
 
-  return { enemies: enemies, items: items };
+  /* ---------------------------------------------------------------- *
+   * Pontos de parada (fase 2) — DEPOIS de inimigos e itens, sempre.
+   *
+   * A ordem não é estética: colocar as paradas antes deslocaria o consumo do
+   * stream de população e mudaria a posição de TODO inimigo e TODO item de
+   * TODO andar já gerado — inclusive os do oracle vanilla congelado, que a
+   * migração usa para provar paridade. Vindo por último, a fase 1 continua
+   * saindo byte a byte igual e as paradas só acrescentam.
+   *
+   * A contrapartida honesta: por virem depois dos inimigos, os pontos também
+   * dependem do nível do herói no instante em que o andar foi povoado (é ele
+   * que dirige `pickKind`, e `rng.int` consome um número variável de u32).
+   * Continua determinístico — mesma semente, mesma profundidade e mesmo nível
+   * dão sempre os mesmos pontos — e o save carrega os pontos escolhidos, então
+   * nada disso é observável numa retomada.
+   * ---------------------------------------------------------------- */
+  let mercador: Point | null = null;
+  if (stairs) {
+    const escolhido = escolherParada(rng, candidatosMercador(map, taken, start, stairs));
+    if (escolhido) {
+      mercador = { x: escolhido.x, y: escolhido.y };
+      /* Reservado: a bancada não pode nascer em cima do mercador. */
+      taken.add(escolhido.i);
+    }
+  }
+  const naBancada = escolherParada(rng, candidatosBancada(map, taken, start, stairs));
+  const bancada: Point | null = naBancada ? { x: naBancada.x, y: naBancada.y } : null;
+
+  return { enemies: enemies, items: items, mercador: mercador, bancada: bancada };
 }
 
 /* ------------------------------------------------------------------ *

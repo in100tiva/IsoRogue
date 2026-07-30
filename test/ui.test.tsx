@@ -18,6 +18,8 @@
  *     linha de um comando RECUSADO, que no vanilla ia ao DOM dentro do próprio
  *     `logMsg` (`R.UI.pushLog`) e portanto aparecia no ato;
  *   · o overlay de morte aparece com `over: true`, com os 9 campos do R48;
+ *   · o BALCÃO (fase 2 da economia) só existe sobre o mercador ou sobre a
+ *     bancada, despacha os comandos certos e reflete bolsa, moedas e receitas;
  *   · o `IsoRenderer` degrada sem lançar quando `getContext('2d')` devolve null
  *     (jsdom não tem canvas 2D) — defensivo, não gambiarra;
  *   · o laço de rAF NÃO duplica com a montagem dupla do StrictMode e é
@@ -30,9 +32,11 @@ import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 
+import { ARMA_NIVEL_MAX, ITENS, PRECO_POCAO } from '../src/engine/entities';
 import { store } from '../src/engine/store';
 import { setStorage } from '../src/engine/save';
 import { App } from '../src/ui/App';
+import { sincronizar } from '../src/ui/cinematics';
 import { getRenderer } from '../src/ui/GameCanvas';
 
 /* Sem localStorage nos testes: cada caso parte de um estado explícito. */
@@ -109,6 +113,14 @@ beforeEach(() => {
     anotar(args);
   });
   instalarRelogioDeQuadros();
+  /*
+   * A fase da cinemática é estado de MÓDULO (src/ui/cinematics.ts) e vaza de um
+   * caso para o outro: basta um `passarQuadro()` com a partida no turno 0 para
+   * a fase virar 'intro' — e 'intro' TRAVA o teclado do jogador
+   * (`inputBloqueado`). Sem este reparo, todo teste de tecla que rodasse depois
+   * de um teste com quadros passaria em silêncio, provando nada.
+   */
+  sincronizar('nenhuma');
   store.newRun(SEMENTE);
 });
 
@@ -523,6 +535,285 @@ describe('UI — smoke da casca React (§7.4)', () => {
       .toEqual(['Poção', 'Frasco de gosma', 'Orelhas de goblin']);
     expect(bolsa.textContent, 'o valor unitário do material não apareceu')
       .toContain('5 moedas cada');
+
+    esperarConsoleLimpo();
+  });
+
+  /* ================================================================ *
+   * O BALCÃO — mercador e bancada (fase 2 da economia)
+   *
+   * Os dois pontos de parada são estado do JOGO (`game.mercador` /
+   * `game.bancada`), então pôr o jogador "em cima" de um deles é mover o
+   * PONTO até ele — muito mais barato e mais determinístico do que caminhar
+   * até onde a semente resolveu colocá-lo, e a regra em teste ('estou sobre o
+   * tile?') é exatamente a mesma nos dois casos.
+   *
+   * Notificação: `store.setHover` é a via pública mais barata de acordar os
+   * assinantes sem consumir turno — e ela só emite quando o TILE muda, daí as
+   * coordenadas diferentes a cada bloco.
+   * ================================================================ */
+
+  function acordar(dx: number): void {
+    const g = store.getGame();
+    store.setHover({ x: g.player.x + dx, y: g.player.y });
+  }
+
+  it('o balcão não existe longe dos pontos de parada', () => {
+    montarApp();
+    const g = store.getGame();
+
+    /* `populate` nunca põe ponto de parada no tile inicial (start entra em
+     * `taken` antes de qualquer sorteio), então a partida nasce longe dos dois. */
+    const sobreMercador = !!g.mercador && g.mercador.x === g.player.x && g.mercador.y === g.player.y;
+    const sobreBancada = !!g.bancada && g.bancada.x === g.player.x && g.bancada.y === g.player.y;
+    expect(sobreMercador || sobreBancada, 'a semente do teste nasceu em cima de um balcão')
+      .toBe(false);
+
+    expect(document.getElementById('troca'), 'o balcão apareceu com o jogador longe dele')
+      .toBeNull();
+
+    /* Andar sem mercador nem bancada (mapa sem tile elegível) também não abre. */
+    act(() => {
+      g.mercador = null;
+      g.bancada = null;
+      acordar(1);
+    });
+    expect(document.getElementById('troca'), 'o balcão abriu num andar sem pontos de parada')
+      .toBeNull();
+
+    esperarConsoleLimpo();
+  });
+
+  it('sobre o mercador: vender despacha o comando e a bolsa e as moedas seguem', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = { x: g.player.x, y: g.player.y };
+      g.bancada = null;
+      g.player.bag = { gosma: 3 };
+      g.player.moedas = 0;
+      acordar(0);
+    });
+
+    /* O bloco entra entre a Bolsa e a Semente — o que carrego, e o que posso
+     * fazer com isso (ver Sidebar.tsx). */
+    const titulos = Array.from(document.querySelectorAll('.painel .titulo'))
+      .map((el) => (el.textContent || '').trim());
+    expect(titulos, 'o balcão entrou fora de lugar na barra lateral').toEqual([
+      'Vitais', 'Bolsa', 'Mercador', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+    ]);
+    expect(document.getElementById('troca-moedas')!.textContent, 'moedas do balcão').toBe('0');
+
+    const preco = ITENS.gosma.valor;
+    const turnoAntes = g.turn;
+
+    /* VENDER 1 — o botão manda `{kind:'vender', item:'gosma', quantidade:1}`. */
+    act(() => {
+      fireEvent.click(document.getElementById('vender-gosma') as HTMLButtonElement);
+    });
+
+    expect(g.player.bag.gosma, 'a venda de uma unidade não saiu da bolsa').toBe(2);
+    expect(g.player.moedas, 'a venda não pagou o preço da tabela').toBe(preco);
+    expect(g.turn, 'negociar custa um turno (e é decisão de design)').toBe(turnoAntes + 1);
+    expect(document.getElementById('troca-moedas')!.textContent, 'o balcão não recontou as moedas')
+      .toBe(String(preco));
+    expect(document.getElementById('hud-moedas')!.textContent, 'os vitais não recontaram as moedas')
+      .toBe(String(preco));
+    expect(document.getElementById('bolsa-gosma')!.textContent, 'a bolsa não recontou o material')
+      .toBe('2');
+
+    /* VENDER TUDO — a quantidade EXATA (o engine não aceita 'tudo'). */
+    act(() => {
+      fireEvent.click(document.getElementById('vender-tudo-gosma') as HTMLButtonElement);
+    });
+
+    expect(g.player.bag.gosma, 'vender tudo deixou material para trás').toBeUndefined();
+    expect(g.player.moedas, 'o lote não pagou as duas unidades restantes').toBe(preco * 3);
+    expect(document.getElementById('troca-venda'), 'a lista de venda sobreviveu à bolsa vazia')
+      .toBeNull();
+    expect(document.getElementById('troca-sem-material'), 'ninguém disse que não há o que vender')
+      .toBeTruthy();
+
+    esperarConsoleLimpo();
+  });
+
+  it('sobre o mercador: a poção só pode ser comprada com moeda no bolso', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = { x: g.player.x, y: g.player.y };
+      g.bancada = null;
+      g.player.bag = {};
+      g.player.moedas = PRECO_POCAO - 1;
+      g.player.potions = 0;
+      acordar(0);
+    });
+
+    const semMoeda = document.getElementById('comprar-potion') as HTMLButtonElement;
+    expect(semMoeda.tagName, 'o gatilho de compra tem de ser um <button> de verdade')
+      .toBe('BUTTON');
+    expect(semMoeda.disabled, 'a compra sem moeda tinha de estar desabilitada').toBe(true);
+    expect(document.getElementById('troca-motivo-potion')!.textContent,
+      'a falta de moeda não foi dita com todas as letras').toBe('Falta 1 moeda.');
+    expect(semMoeda.getAttribute('aria-describedby'),
+      'o botão desabilitado não aponta para o motivo').toBe('troca-motivo-potion');
+
+    /* Botão desabilitado não vira comando — nem turno. */
+    const turnoAntes = g.turn;
+    act(() => { fireEvent.click(semMoeda); });
+    expect(g.turn, 'o clique no botão desabilitado consumiu turno').toBe(turnoAntes);
+    expect(g.player.potions, 'o botão desabilitado comprou mesmo assim').toBe(0);
+
+    act(() => {
+      g.player.moedas = PRECO_POCAO;
+      acordar(1);
+    });
+
+    const comMoeda = document.getElementById('comprar-potion') as HTMLButtonElement;
+    expect(comMoeda.disabled, 'a compra continuou travada com a moeda no bolso').toBe(false);
+    act(() => { fireEvent.click(comMoeda); });
+
+    expect(g.player.potions, 'a poção comprada não chegou').toBe(1);
+    expect(g.player.moedas, 'o preço não foi cobrado').toBe(0);
+    expect(document.getElementById('hud-pocoes')!.textContent).toBe('1');
+
+    esperarConsoleLimpo();
+  });
+
+  it('sobre a bancada: sem material a receita fica desabilitada; com material, cria', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = null;
+      g.bancada = { x: g.player.x, y: g.player.y };
+      g.player.bag = {};
+      g.player.potions = 0;
+      acordar(0);
+    });
+
+    expect((document.querySelector('#troca .titulo') as HTMLElement).textContent)
+      .toBe('Bancada');
+
+    const travado = document.getElementById('criar-pocao') as HTMLButtonElement;
+    expect(travado.tagName, 'o gatilho da receita tem de ser um <button> de verdade')
+      .toBe('BUTTON');
+    expect(travado.disabled, 'a receita sem material tinha de estar desabilitada').toBe(true);
+    /* O motivo, escrito, e ligado ao botão para quem lê por leitor de tela. */
+    expect(document.getElementById('troca-motivo-pocao')!.textContent,
+      'a falta não foi dita com todas as letras').toBe('Faltam 3 frascos de gosma.');
+    expect(travado.getAttribute('aria-describedby'),
+      'o botão desabilitado não aponta para o motivo').toBe('troca-motivo-pocao');
+
+    const turnoAntes = g.turn;
+    act(() => { fireEvent.click(travado); });
+    expect(g.turn, 'o clique no botão desabilitado consumiu turno').toBe(turnoAntes);
+    expect(g.player.potions, 'a bancada criou sem material').toBe(0);
+
+    /* Com as três gosmas na bolsa o botão abre e o caldeirão trabalha. */
+    act(() => {
+      g.player.bag = { gosma: 3 };
+      acordar(1);
+    });
+
+    const liberado = document.getElementById('criar-pocao') as HTMLButtonElement;
+    expect(liberado.disabled, 'a receita continuou travada com o material em mãos').toBe(false);
+    expect(document.getElementById('troca-motivo-pocao'), 'sobrou motivo com o material em mãos')
+      .toBeNull();
+
+    act(() => { fireEvent.click(liberado); });
+
+    expect(g.player.potions, 'a bancada não engarrafou a poção').toBe(1);
+    expect(g.player.bag.gosma, 'a receita não consumiu a gosma').toBeUndefined();
+    expect(g.turn, 'usar a bancada custa um turno').toBe(turnoAntes + 1);
+    expect(document.getElementById('log')!.textContent, 'o caldeirão não foi narrado')
+      .toContain('engarrafa uma poção');
+
+    esperarConsoleLimpo();
+  });
+
+  it('o teclado que ativa um botão do balcão não vira comando de jogo também', () => {
+    /*
+     * Acessibilidade de verdade: quem joga no teclado chega ao botão com Tab e
+     * o ativa com Enter ou Espaço. As duas teclas TAMBÉM são comando global —
+     * Enter desce a escada, Espaço espera um turno (useKeyboard.ts). Sem a
+     * barreira do painel, um único Espaço venderia a gosma E queimaria um turno
+     * a mais, com um Ogro na sala. As demais teclas continuam passando: o foco
+     * num botão não pode prender o jogador no lugar.
+     */    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = { x: g.player.x, y: g.player.y };
+      g.bancada = null;
+      g.player.bag = { gosma: 1 };
+      acordar(0);
+    });
+
+    const botao = document.getElementById('vender-gosma') as HTMLButtonElement;
+    botao.focus();
+
+    const turnoAntes = g.turn;
+    act(() => {
+      fireEvent.keyDown(botao, { key: ' ', code: 'Space' });
+      fireEvent.keyDown(botao, { key: 'Enter', code: 'Enter' });
+    });
+    expect(g.turn, 'a tecla que ativa o botão vazou para o comando global')
+      .toBe(turnoAntes);
+
+    /* Mas as OUTRAS teclas continuam passando: o foco num botão do balcão não
+     * pode prender o jogador. ('.' é esperar — o único comando que consome
+     * turno sem depender do desenho do mapa em volta.) */
+    act(() => {
+      fireEvent.keyDown(botao, { key: '.', code: 'Period' });
+    });
+    expect(g.turn, 'o foco no botão engoliu o resto do teclado')
+      .toBe(turnoAntes + 1);
+
+    esperarConsoleLimpo();
+  });
+
+  it('sobre a bancada: o refino mostra o nível da arma e trava no teto', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.mercador = null;
+      g.bancada = { x: g.player.x, y: g.player.y };
+      g.player.bag = { espadaGoblin: 2 };
+      g.player.armaNivel = 0;
+      acordar(0);
+    });
+
+    expect(document.getElementById('troca-arma-nivel')!.textContent,
+      'o nível da arma não apareceu na receita de refino')
+      .toBe('Sua arma: refino 0 de ' + ARMA_NIVEL_MAX);
+    expect(document.getElementById('hud-arma')!.textContent, 'o refino sumiu dos vitais')
+      .toBe('0/' + ARMA_NIVEL_MAX);
+
+    const atkAntes = g.player.atk;
+    act(() => {
+      fireEvent.click(document.getElementById('criar-refino') as HTMLButtonElement);
+    });
+
+    expect(g.player.armaNivel, 'o refino não subiu um degrau').toBe(1);
+    expect(g.player.atk, 'o degrau de refino não somou ataque').toBe(atkAntes + 1);
+    expect(document.getElementById('hud-arma')!.textContent).toBe('1/' + ARMA_NIVEL_MAX);
+
+    /* No TETO o botão trava mesmo com material de sobra — e diz por quê. */
+    act(() => {
+      g.player.bag = { espadaGoblin: 4 };
+      g.player.armaNivel = ARMA_NIVEL_MAX;
+      acordar(1);
+    });
+
+    const noTeto = document.getElementById('criar-refino') as HTMLButtonElement;
+    expect(noTeto.disabled, 'o refino no teto continuou clicável').toBe(true);
+    expect(document.getElementById('troca-motivo-refino')!.textContent,
+      'o teto do refino não foi explicado')
+      .toBe('Refino máximo atingido (' + ARMA_NIVEL_MAX + ').');
 
     esperarConsoleLimpo();
   });

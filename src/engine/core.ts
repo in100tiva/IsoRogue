@@ -16,6 +16,14 @@
 import { makeRng } from './rng';
 import { Tile } from './types';
 import type { Command, Dir, RandomBytes } from './types';
+/*
+ * Só o VOCABULÁRIO (as listas de nomes que viajam em texto), nunca as tabelas
+ * de domínio: `parseCommand` precisa saber que 'gosma' existe e que 'banana'
+ * não, mas não pode conhecer o preço de nada. vocab.ts existe exatamente para
+ * essa fatia — e para não fechar o ciclo core → entities → mapgen → core, que
+ * derrubaria o engine na primeira importação (ver o cabeçalho de vocab.ts).
+ */
+import { normalizeMaterialKind, normalizeReceita } from './vocab';
 
 /*
  * Builtins içados para o escopo do módulo — mesma razão de perf documentada em
@@ -273,6 +281,42 @@ function inteiroOuNaN(v: string): number {
 }
 
 /**
+ * Limites de quantidade de uma negociação, em unidades por comando.
+ *
+ * O piso 1 é o óbvio (vender zero não é ação). O teto 99 é de contrato e vale
+ * para os dois lados do balcão: ele mantém a forma textual curta e previsível
+ * ('vender:gosma,99' e nada maior), e é o que impede um comando forjado de
+ * pedir 2^31 poções e estourar a aritmética do preço. Quem quiser vender 200
+ * gosmas manda dois comandos — e paga dois turnos por isso.
+ */
+export const QUANTIDADE_MIN = 1;
+export const QUANTIDADE_MAX = 99;
+
+/**
+ * Quantidade de uma negociação, ou `NaN` se o texto não for um inteiro dentro
+ * de [QUANTIDADE_MIN, QUANTIDADE_MAX].
+ *
+ * Note o que NÃO é aceito: 'tudo'. Não existe atalho de "vender tudo" no
+ * protocolo — quem sabe quanto há na bolsa na hora do clique é a interface, e é
+ * ela que manda o número. O engine não adivinha intenção.
+ */
+function quantidadeOuNaN(v: string): number {
+  const n = inteiroOuNaN(v);
+  if (!isFinite(n)) return NaN;
+  if (n < QUANTIDADE_MIN || n > QUANTIDADE_MAX) return NaN;
+  return n;
+}
+
+/** Corpo 'nome,quantidade' de vender/comprar; `null` se a forma não fecha. */
+function parNomeQuantidade(corpo: string): { nome: string; n: number } | null {
+  const partes = corpo.split(',');
+  if (partes.length !== 2) return null;
+  const n = quantidadeOuNaN(partes[1].trim());
+  if (!isFinite(n)) return null;
+  return { nome: partes[0].trim(), n: n };
+}
+
+/**
  * Converte a forma textual do vanilla em `Command`, ou `null` se inválida.
  *
  * Aceita exatamente o que `R.Game.applyCommand` aceitava, na mesma ordem de
@@ -280,6 +324,15 @@ function inteiroOuNaN(v: string): number {
  * cada parte com trim, `Number` + `Math.floor`, e só então o limite [-1, 1].
  * Isso preserva casos de borda do original — 'move:1.7,0' vira {1, 0}, e
  * 'move:1,0,2' é rejeitado.
+ *
+ * Os três comandos de economia (fase 2) seguem a mesma disciplina de forma:
+ * 'vender:gosma,3', 'comprar:potion,1', 'criar:pocao'. O que este parse recusa
+ * é ERRO DE FORMA (nome que não existe, quantidade fora da faixa, vírgula a
+ * mais) — devolver `null` aqui é dizer "isto não é um comando". O que ele NÃO
+ * julga é ERRO DE SITUAÇÃO (estar longe do mercador, não ter o material, não
+ * ter moeda): isso é comando legítimo que o jogo recusa com uma linha de
+ * registro, e quem decide é `applyCommand`. A fronteira importa porque só o
+ * segundo caso tem de VIRAR MENSAGEM para o jogador.
  */
 export function parseCommand(s: string): Command | null {
   if (typeof s !== 'string') return null;
@@ -293,6 +346,28 @@ export function parseCommand(s: string): Command | null {
     if (!isFinite(dx) || !isFinite(dy)) return null;
     if (dx < -1 || dx > 1 || dy < -1 || dy > 1) return null;
     return { kind: 'move', dx: dx, dy: dy };
+  }
+  if (c.indexOf('vender:') === 0) {
+    const par = parNomeQuantidade(c.slice(7));
+    if (!par) return null;
+    /* Só MATERIAL se vende: 'vender:potion,1' cai aqui e é recusado, porque a
+     * poção é contador, não mercadoria (contrato antigo R7). */
+    const item = normalizeMaterialKind(par.nome);
+    if (!item) return null;
+    return { kind: 'vender', item: item, quantidade: par.n };
+  }
+  if (c.indexOf('comprar:') === 0) {
+    const par = parNomeQuantidade(c.slice(8));
+    if (!par) return null;
+    /* O mercador só VENDE poção. A comparação é literal de propósito: o dia em
+     * que ele vender outra coisa, este ponto tem de doer. */
+    if (par.nome !== 'potion') return null;
+    return { kind: 'comprar', item: 'potion', quantidade: par.n };
+  }
+  if (c.indexOf('criar:') === 0) {
+    const receita = normalizeReceita(c.slice(6).trim());
+    if (!receita) return null;
+    return { kind: 'criar', receita: receita };
   }
   if (c === 'wait') return { kind: 'wait' };
   if (c === 'use') return { kind: 'use' };
@@ -311,5 +386,11 @@ export function formatCommand(c: Command): string {
       return 'use';
     case 'descend':
       return 'descend';
+    case 'vender':
+      return 'vender:' + c.item + ',' + c.quantidade;
+    case 'comprar':
+      return 'comprar:' + c.item + ',' + c.quantidade;
+    case 'criar':
+      return 'criar:' + c.receita;
   }
 }

@@ -198,6 +198,26 @@
 
 .botao-primario:hover { border-color: var(--ambar); }
 
+/* Desabilitado = APAGADO e INERTE, e as duas coisas têm de se ver.
+   `:disabled` cobre o <button> nativo — o único que existe nesta barra, porque
+   div clicável não é botão (nem para o teclado, nem para o leitor de tela).
+
+   Vem DEPOIS de `.botao-primario:hover` de propósito: as duas regras têm a
+   mesma especificidade, e sem esta ordem um "Criar" desabilitado ainda
+   acenderia a borda âmbar sob o mouse — continuaria PROMETENDO clique. O hover
+   e o active são neutralizados pelo mesmo motivo.
+
+   Cor: `--fraco`, a mesma dos rótulos secundários da barra. Já está na paleta e
+   já foi medida; nada de cinza novo. */
+.botao:disabled,
+.botao:disabled:hover,
+.botao:disabled:active {
+  background: #141a22;
+  border-color: var(--borda);
+  color: var(--fraco);
+  cursor: not-allowed;
+}
+
 .botao-largo {
   width: 100%;
   min-height: 40px;
@@ -256,6 +276,63 @@
   font-size: 10px;
   letter-spacing: 0.04em;
   color: var(--fraco);
+}
+
+/* ------------------------------------------------------------------ troca */
+
+/* O balcão do mercador e a oficina da bancada (fase 2). Zero primitivo novo:
+   o bloco é `.bloco`, a lista é `.tabela` / `.tabela-linha` (a mesma da bolsa,
+   pela mesma razão — rótulo à esquerda, coisa à direita), o nome do item é
+   `.bolsa-nome` e a linha secundária é `.bolsa-preco`. O que entra aqui é só o
+   que a bolsa não tinha: uma coluna de BOTÕES à direita.
+
+   A borda esquerda âmbar é a mesma marca do cabeçalho (`.bloco-marca`) e do
+   balão de dica: "isto aqui é o ponto quente da tela agora". O bloco só existe
+   quando o jogador está sobre o mercador ou a bancada, então a marca não
+   compete com nada — ela aparece e some com o balcão. */
+
+.bloco-troca {
+  border-left: 2px solid var(--ambar);
+  padding-left: 14px;
+}
+
+/* Moedas em âmbar nos dois lugares em que aparecem (vitais e balcão): é a cor
+   do valor no jogo inteiro — o realce do cursor, a barra de XP e a escada. */
+.valor-moedas { color: var(--ambar); }
+
+/* A célula de ações. `flex-wrap` porque a barra tem 320px e "Vender 1" +
+   "Tudo (12)" não cabem lado a lado em telas estreitas; quebrar é melhor do
+   que espremer o rótulo até ele mentir. */
+.troca-acoes {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+/* Botão de linha: o `.botao` de sempre, na altura de uma linha de tabela. O
+   alvo continua com 26px de altura e 8px de folga horizontal — abaixo disso o
+   toque em tela pequena erra. */
+.botao-mini {
+  min-height: 26px;
+  padding: 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* O motivo de um botão estar desabilitado, escrito com todas as letras: 'Faltam
+   2 cimitarras de goblin', 'Refino máximo atingido (5)'. Em âmbar porque é a
+   cor de AVISO do registro (`.log-aviso`) — a mesma frase, a mesma cor, e o
+   `aria-describedby` do botão aponta para cá. */
+.troca-falta {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ambar);
 }
 
 /* --------------------------------------------------------------- registro */

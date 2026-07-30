@@ -21,17 +21,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { CONFIG, DIRS8, hash32, makeRng, parseCommand } from '../src/engine/core';
-import { generate, isWalkable } from '../src/engine/mapgen';
+import { CONFIG, DIRS8, formatCommand, hash32, makeRng, parseCommand } from '../src/engine/core';
+import { generate, isWalkable, roomAt } from '../src/engine/mapgen';
 import { checkSymmetry, computeFov, isVisibleFrom } from '../src/engine/fov';
 import { DIJKSTRA_INF, bestStep, computeDijkstra, fleeMap } from '../src/engine/dijkstra';
 import {
   ARCHETYPES,
+  ARMA_NIVEL_MAX,
   DROPS,
   ITEM_KINDS,
   ITENS,
   KINDS,
   POTION_HEAL,
+  PRECO_POCAO,
+  RECEITAS,
+  RECEITA_KINDS,
   ehMaterial,
   makeItem,
   pesosSpawn,
@@ -1030,7 +1034,8 @@ describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', ()
  *     na bolsa (T12.4);
  *   · bolsa e `kind` sobrevivem ao save, e um save legado (sem nenhum dos dois)
  *     ainda carrega (T12.5);
- *   · o `snapshot()` v2 expõe kind, bolsa (em ordem de TABELA) e rngLoot (T12.6).
+ *   · o `snapshot()` expõe kind, bolsa (em ordem de TABELA) e rngLoot (T12.6) —
+ *     garantias da fase 1 que a etiqueta v3 da fase 2 não pode ter perdido.
  * ================================================================== */
 
 /** Armazenamento de memória: o save do teste não encosta em disco nem em DOM. */
@@ -1422,11 +1427,14 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
       .not.toBe(null);
   }, LENTO);
 
-  it('o snapshot v2 expõe kind do item, bolsa em ordem de tabela e estado do rngLoot', () => {
+  it('o snapshot expõe kind do item, bolsa em ordem de tabela e estado do rngLoot', () => {
     const game = createState('T12-SNAP', 1);
     const inicial = String(snapshot(game));
 
-    expect(inicial.indexOf('v2|'), 'T12.6: o snapshot não é v2').toBe(0);
+    /* A etiqueta subiu para v3 na fase 2 (economia). O que este teste guarda
+     * são as garantias que a fase 1 introduziu e que NÃO podem se perder na
+     * troca de versão — o formato do bloco de itens, da bolsa e do rngLoot. */
+    expect(inicial.indexOf('v3|'), 'T12.6: o snapshot não é v3').toBe(0);
     expect(inicial.indexOf('|B[]|') >= 0, 'T12.6: bolsa vazia devia sair como B[]').toBe(true);
     expect(
       /\|I\[\d+:potion:\d+:\d+(\|\d+:potion:\d+:\d+)*\]\|/.test(inicial),
@@ -1456,5 +1464,594 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
     /* E o que NÃO pode aparecer: a poção não é material e não entra na bolsa. */
     expect(depois.indexOf('B[') >= 0 && depois.indexOf('potion0') === -1,
       'T12.6: contador de poção vazou para a bolsa').toBe(true);
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T13 — economia e oficina, fase 2: mercador, bancada, moedas e receitas
+ *
+ * O que estes testes protegem, em uma frase cada:
+ *   · as tabelas (preço, teto de refino, receitas) são as do contrato (T13.0);
+ *   · os dois pontos de parada são determinísticos pela semente e nunca caem
+ *     sobre início, escada, item ou inimigo (T13.1);
+ *   · negociar longe do balcão é RECUSA — sem turno e sem mexer no estado
+ *     (T13.2);
+ *   · vender troca material por moeda pelo valor da TABELA, com quantidade
+ *     fora da faixa 1..99 recusada (T13.3);
+ *   · comprar troca moeda por poção a `PRECO_POCAO`, e sem moeda não há
+ *     compra (T13.4);
+ *   · a alquimia e o refino cobram exatamente o que `RECEITAS` diz, e o refino
+ *     respeita o teto (T13.5, T13.6);
+ *   · moedas, refino e bolsa são do JOGADOR e descem a escada; os pontos são
+ *     do ANDAR e ficam para trás (T13.7);
+ *   · tudo isso sobrevive ao save — e um save legado, que não tem nada disso,
+ *     ainda carrega (T13.8);
+ *   · negociar e forjar não consomem sorteio nenhum (T13.9);
+ *   · a forma textual dos três comandos é a do protocolo, ida e volta (T13.10);
+ *   · o `snapshot()` v3 mostra moedas, refino e os dois pontos (T13.11);
+ *   · pisar no ponto anuncia o balcão no registro (T13.12).
+ * ================================================================== */
+
+/** Projeção do que uma NEGOCIAÇÃO pode mudar. Recusa tem de deixar isto intacto. */
+function estadoDeComercio(game: Game): string {
+  const p = game.player;
+  return [
+    't=' + game.turn,
+    'moedas=' + p.moedas,
+    'poc=' + p.potions,
+    'atk=' + p.atk,
+    'arma=' + p.armaNivel,
+    'B[' + bolsaEmTexto(p.bag) + ']',
+    'rng=' + (game.rngCombat.s >>> 0),
+    'rngL=' + (game.rngLoot.s >>> 0)
+  ].join('|');
+}
+
+/**
+ * Partida montada para negociar: vida folgada e o jogador POSTO sobre o ponto.
+ *
+ * Teleportar em vez de caminhar é deliberado — o caminho até o mercador é
+ * assunto do movimento (T6/T7), e fazer o teste andar até lá o tornaria refém
+ * da IA dos monstros do andar.
+ */
+function partidaNoPonto(semente: string, onde: 'mercador' | 'bancada'): Game {
+  const game = createState(semente, 1);
+  game.player.maxHp = 999;
+  game.player.hp = 999;
+  const ponto = onde === 'mercador' ? game.mercador : game.bancada;
+  expect(ponto, 'T13: a semente ' + semente + ' não tem ' + onde).not.toBe(null);
+  if (ponto) {
+    game.player.x = ponto.x;
+    game.player.y = ponto.y;
+  }
+  return game;
+}
+
+/** Semente cujo nível 1 tem os DOIS pontos — a varredura é determinística. */
+function sementeComParadas(): string {
+  for (let i = 0; i < 64; i++) {
+    const semente = 'T13-' + pad(i, 4);
+    const g = createState(semente, 1);
+    if (g.mercador && g.bancada) return semente;
+  }
+  throw new Error('T13: nenhuma das 64 sementes gerou mercador E bancada');
+}
+
+describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () => {
+  it('as tabelas de economia são as do contrato da fase 2', () => {
+    expect(PRECO_POCAO, 'T13.0: preço da poção').toBe(15);
+    expect(ARMA_NIVEL_MAX, 'T13.0: teto de refino').toBe(5);
+
+    /* Ordem fixa, como `ITEM_KINDS`: é ela que a UI vai listar. */
+    expect(RECEITA_KINDS.slice(), 'T13.0: ordem das receitas').toEqual(['pocao', 'refino']);
+    expect(RECEITAS.pocao.custo, 'T13.0: RECEITA_POCAO').toEqual({ gosma: 3 });
+    expect(RECEITAS.refino.custo, 'T13.0: RECEITA_REFINO').toEqual({ espadaGoblin: 2 });
+
+    for (const key of RECEITA_KINDS) {
+      const r = RECEITAS[key];
+      expect(r.key, 'T13.0: chave da ficha de ' + key).toBe(key);
+      expect(
+        r.nome.length > 0 && r.desc.length > 0 && r.produz.length > 0,
+        'T13.0: ' + key + ' sem nome, descrição ou produto — a UI lista a partir daqui'
+      ).toBe(true);
+      /* Receita só cobra MATERIAL: poção é contador, não ingrediente. */
+      for (const kind of Object.keys(r.custo)) {
+        expect(ehMaterial(kind as MaterialKind), 'T13.0: ' + key + ' cobra ' + kind).toBe(true);
+      }
+    }
+  });
+
+  it('mesma semente ⇒ mesmos pontos, e eles nunca caem sobre start/escada/item/inimigo', () => {
+    let comMercador = 0;
+    let comBancada = 0;
+
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T13-POS-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const a = populate(map, depth, 1);
+        const b = populate(map, depth, 1);
+        const onde = 'semente ' + semente + ' d=' + depth;
+
+        /* Determinismo: duas chamadas, os mesmos dois pontos. */
+        expect(JSON.stringify(b.mercador), 'T13.1: mercador divergiu — ' + onde)
+          .toBe(JSON.stringify(a.mercador));
+        expect(JSON.stringify(b.bancada), 'T13.1: bancada divergiu — ' + onde)
+          .toBe(JSON.stringify(a.bancada));
+        /* E o mesmo vale pelo caminho de verdade, `createState`. */
+        const game = createState(semente, depth);
+        expect(JSON.stringify(game.mercador), 'T13.1: createState ≠ populate (mercador) — ' + onde)
+          .toBe(JSON.stringify(a.mercador));
+        expect(JSON.stringify(game.bancada), 'T13.1: createState ≠ populate (bancada) — ' + onde)
+          .toBe(JSON.stringify(a.bancada));
+
+        const ocupados = new Set<string>();
+        ocupados.add(map.start.x + ',' + map.start.y);
+        ocupados.add(map.stairs.x + ',' + map.stairs.y);
+        for (const e of a.enemies) ocupados.add(e.x + ',' + e.y);
+        for (const it of a.items) ocupados.add(it.x + ',' + it.y);
+
+        const paradas: Array<[string, Point | null]> = [
+          ['mercador', a.mercador],
+          ['bancada', a.bancada]
+        ];
+        for (const [nome, ponto] of paradas) {
+          if (!ponto) continue;
+          expect(isWalkable(map, ponto.x, ponto.y),
+            'T13.1: ' + nome + ' em tile não caminhável — ' + onde).toBe(true);
+          expect(ocupados.has(ponto.x + ',' + ponto.y),
+            'T13.1: ' + nome + ' sobre início, escada, item ou inimigo — ' + onde).toBe(false);
+        }
+        if (a.mercador && a.bancada) {
+          expect(a.mercador.x === a.bancada.x && a.mercador.y === a.bancada.y,
+            'T13.1: mercador e bancada no MESMO tile — ' + onde).toBe(false);
+        }
+
+        if (a.mercador) {
+          comMercador++;
+          const d = Math.max(Math.abs(a.mercador.x - map.stairs.x),
+            Math.abs(a.mercador.y - map.stairs.y));
+          expect(d >= 2 && d <= 4,
+            'T13.1: mercador a Chebyshev ' + d + ' da escada (esperado 2..4) — ' + onde).toBe(true);
+        }
+        if (a.bancada) {
+          comBancada++;
+          const salaBancada = roomAt(map, a.bancada.x, a.bancada.y);
+          expect(salaBancada, 'T13.1: bancada fora de sala — ' + onde).not.toBe(null);
+          const salaInicio = roomAt(map, map.start.x, map.start.y);
+          const salaEscada = roomAt(map, map.stairs.x, map.stairs.y);
+          if (salaBancada && salaInicio) {
+            expect(salaBancada.id, 'T13.1: bancada na sala do INÍCIO — ' + onde)
+              .not.toBe(salaInicio.id);
+          }
+          if (salaBancada && salaEscada) {
+            expect(salaBancada.id, 'T13.1: bancada na sala da ESCADA — ' + onde)
+              .not.toBe(salaEscada.id);
+          }
+        }
+      }
+    }
+
+    /* Contraprova: o laço acima só diz alguma coisa se os pontos existirem.
+     * 72 de 72 não é sorte — o gerador sempre deixa sala sobrando e anel livre
+     * ao redor da escada (medido: 800 andares, nenhum sem os dois pontos). O
+     * dia em que faltar é mudança de MAPA que merece decisão, não um teste que
+     * afrouxa o número. */
+    expect(comMercador, 'T13.1: andar sem mercador — o gerador mudou').toBe(72);
+    expect(comBancada, 'T13.1: andar sem bancada — o gerador mudou').toBe(72);
+  }, LENTO);
+
+  it('fora do tile certo, negociar é recusa: sem turno e sem mexer no estado', () => {
+    const semente = sementeComParadas();
+    const game = createState(semente, 1);
+    game.player.bag.gosma = 9;
+    game.player.bag.espadaGoblin = 4;
+    game.player.moedas = 500;
+
+    /* O jogador começa no start, que nunca é ponto de parada (T13.1). */
+    const antes = estadoDeComercio(game);
+    const marcaLog = game.log.length;
+    const proibidos = ['vender:gosma,3', 'comprar:potion,1', 'criar:pocao', 'criar:refino'];
+    for (const texto of proibidos) {
+      expect(aplicar(game, texto), 'T13.2: ' + texto + ' foi ACEITO longe do balcão').toBe(false);
+      expect(estadoDeComercio(game), 'T13.2: ' + texto + ' mexeu no estado ao ser recusado')
+        .toBe(antes);
+    }
+    /* Uma linha de aviso por recusa: recusa muda é recusa que o jogador não
+     * entende (é o mesmo contrato de 'Não há escada aqui.'). */
+    const avisos = game.log.slice(marcaLog);
+    expect(avisos.length, 'T13.2: uma linha de registro por recusa').toBe(proibidos.length);
+    expect(avisos.every((l) => l.cls === 'aviso'), 'T13.2: recusa tem de ser classe aviso')
+      .toBe(true);
+
+    /* Cada balcão só aceita o seu ofício: no mercador não se forja, na bancada
+     * não se vende. */
+    const noMercador = partidaNoPonto(semente, 'mercador');
+    noMercador.player.bag.gosma = 9;
+    const antesM = estadoDeComercio(noMercador);
+    expect(aplicar(noMercador, 'criar:pocao'), 'T13.2: alquimia aceita no mercador').toBe(false);
+    expect(estadoDeComercio(noMercador), 'T13.2: a recusa no mercador mexeu no estado')
+      .toBe(antesM);
+
+    const naBancada = partidaNoPonto(semente, 'bancada');
+    naBancada.player.bag.gosma = 9;
+    naBancada.player.moedas = 500;
+    const antesB = estadoDeComercio(naBancada);
+    expect(aplicar(naBancada, 'vender:gosma,3'), 'T13.2: venda aceita na bancada').toBe(false);
+    expect(aplicar(naBancada, 'comprar:potion,1'), 'T13.2: compra aceita na bancada').toBe(false);
+    expect(estadoDeComercio(naBancada), 'T13.2: a recusa na bancada mexeu no estado')
+      .toBe(antesB);
+  }, LENTO);
+
+  it('venda: a bolsa cai, as moedas sobem pelo valor da tabela, e a quantidade tem faixa', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'mercador');
+    game.player.bag.gosma = 5;
+    game.player.bag.clavaOgro = 1;
+    const turnoAntes = game.turn;
+    const marcaLog = game.log.length;
+
+    expect(aplicar(game, 'vender:gosma,3'), 'T13.3: a venda válida não foi aceita').toBe(true);
+    expect(game.player.bag.gosma, 'T13.3: 5 − 3 na bolsa').toBe(2);
+    expect(game.player.moedas, 'T13.3: 3 × ITENS.gosma.valor').toBe(3 * ITENS.gosma.valor);
+    /* Negociar custa tempo: é decisão de design, e o turno prova que valeu. */
+    expect(game.turn, 'T13.3: a venda tem de consumir turno').toBe(turnoAntes + 1);
+    expect(
+      game.log.slice(marcaLog).some((l) => l.text === 'Você vende 3 frascos de gosma por 9 moedas. Total: 9 moedas.'),
+      'T13.3: a linha da venda saiu fora do padrão — ' +
+        JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
+    ).toBe(true);
+
+    /* Vender o último de um material APAGA a chave: ausência é zero (é a regra
+     * da bolsa aberta, e é o que mantém `B[]` limpo no snapshot). */
+    expect(aplicar(game, 'vender:clavaOgro,1'), 'T13.3: venda da clava').toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(game.player.bag, 'clavaOgro'),
+      'T13.3: chave zerada devia sumir da bolsa').toBe(false);
+    expect(game.player.moedas, 'T13.3: 9 + valor da clava').toBe(9 + ITENS.clavaOgro.valor);
+
+    /* Recusas: mais do que se tem, e quantidade fora de 1..99. */
+    const antes = estadoDeComercio(game);
+    expect(aplicar(game, 'vender:gosma,3'), 'T13.3: vendeu 3 tendo 2').toBe(false);
+    expect(aplicar(game, 'vender:peOgro,1'), 'T13.3: vendeu o que não tem').toBe(false);
+    expect(estadoDeComercio(game), 'T13.3: a recusa por falta mexeu no estado').toBe(antes);
+
+    for (const texto of ['vender:gosma,0', 'vender:gosma,-2', 'vender:gosma,100', 'vender:gosma,tudo']) {
+      expect(parseCommand(texto), 'T13.3: "' + texto + '" não devia nem virar comando').toBe(null);
+      expect(aplicar(game, texto), 'T13.3: "' + texto + '" foi aceito').toBe(false);
+    }
+    expect(estadoDeComercio(game), 'T13.3: quantidade inválida mexeu no estado').toBe(antes);
+
+    /* O comando montado à mão (sem passar pelo texto) também é barrado. */
+    expect(applyCommand(game, { kind: 'vender', item: 'gosma', quantidade: 100 }),
+      'T13.3: 100 unidades aceitas por objeto').toBe(false);
+    expect(applyCommand(game, { kind: 'vender', item: 'gosma', quantidade: 1.5 }),
+      'T13.3: quantidade fracionária aceita').toBe(true);
+    /* 1.5 vira 1 (mesmo `intOr` de 'move:1.7,0'): a venda acontece, uma só. */
+    expect(game.player.bag.gosma, 'T13.3: 2 − 1 depois do arredondamento').toBe(1);
+  }, LENTO);
+
+  it('compra: as moedas caem, as poções sobem, e sem moeda não há poção', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'mercador');
+    game.player.potions = 1;
+    game.player.moedas = PRECO_POCAO * 2;
+    const turnoAntes = game.turn;
+    const marcaLog = game.log.length;
+
+    expect(aplicar(game, 'comprar:potion,2'), 'T13.4: a compra válida não foi aceita').toBe(true);
+    expect(game.player.moedas, 'T13.4: 2 × PRECO_POCAO gastos').toBe(0);
+    expect(game.player.potions, 'T13.4: 1 + 2 poções').toBe(3);
+    expect(game.turn, 'T13.4: a compra tem de consumir turno').toBe(turnoAntes + 1);
+    expect(
+      game.log.slice(marcaLog).some((l) => l.text.indexOf('Você compra 2 poções por 30 moedas') === 0),
+      'T13.4: a linha da compra saiu fora do padrão — ' +
+        JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
+    ).toBe(true);
+
+    /* Sem moeda: recusa seca. */
+    const antes = estadoDeComercio(game);
+    expect(aplicar(game, 'comprar:potion,1'), 'T13.4: comprou sem moeda').toBe(false);
+    expect(estadoDeComercio(game), 'T13.4: a recusa por moeda mexeu no estado').toBe(antes);
+
+    /* Uma moeda a menos do que o preço ainda é pouco — o teste do limite. */
+    game.player.moedas = PRECO_POCAO - 1;
+    expect(aplicar(game, 'comprar:potion,1'), 'T13.4: comprou com 14 moedas').toBe(false);
+    game.player.moedas = PRECO_POCAO;
+    expect(aplicar(game, 'comprar:potion,1'), 'T13.4: 15 moedas exatas deviam bastar').toBe(true);
+    expect(game.player.moedas, 'T13.4: pagou exatamente o preço').toBe(0);
+
+    /* O mercador não vende material — nem pelo texto, nem por objeto. */
+    expect(parseCommand('comprar:gosma,1'), 'T13.4: "comprar:gosma,1" virou comando').toBe(null);
+  }, LENTO);
+
+  it('alquimia: 3 gosmas viram 1 poção; com 2 na bolsa, recusa', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'bancada');
+    game.player.potions = 0;
+    game.player.bag.gosma = 2;
+
+    /* Com 2 de 3, a bancada recusa e não come nada. */
+    const antes = estadoDeComercio(game);
+    const marcaFalta = game.log.length;
+    expect(aplicar(game, 'criar:pocao'), 'T13.5: destilou com 2 gosmas').toBe(false);
+    expect(estadoDeComercio(game), 'T13.5: a recusa por falta consumiu material').toBe(antes);
+    expect(game.player.bag.gosma, 'T13.5: as 2 gosmas continuam na bolsa').toBe(2);
+    /* A frase diz o que a receita pede E o que falta, com o verbo concordando
+     * com a QUANTIA que falta (uma, singular). */
+    expect(game.log.slice(marcaFalta).map((l) => l.text), 'T13.5: a recusa saiu fora do padrão')
+      .toEqual(['Poção de cura pede 3 frascos de gosma. Falta um frasco de gosma.']);
+
+    game.player.bag.gosma = 4;
+    const turnoAntes = game.turn;
+    const marcaLog = game.log.length;
+    expect(aplicar(game, 'criar:pocao'), 'T13.5: a alquimia válida não foi aceita').toBe(true);
+    expect(game.player.bag.gosma, 'T13.5: 4 − 3 gosmas').toBe(1);
+    expect(game.player.potions, 'T13.5: +1 poção').toBe(1);
+    expect(game.turn, 'T13.5: a alquimia tem de consumir turno').toBe(turnoAntes + 1);
+    expect(game.player.moedas, 'T13.5: a bancada não cobra moeda').toBe(0);
+    expect(
+      game.log.slice(marcaLog).some((l) => l.text.indexOf('caldeirão') >= 0 && l.cls === 'bom'),
+      'T13.5: a linha do caldeirão não saiu — ' +
+        JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
+    ).toBe(true);
+  }, LENTO);
+
+  it('refino: 2 cimitarras dão +1 de ataque e +1 de refino, com o teto respeitado', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'bancada');
+    const atkBase = game.player.atk;
+    expect(game.player.armaNivel, 'T13.6: o refino começa em zero').toBe(0);
+
+    /* Uma cimitarra não basta. */
+    game.player.bag.espadaGoblin = 1;
+    const antes = estadoDeComercio(game);
+    const marcaFalta = game.log.length;
+    expect(aplicar(game, 'criar:refino'), 'T13.6: refinou com 1 cimitarra').toBe(false);
+    expect(estadoDeComercio(game), 'T13.6: a recusa por falta mexeu no estado').toBe(antes);
+    /* Concordância do verbo com a QUANTIA: uma faltando é 'Falta', duas é
+     * 'Faltam' — e não com o número de materiais distintos. */
+    expect(game.log.slice(marcaFalta).map((l) => l.text), 'T13.6: recusa com 1 cimitarra')
+      .toEqual(['Refino de arma pede 2 cimitarras de goblin. Falta uma cimitarra de goblin.']);
+    delete game.player.bag.espadaGoblin;
+    const marcaFalta2 = game.log.length;
+    expect(aplicar(game, 'criar:refino'), 'T13.6: refinou com a bolsa vazia').toBe(false);
+    expect(game.log.slice(marcaFalta2).map((l) => l.text), 'T13.6: recusa com bolsa vazia')
+      .toEqual(['Refino de arma pede 2 cimitarras de goblin. Faltam 2 cimitarras de goblin.']);
+
+    /* Cinco refinos: material para todos, e nem um a mais. */
+    game.player.bag.espadaGoblin = 2 * (ARMA_NIVEL_MAX + 1);
+    for (let n = 1; n <= ARMA_NIVEL_MAX; n++) {
+      expect(aplicar(game, 'criar:refino'), 'T13.6: refino #' + n + ' recusado').toBe(true);
+      expect(game.player.armaNivel, 'T13.6: nível de arma após o refino #' + n).toBe(n);
+      expect(game.player.atk, 'T13.6: ataque após o refino #' + n).toBe(atkBase + n);
+    }
+    expect(game.player.bag.espadaGoblin, 'T13.6: 12 − 5×2 cimitarras')
+      .toBe(2 * (ARMA_NIVEL_MAX + 1) - 2 * ARMA_NIVEL_MAX);
+
+    /* No teto: recusa, com o material sobrando na bolsa. */
+    const noTeto = estadoDeComercio(game);
+    expect(aplicar(game, 'criar:refino'), 'T13.6: o teto de refino foi furado').toBe(false);
+    expect(estadoDeComercio(game), 'T13.6: a recusa no teto mexeu no estado').toBe(noTeto);
+    expect(game.player.atk, 'T13.6: o ataque passou do teto').toBe(atkBase + ARMA_NIVEL_MAX);
+
+    /* Receita que não existe também não gasta nada. */
+    expect(parseCommand('criar:banana'), 'T13.6: "criar:banana" virou comando').toBe(null);
+    expect(estadoDeComercio(game), 'T13.6: receita desconhecida mexeu no estado').toBe(noTeto);
+  }, LENTO);
+
+  it('moedas, refino e bolsa descem a escada; os pontos de parada não', () => {
+    const semente = sementeComParadas();
+    const game = createState(semente, 1);
+    game.player.moedas = 42;
+    game.player.armaNivel = 2;
+    game.player.bag.gosma = 7;
+    const antes = {
+      mercador: JSON.stringify(game.mercador),
+      bancada: JSON.stringify(game.bancada)
+    };
+
+    descend(game);
+
+    expect(game.player.moedas, 'T13.7: as moedas são do JOGADOR, descem com ele').toBe(42);
+    expect(game.player.armaNivel, 'T13.7: o refino da arma desce com ele').toBe(2);
+    expect(game.player.bag.gosma, 'T13.7: a bolsa desce com ele').toBe(7);
+    /* Os pontos, ao contrário, são do ANDAR: o nível novo tem os seus. */
+    expect(JSON.stringify(game.mercador), 'T13.7: o mercador do nível 1 sobreviveu à descida')
+      .not.toBe(antes.mercador);
+    expect(JSON.stringify(game.bancada), 'T13.7: a bancada do nível 1 sobreviveu à descida')
+      .not.toBe(antes.bancada);
+    expect(game.mercador, 'T13.7: o nível 2 nasceu sem mercador').not.toBe(null);
+    expect(game.bancada, 'T13.7: o nível 2 nasceu sem bancada').not.toBe(null);
+  }, LENTO);
+
+  it('save/restore: moedas, refino e os dois pontos sobrevivem; save legado degrada', () => {
+    const armazem = armazemDeMemoria();
+    const semente = sementeComParadas();
+    const game = createState(semente, 1);
+    game.player.moedas = 137;
+    game.player.armaNivel = 3;
+    game.player.atk += 3;
+    game.player.bag.gosma = 2;
+
+    expect(escreverSave(game, armazem), 'T13.8: o save não foi gravado').toBe(true);
+    const voltou = restore(lerSave(armazem));
+    expect(voltou, 'T13.8: restore recusou um save válido').not.toBe(null);
+    if (!voltou) return;
+
+    expect(voltou.player.moedas, 'T13.8: as moedas não sobreviveram').toBe(137);
+    expect(voltou.player.armaNivel, 'T13.8: o refino não sobreviveu').toBe(3);
+    expect(JSON.stringify(voltou.mercador), 'T13.8: o mercador não sobreviveu')
+      .toBe(JSON.stringify(game.mercador));
+    expect(JSON.stringify(voltou.bancada), 'T13.8: a bancada não sobreviveu')
+      .toBe(JSON.stringify(game.bancada));
+
+    /* Um ponto GRAVADO NA PAREDE é ponto inalcançável: o restore o descarta e
+     * fica com o que a geração determinística acabou de produzir. */
+    const adulterado = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    adulterado.mercador = { x: 0, y: 0 };
+    const consertado = restore(adulterado);
+    expect(consertado, 'T13.8: restore recusou o save adulterado em vez de degradar').not.toBe(null);
+    if (consertado) {
+      expect(JSON.stringify(consertado.mercador), 'T13.8: mercador dentro da parede aceito')
+        .toBe(JSON.stringify(game.mercador));
+    }
+
+    /* ---- save LEGADO: o de antes da fase 2, sem moeda, sem refino e sem os
+     * pontos. Tem de carregar, com zero nos contadores e os pontos regerados
+     * pela semente — nunca uma recusa de run. ---- */
+    const bruto = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    const jogador = bruto.player as Record<string, unknown>;
+    delete jogador.moedas;
+    delete jogador.armaNivel;
+    delete bruto.mercador;
+    delete bruto.bancada;
+
+    const legado = restore(bruto);
+    expect(legado, 'T13.8: restore recusou um save legado').not.toBe(null);
+    if (!legado) return;
+    expect(legado.player.moedas, 'T13.8: save sem moedas devia restaurar ZERO').toBe(0);
+    expect(legado.player.armaNivel, 'T13.8: save sem refino devia restaurar ZERO').toBe(0);
+    expect(JSON.stringify(legado.mercador), 'T13.8: sem ponto salvo, vale o determinístico')
+      .toBe(JSON.stringify(game.mercador));
+    expect(JSON.stringify(legado.bancada), 'T13.8: sem ponto salvo, vale o determinístico')
+      .toBe(JSON.stringify(game.bancada));
+
+    /* Save adulterado com refino acima do teto: o teto vale na leitura também. */
+    jogador.armaNivel = 99;
+    const exagerado = restore(bruto);
+    expect(exagerado ? exagerado.player.armaNivel : -1, 'T13.8: refino 99 aceito do save')
+      .toBe(ARMA_NIVEL_MAX);
+  }, LENTO);
+
+  it('nada de sorteio: negociar e forjar não movem rngCombat nem rngLoot', () => {
+    const semente = sementeComParadas();
+    const game = partidaNoPonto(semente, 'mercador');
+    game.player.bag.gosma = 9;
+    game.player.moedas = 100;
+
+    /* O turno consumido pela negociação MOVE o combate (os monstros agem), e é
+     * por isso que a sonda tem de ser a própria transação: comparamos o estado
+     * dos dois streams imediatamente antes e depois da chamada interna, sem
+     * deixar o fim de turno rodar. É o que `applyCommand` faria se a ação
+     * tivesse sorteio escondido. */
+    const combateAntes = game.rngCombat.s >>> 0;
+    const lootAntes = game.rngLoot.s >>> 0;
+    /* Recusas: nenhuma delas chega ao fim de turno, então os dois streams têm
+     * de ficar EXATAMENTE onde estavam. */
+    for (const texto of ['vender:gosma,99', 'comprar:potion,99', 'criar:pocao', 'vender:gosma,0']) {
+      aplicar(game, texto);
+    }
+    expect(game.rngCombat.s >>> 0, 'T13.9: uma recusa consumiu rngCombat').toBe(combateAntes);
+    expect(game.rngLoot.s >>> 0, 'T13.9: uma recusa consumiu rngLoot').toBe(lootAntes);
+
+    /* Transação aceita: o loot NÃO pode andar (não há despojo numa venda). O
+     * combate anda, mas por causa do turno — e só do turno. */
+    expect(aplicar(game, 'vender:gosma,3'), 'T13.9: a venda não foi aceita').toBe(true);
+    expect(game.rngLoot.s >>> 0, 'T13.9: a venda mexeu no stream de despojos').toBe(lootAntes);
+  }, LENTO);
+
+  it('o protocolo textual dos três comandos vai e volta sem perder nada', () => {
+    const casos: Array<[string, Command]> = [
+      ['vender:gosma,3', { kind: 'vender', item: 'gosma', quantidade: 3 }],
+      ['vender:clavaOgro,99', { kind: 'vender', item: 'clavaOgro', quantidade: 99 }],
+      ['comprar:potion,1', { kind: 'comprar', item: 'potion', quantidade: 1 }],
+      ['criar:pocao', { kind: 'criar', receita: 'pocao' }],
+      ['criar:refino', { kind: 'criar', receita: 'refino' }]
+    ];
+    for (const [texto, cmd] of casos) {
+      expect(parseCommand(texto), 'T13.10: parse de "' + texto + '"').toEqual(cmd);
+      expect(formatCommand(cmd), 'T13.10: format de "' + texto + '"').toBe(texto);
+    }
+
+    /* O que NÃO é comando. 'tudo' está aqui de propósito: quem sabe quanto há
+     * na bolsa é a interface, e é ela que manda o número. */
+    const lixo = [
+      'vender:gosma,tudo', 'vender:gosma', 'vender:gosma,3,4', 'vender:banana,1',
+      'vender:potion,1', 'vender:gosma,0', 'vender:gosma,100',
+      'comprar:potion,0', 'comprar:gosma,1', 'comprar:potion',
+      'criar', 'criar:', 'criar:pocao,1', 'criar:POCAO'
+    ];
+    for (const texto of lixo) {
+      expect(parseCommand(texto), 'T13.10: "' + texto + '" NÃO devia virar comando').toBe(null);
+    }
+
+    /* Os comandos antigos continuam intactos — o protocolo só cresceu. */
+    expect(parseCommand('move:1,-1'), 'T13.10: move').toEqual({ kind: 'move', dx: 1, dy: -1 });
+    expect(parseCommand('wait'), 'T13.10: wait').toEqual({ kind: 'wait' });
+    expect(parseCommand('use'), 'T13.10: use').toEqual({ kind: 'use' });
+    expect(parseCommand('descend'), 'T13.10: descend').toEqual({ kind: 'descend' });
+  });
+
+  it('o snapshot v3 traz moedas, refino e os dois pontos de parada', () => {
+    const semente = sementeComParadas();
+    const game = createState(semente, 1);
+    const inicial = String(snapshot(game));
+
+    expect(inicial.indexOf('v3|'), 'T13.11: o snapshot não é v3').toBe(0);
+    expect(inicial.indexOf(',mo0,arm0|') >= 0,
+      'T13.11: moedas e refino não aparecem no bloco do jogador — ' + inicial).toBe(true);
+    expect(
+      inicial.indexOf('|merc=' + (game.mercador ? game.mercador.x + ',' + game.mercador.y : '-') + '|') >= 0,
+      'T13.11: o mercador não aparece — ' + inicial
+    ).toBe(true);
+    expect(
+      inicial.indexOf('|banc=' + (game.bancada ? game.bancada.x + ',' + game.bancada.y : '-') + '|') >= 0,
+      'T13.11: a bancada não aparece — ' + inicial
+    ).toBe(true);
+    /* Os dois pontos vêm ANTES do checksum de tiles, que fecha o snapshot. */
+    expect(/\|merc=[^|]+\|banc=[^|]+\|map=[0-9a-f]+$/.test(inicial),
+      'T13.11: merc/banc fora do lugar no formato — ' + inicial).toBe(true);
+
+    /* O snapshot ACOMPANHA a economia: mudou moeda ou refino, mudou o resumo. */
+    game.player.moedas = 137;
+    game.player.armaNivel = 2;
+    const depois = String(snapshot(game));
+    expect(depois.indexOf(',mo137,arm2|') >= 0,
+      'T13.11: o snapshot não acompanhou moedas/refino — ' + depois).toBe(true);
+    expect(depois, 'T13.11: mudar a economia tem de mudar o snapshot').not.toBe(inicial);
+
+    /* Andar sem ponto sai com traço, não com '0,0' — que é coordenada válida. */
+    game.mercador = null;
+    game.bancada = null;
+    expect(String(snapshot(game)).indexOf('|merc=-|banc=-|map=') >= 0,
+      'T13.11: ponto ausente devia sair como "-" — ' + String(snapshot(game))).toBe(true);
+  }, LENTO);
+
+  it('pisar no ponto anuncia o mercador e a bancada, no padrão do registro', () => {
+    const semente = sementeComParadas();
+
+    const paradas: Array<['mercador' | 'bancada', string]> = [
+      ['mercador', 'Você chega ao mercador. Ele avalia sua bolsa.'],
+      ['bancada', 'Uma bancada de alquimia. Há um caldeirão e uma bigorna.']
+    ];
+    for (const [qual, frase] of paradas) {
+      const game = createState(semente, 1);
+      game.player.maxHp = 999;
+      game.player.hp = 999;
+      const ponto = qual === 'mercador' ? game.mercador : game.bancada;
+      expect(ponto, 'T13.12: a semente não tem ' + qual).not.toBe(null);
+      if (!ponto) continue;
+
+      /* Um vizinho ORTOGONAL caminhável: a diagonal tem regra de corte de
+       * canto, e um passo recusado transformaria a falha numa charada. */
+      const vizinho = DIRS8.find((d) =>
+        (d[0] === 0 || d[1] === 0) && isWalkable(game.map, ponto.x + d[0], ponto.y + d[1]));
+      expect(vizinho, 'T13.12: ' + qual + ' sem vizinho ortogonal caminhável').not.toBe(undefined);
+      if (!vizinho) continue;
+      game.player.x = ponto.x + vizinho[0];
+      game.player.y = ponto.y + vizinho[1];
+
+      const marcaLog = game.log.length;
+      const aceito = aplicar(game, 'move:' + (-vizinho[0]) + ',' + (-vizinho[1]));
+      expect(aceito, 'T13.12: o passo até ' + qual + ' não foi aceito').toBe(true);
+      expect(game.player.x === ponto.x && game.player.y === ponto.y,
+        'T13.12: o jogador não chegou ao tile d' + (qual === 'bancada' ? 'a' : 'o') + ' ' + qual)
+        .toBe(true);
+      expect(
+        game.log.slice(marcaLog).some((l) => l.text === frase),
+        'T13.12: a chegada a' + (qual === 'bancada' ? '' : 'o') + ' ' + qual +
+          ' não foi anunciada — ' + JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))
+      ).toBe(true);
+    }
   }, LENTO);
 });

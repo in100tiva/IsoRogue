@@ -55,7 +55,7 @@ import { CONFIG, DEFAULT_FACING, cheb, dirIndex, normalizeFacing } from '../engi
 import { DIJKSTRA_INF } from '../engine/dijkstra';
 import { checkSymmetry, computeFov } from '../engine/fov';
 import type {
-  ArchetypeKey, Enemy, Game, GameMap, Item, ItemKind, MaterialKind, Player
+  ArchetypeKey, Enemy, Game, GameMap, Item, ItemKind, MaterialKind, Player, Point
 } from '../engine/types';
 import {
   buildLuts,
@@ -156,6 +156,22 @@ import {
   RAMPAS_PE_OGRO,
   RAMPA_DA_COR_PE_OGRO
 } from './characters/itemPeOgro';
+import {
+  CORES_EMISSIVAS_MERCADOR,
+  MODELO_MERCADOR,
+  PALETA_MERCADOR,
+  POSE_PARADA_MERCADOR,
+  RAMPAS_MERCADOR,
+  RAMPA_DA_COR_MERCADOR
+} from './characters/mercador';
+import {
+  CORES_EMISSIVAS_BANCADA,
+  MODELO_BANCADA,
+  PALETA_BANCADA,
+  POSE_PARADA_BANCADA,
+  RAMPAS_BANCADA,
+  RAMPA_DA_COR_BANCADA
+} from './characters/bancada';
 import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -675,6 +691,119 @@ interface ColetaVfx {
   ordem: number;
 }
 
+/* ------------------------------------------------------------------ *
+ * OS PONTOS DE PARADA (fase 2 da economia): o MERCADOR e a BANCADA
+ *
+ * `game.mercador` e `game.bancada` são dois `Point | null` do ANDAR (ver
+ * `Game` em src/engine/types.ts — eles NÃO são um valor novo de `Tile`, e é
+ * por isso que o passe de pisos não sabe nada deles). Aqui eles são desenhados
+ * no PASSE DE ENTIDADES, no tile em que estão, exatamente como um inimigo:
+ * mesma âncora (`atlas.ancoraY` sobre o centro do losango), mesma sombra
+ * elíptica no chão e mesma modulação pela luz do tile (`quadroModulado`).
+ *
+ * A diferença entre os dois é de NATUREZA, e ela cabe em duas linhas:
+ *
+ *   - o MERCADOR é gente. Ele encara quem chega — a direção sai por
+ *     OBSERVAÇÃO em `orientarMercador`, no espírito da regra (b) de §0.2 do
+ *     BESTIARIO, e mora num campo desta instância. Nenhuma letra no `Game`;
+ *   - a BANCADA é mobília. Direção FIXA (`DIR_PARADA_FIXA`), como todo
+ *     despojo no chão: um caldeirão não vira para ninguém, e fixar a direção é
+ *     o que garante que ele desenhe igual em toda partida.
+ *
+ * O que os dois compartilham, além do desenho: o BRILHO DE CONVITE (ver
+ * `desenharConvite`) — o pulso âmbar no losango que diz "atravesse a sala".
+ * ------------------------------------------------------------------ */
+
+/**
+ * Forja do MERCADOR. Constante de módulo pelos dois motivos de sempre (o forge
+ * memoiza por (modelo, opções) — objeto novo a cada chamada gera chave nova e
+ * reforja tudo; e a cor é propriedade do rig, não do renderizador).
+ *
+ * `emissivas: CORES_EMISSIVAS_MERCADOR` é `['olhoVeneno']`: os dois olhos no
+ * vão do capuz atravessam a modulação acesos (§1.1). É deliberado que sejam a
+ * primeira coisa visível dele num corredor escuro — o rig foi desenhado assim
+ * (I1 em `./characters/mercador`), e é esse par de pontos verdes que puxa o
+ * jogador até o balcão antes de o sprite ser legível.
+ *
+ * Sem `arcoGolpe`: o mercador não bate em ninguém. As colunas de 'atacando' do
+ * atlas existem só porque a forja é genérica, e nunca são lidas.
+ */
+const FORJA_MERCADOR: OpcoesForja = {
+  paleta: PALETA_MERCADOR,
+  rampas: RAMPAS_MERCADOR,
+  rampaDaCor: RAMPA_DA_COR_MERCADOR,
+  repouso: POSE_PARADA_MERCADOR,
+  emissivas: CORES_EMISSIVAS_MERCADOR
+};
+
+/**
+ * Forja da BANCADA. Mesma forma, com o repouso VAZIO que o rig declara
+ * (`POSE_PARADA_BANCADA`): mobília não articula, e a coluna ('parado', 0)
+ * devolve o objeto exatamente como foi modelado.
+ *
+ * `emissivas: CORES_EMISSIVAS_BANCADA` é `['brasa']` — o fogo sob o caldeirão
+ * (I3). É o análogo dos olhos do mercador: a oficina se anuncia pela brasa, e
+ * sem ela o conjunto lê como entulho no escuro.
+ */
+const FORJA_BANCADA: OpcoesForja = {
+  paleta: PALETA_BANCADA,
+  rampas: RAMPAS_BANCADA,
+  rampaDaCor: RAMPA_DA_COR_BANCADA,
+  repouso: POSE_PARADA_BANCADA,
+  emissivas: CORES_EMISSIVAS_BANCADA
+};
+
+/** Os dois pontos de parada do andar, como chave de tabela e de cache. */
+type TipoParada = 'mercador' | 'bancada';
+
+/**
+ * ══ PONTO DE EXTENSÃO: como um ponto de parada ganha rosto ══
+ *
+ * A gêmea de `RETRATOS` e de `FICHAS_DE_ITEM`, para os pontos de parada. Um
+ * terceiro ponto (um altar, um poço) entra com um arquivo em `./characters/`,
+ * uma `FORJA_<COISA>` acima e UMA linha aqui — mais o campo correspondente no
+ * `Game`, que é decisão do engine e não deste arquivo.
+ */
+const FICHAS_DE_PARADA: Readonly<Record<TipoParada, FichaDeSprite>> = {
+  mercador: { modelo: MODELO_MERCADOR, forja: FORJA_MERCADOR },
+  bancada: { modelo: MODELO_BANCADA, forja: FORJA_BANCADA }
+};
+
+/**
+ * Linha do atlas da BANCADA — a mesma direção fixa dos despojos (`DIR_ITEM`),
+ * pelo mesmo motivo: objeto não encara ninguém.
+ */
+const DIR_PARADA_FIXA = DIR_ITEM;
+
+/**
+ * Até onde o mercador PERCEBE o jogador, em Chebyshev. Quatro tiles é a
+ * distância em que ele já cabe na tela junto do herói — mais que isso e a
+ * cabeça girando ao longe vira ruído; menos e ele só se vira quando já não
+ * importa. Fora do raio ele mantém a última direção (regra (c) de §0.2).
+ */
+const MERCADOR_ATENCAO = 4;
+
+/**
+ * O BRILHO DE CONVITE — o pulso âmbar no losango dos pontos de parada.
+ *
+ * Existe por um problema de desenho de jogo, não de estética: o mercador nasce
+ * a 2–4 tiles da escada e a bancada noutra sala, e nenhum dos dois grita. Um
+ * tile que pulsa devagar é o convite que faz o jogador atravessar a sala para
+ * ver o que é — a mesma frase visual do realce sob o cursor e do clarão da
+ * coleta ("olhe para este tile"), no mesmo âmbar.
+ *
+ * O pulso APAGA quando o jogador chega ao tile: o convite já foi aceito, e
+ * manter a luz acesa embaixo dos próprios pés só disputaria atenção com o
+ * painel de troca que acabou de abrir.
+ *
+ * Relógio: `this.t`, o relógio visual da instância, somado por `dt` — o mesmo
+ * que move o bob dos itens e a respiração. Nada disto toca o `Game` (R54).
+ */
+const CONVITE_PERIODO = 2.4;
+/** Alfa do losango no vale e no pico do pulso. Discreto por contrato. */
+const CONVITE_ALFA_MIN = 0.05;
+const CONVITE_ALFA_MAX = 0.16;
+
 /**
  * §6 — a troca de tile leva ~120 ms NA TELA. O estado lógico já mudou antes do
  * primeiro quadro desta interpolação: o turno não espera animação (R54).
@@ -1012,6 +1141,37 @@ export class IsoRenderer {
   /** Pops de coleta vivos. Poucos e de vida curtíssima — varridos sem índice. */
   private readonly coletas: ColetaVfx[] = [];
 
+  /* --- os pontos de parada (ver `FICHAS_DE_PARADA`) --- */
+  /**
+   * Atlas do mercador e da bancada, forjados SOB DEMANDA no primeiro desenho
+   * de cada um. Mesmo protocolo de `atlasInimigo` e `atlasItem`: `undefined` =
+   * nunca tentado, `null` GUARDADO = tentou e não há canvas (jsdom) — a forja
+   * jamais vira retentativa por quadro.
+   *
+   * Sobrevive à troca de mapa junto com os atlases da morte: o andar novo tem
+   * outro mercador em outro lugar, mas é o MESMO rig, e o forge o memoiza.
+   */
+  private readonly atlasParada = new Map<TipoParada, AtlasPersonagem | null>();
+  /**
+   * Para onde o MERCADOR olha, 0..7 na ordem de `DIRS8`. Mora aqui pela mesma
+   * razão do `facing` dos inimigos (ver `Vfx`): dá para derivá-lo de graça por
+   * observação, e um campo em `Game.mercador` entraria em `snapshot()`, no save
+   * e no oracle para não dizer nada que o render não saiba sozinho.
+   *
+   * Um número, e não um `Vfx`: o mercador não desliza, não pisca de dano e não
+   * quica — ele está POSTO. A única coisa dele que muda na tela é para onde
+   * olha.
+   */
+  private facingMercador = DEFAULT_FACING;
+  /**
+   * `prefers-reduced-motion` amostrado na troca de partida/andar (`syncRun`), e
+   * não por quadro: o pulso do convite é contínuo, e consultar `matchMedia`
+   * 60 vezes por segundo para saber se um losango deve piscar seria caro e
+   * ridículo. A preferência que muda com a página aberta é colhida no próximo
+   * andar — que é a mesma granularidade das cinemáticas.
+   */
+  private movimentoReduzido = false;
+
   /* --- o texto de XP flutuante (docs/BESTIARIO.md §16) --- */
   /** Flutuantes vivos. Poucos e de vida curta — varridos por quadro sem índice. */
   private readonly flutuantes: FlutuanteXp[] = [];
@@ -1234,6 +1394,8 @@ export class IsoRenderer {
     this.trackVfx(this.vfxOf('p', p.x, p.y, p.hp), p.x, p.y, p.hp, d, decay);
     // §6 — a máquina de animação do Guerreiro. Só lê o estado; nunca o escreve.
     this.animarJogador(game, d);
+    // O mercador acompanha quem chega. Observação pura, como tudo aqui.
+    this.orientarMercador(game);
 
     const en = game.enemies;
     if (en) {
@@ -1377,6 +1539,36 @@ export class IsoRenderer {
   }
 
   /**
+   * Para onde o MERCADOR olha — a regra (b) de §0.2 do BESTIARIO aplicada a
+   * quem nunca muda de tile:
+   *
+   *   (a) o jogador está no raio de atenção e NÃO em cima dele → encara-o;
+   *   (b) o jogador está em cima dele → mantém o que já olhava, que é
+   *       exatamente a direção de onde ele veio (delta (0,0) não é direção);
+   *   (c) longe demais, ou não há mercador → mantém o último;
+   *   (d) andar novo → sul (`DEFAULT_FACING`, zerado em `syncRun`).
+   *
+   * Não existe regra (a) de MOVIMENTO aqui, porque não existe movimento: o
+   * ponto de parada é do ANDAR e fica onde nasceu. E não existe escrita: `game`
+   * é lido, ponto — o `facing` mora no campo desta instância (R54).
+   *
+   * `Math.sign` no delta pela mesma razão de `orientarInimigo`: um salto de
+   * dois tiles (teclado em repetição, dois turnos entre dois quadros) daria
+   * `dirIndex(2, 0) === −1` e o mercador olharia para o lugar errado.
+   */
+  private orientarMercador(game: Game): void {
+    const m: Point | null = game.mercador;
+    if (!m) return;
+    const p = game.player;
+    const dx = p.x - m.x;
+    const dy = p.y - m.y;
+    if (dx === 0 && dy === 0) return;               // (b)
+    if (cheb(m.x, m.y, p.x, p.y) > MERCADOR_ATENCAO) return; // (c)
+    const i = dirIndex(Math.sign(dx), Math.sign(dy));
+    if (i >= 0) this.facingMercador = i;            // (a)
+  }
+
+  /**
    * §14 — o gatilho do abate, por OBSERVAÇÃO: todo id presente no quadro
    * anterior e ausente deste dentro do mesmo mapa foi morto pelo jogador (a
    * única via de saída de `game.enemies` é `removerInimigo`, chamada só de
@@ -1494,6 +1686,12 @@ export class IsoRenderer {
       game.visible && typeof game.visible.has === 'function' ? game.visible : EMPTY_SET;
     const expl = game.explored || null;
     const p = game.player;
+    /* Os dois pontos de parada do andar, hasteados FORA do laço: eles são
+     * consultados uma vez por tile visível, e um `game.mercador` por tile seria
+     * uma leitura de propriedade no laço quente para responder sempre a mesma
+     * coisa. `null` (mapa sem tile elegível) simplesmente nunca casa. */
+    const paradaMerc = game.mercador;
+    const paradaBanc = game.bancada;
 
     const z = cam.zoom;
     const hw = this.HW0 * z;
@@ -1614,6 +1812,22 @@ export class IsoRenderer {
           // das botas do jogador — que é exatamente quem está nesse tile.
           this.desenharBrilhoColeta(ctx, x, y, sx, sy, hw, hh);
         }
+        // Os PONTOS DE PARADA, antes dos itens e do bicho: o mercador está
+        // POSTO e a bancada é mobília — o que se recolhe do chão e o que anda
+        // por cima deles vem depois, como vem por cima de qualquer cenário.
+        // A regra de visão é a dos inimigos (R31): fora do FOV, nada.
+        if (seen) {
+          if (paradaMerc && paradaMerc.x === x && paradaMerc.y === y) {
+            this.desenharParada(
+              ctx, 'mercador', this.facingMercador, sx, sy, cy, hw, hh, z, lvl, !isPlayer
+            );
+          }
+          if (paradaBanc && paradaBanc.x === x && paradaBanc.y === y) {
+            this.desenharParada(
+              ctx, 'bancada', DIR_PARADA_FIXA, sx, sy, cy, hw, hh, z, lvl, !isPlayer
+            );
+          }
+        }
         if (seen && this.itemAt) {
           // A PILHA: até `PILHA_MAX` sprites por tile, já ordenados por `id`
           // crescente pelo índice. Os slots são contíguos e o primeiro vazio
@@ -1722,6 +1936,8 @@ export class IsoRenderer {
     this.flutuantes.length = 0;
     this.atlasXp.clear();
     this.atlasItem.clear();
+    this.atlasParada.clear();
+    this.facingMercador = DEFAULT_FACING;
     this.itensVistos.clear();
     this.coletas.length = 0;
     this.tinta = null;
@@ -1815,6 +2031,13 @@ export class IsoRenderer {
     this.itensVistos.clear();
     this.coletas.length = 0;
     this.mapW = game.map.w;
+    // Andar novo, mercador novo: ele nasce olhando para o sul do grid, como
+    // toda entidade nunca vista antes (regra (d) de §0.2). O atlas fica — é o
+    // mesmo rig, memoizado pelo forge.
+    this.facingMercador = DEFAULT_FACING;
+    // A preferência de movimento é amostrada aqui, uma vez por andar: o pulso
+    // do convite é contínuo e não pode consultar `matchMedia` por quadro.
+    this.movimentoReduzido = prefereReduzirMovimento();
     // Índices de tile são por mapa: os alphas das paredes do nível anterior
     // não significam nada no novo.
     this.alfaParedes.clear();
@@ -3384,6 +3607,140 @@ export class IsoRenderer {
     ctx.fillRect(cx - 2.8 * z, cy - 18.5 * z, 5.6 * z, 3 * z);
     // brilho
     fillCircle(ctx, cx - 1.8 * z, cy - 8.6 * z, 1.4 * z, sh.light[lvl]);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Os PONTOS DE PARADA — o mercador e a bancada (fase 2 da economia)
+   *
+   * Ver o bloco de constantes `FICHAS_DE_PARADA` para o porquê de cada
+   * decisão. Aqui só há desenho, e ele é o mesmo de um inimigo com sprite:
+   * sombra elíptica no chão, quadro da coluna ('parado', 0) modulado pela luz
+   * do tile e colado pela âncora do atlas, e a rede de segurança geométrica
+   * para quem não pôde forjar (jsdom, Node, qualquer ambiente sem contexto 2D).
+   * ------------------------------------------------------------------ */
+
+  /**
+   * O atlas de um ponto de parada, forjado SOB DEMANDA e uma vez só (o padrão
+   * de `atlasDoInimigo`). Sem canvas devolve `null` E GUARDA o `null`.
+   */
+  private atlasDaParada(tipo: TipoParada): AtlasPersonagem | null {
+    const pronto = this.atlasParada.get(tipo);
+    // `undefined` = nunca perguntado; `null` = já perguntado e não há atlas.
+    if (pronto !== undefined) return pronto;
+    const ficha = FICHAS_DE_PARADA[tipo];
+    const atlas = ficha ? this.forjarSeguro(ficha.modelo, ficha.forja) : null;
+    this.atlasParada.set(tipo, atlas);
+    return atlas;
+  }
+
+  /**
+   * Um ponto de parada no tile dele. `convida` liga o pulso âmbar do chão —
+   * ele é falso exatamente quando o jogador está EM CIMA do ponto.
+   *
+   * A sombra é maior na bancada do que no mercador porque a mobília ocupa o
+   * tile inteiro e a figura encapuzada não: elipse pequena sob um caldeirão
+   * de 7u de largura lê como objeto flutuando.
+   */
+  private desenharParada(
+    ctx: CanvasRenderingContext2D, tipo: TipoParada, dir: number,
+    sx: number, sy: number, cy: number, hw: number, hh: number,
+    z: number, lvl: number, convida: boolean
+  ): void {
+    if (convida) this.desenharConvite(ctx, sx, sy, hw, hh);
+
+    const mobilia = tipo === 'bancada';
+    fillEllipse(
+      ctx, sx, cy + 2 * z,
+      (mobilia ? 14 : 11) * z, (mobilia ? 5.4 : 4.6) * z,
+      COL_SHADOW_ENT
+    );
+
+    const atlas = this.atlasDaParada(tipo);
+    if (atlas) {
+      // Coluna ('parado', 0) — nem o mercador nem a bancada andam ou atacam —,
+      // MODULADA pela luz do tile, como todo inimigo (§1). As emissivas (os
+      // olhos dele, a brasa dela) atravessam acesas sozinhas: quem cuida disso
+      // é `quadroModulado`, e este arquivo não conhece um pixel do assunto.
+      const f = quadroModulado(atlas, dir, 'parado', 0, lvl / (LEVELS - 1));
+      if (f.fonte) {
+        const dx = Math.round(sx - atlas.ancoraX * z);
+        const dy = Math.round(cy - atlas.ancoraY * z);
+        const suave = ctx.imageSmoothingEnabled;
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
+        ctx.imageSmoothingEnabled = suave;
+        return;
+      }
+    }
+    // Sem atlas: NUNCA deixar de desenhar. Um andar em que o mercador é
+    // invisível é um andar em que o jogador não sabe que pode negociar.
+    if (mobilia) this.desenharBancadaGeometrica(ctx, sx, cy, z, lvl);
+    else this.desenharMercadorGeometrico(ctx, sx, cy, z, lvl);
+  }
+
+  /**
+   * O pulso âmbar no losango do ponto de parada (ver `CONVITE_PERIODO`).
+   *
+   * Cor: `SHADES.amber` no nível MÁXIMO, e não no `lvl` do tile. Um convite que
+   * escurece com a distância não convida — é justamente de longe que ele
+   * precisa ser visto. É a mesma decisão de brilho pleno do clarão de dano e do
+   * texto de XP: feedback, não cenário.
+   *
+   * Com `prefers-reduced-motion` o pulso congela no meio do curso: o tile
+   * continua marcado, sem nada piscando.
+   */
+  private desenharConvite(
+    ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number
+  ): void {
+    const fase = this.movimentoReduzido
+      ? 0.5
+      : 0.5 - 0.5 * Math.cos((this.t / CONVITE_PERIODO) * TAU);
+    const alfa = CONVITE_ALFA_MIN + (CONVITE_ALFA_MAX - CONVITE_ALFA_MIN) * fase;
+    ctx.save();
+    ctx.globalAlpha = ctx.globalAlpha * alfa;
+    ctx.fillStyle = this.luts.SHADES.amber.main[LEVELS - 1];
+    pathDiamond(ctx, sx, sy, hw, hh);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * O MERCADOR sem atlas: o sino do manto (I3), o capuz (I1) e os dois olhos.
+   * Deliberadamente pobre, como toda reserva geométrica deste arquivo — o que
+   * ela precisa dizer é "há ALGUÉM neste tile", e os olhos acesos dizem que
+   * esse alguém é o encapuzado, não um monstro.
+   *
+   * Os olhos saem em brilho pleno (`LEVELS − 1`), e não no `lvl` do tile:
+   * é a tradução honesta da camada emissiva do rig para um caminho que não tem
+   * camada nenhuma.
+   */
+  private desenharMercadorGeometrico(
+    ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
+  ): void {
+    const manto = this.luts.SHADES.linker;
+    const olho = this.luts.SHADES.potion;
+    fillEllipse(ctx, cx, cy - 7 * z, 6 * z, 9 * z, manto.main[lvl]);
+    fillEllipse(ctx, cx, cy - 16 * z, 4 * z, 3.4 * z, manto.dark[lvl]);
+    fillCircle(ctx, cx - 1.6 * z, cy - 16 * z, 1.1 * z, olho.light[LEVELS - 1]);
+    fillCircle(ctx, cx + 1.6 * z, cy - 16 * z, 1.1 * z, olho.light[LEVELS - 1]);
+  }
+
+  /**
+   * A BANCADA sem atlas: a laje de pedra que assenta o conjunto, o caldeirão à
+   * esquerda e as brasas sob ele (I3) — em brilho pleno, pelo mesmo motivo dos
+   * olhos do mercador. Baixa e larga: é mobília de um tile, e a silhueta tem de
+   * dizer isso mesmo em duas elipses.
+   */
+  private desenharBancadaGeometrica(
+    ctx: CanvasRenderingContext2D, cx: number, cy: number, z: number, lvl: number
+  ): void {
+    const ferro = this.luts.SHADES.stone;
+    const caldo = this.luts.SHADES.potion;
+    const fogo = this.luts.SHADES.amber;
+    fillEllipse(ctx, cx, cy - 5 * z, 13 * z, 6 * z, ferro.main[lvl]);
+    fillEllipse(ctx, cx - 5 * z, cy - 12 * z, 5 * z, 4 * z, ferro.light[lvl]);
+    fillEllipse(ctx, cx - 5 * z, cy - 14 * z, 3 * z, 1.8 * z, caldo.main[lvl]);
+    fillCircle(ctx, cx - 5 * z, cy - 4 * z, 2.2 * z, fogo.main[LEVELS - 1]);
   }
 
   /* ------------------------------------------------------------------ *

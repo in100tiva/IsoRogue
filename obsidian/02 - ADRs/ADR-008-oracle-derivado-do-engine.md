@@ -215,6 +215,32 @@ qual foi feito. O que **não** se faz é inchar a projeção para manter o verde
 que cresce sem critério esconde regressão em vez de contexto, e teste que esconde regressão é
 pior que teste nenhum, porque ainda dá confiança.
 
+### Adendo de 2026-07-30 (mesmo dia): a data de validade venceu
+
+O teste projetado viveu **algumas horas**, e cumpriu exatamente o que prometeu: na fase 1
+(despojos) ele passou **12/12 em todos os eixos** — hash por comando nas duas passadas,
+marcos, aceitos, níveis, morte, `rngCombat`, stats, inimigos, FOV, explorados, mapa, as
+quatro descidas e o log linha por linha. Ou seja, provou que o sistema de despojos **não
+tocou em nada que já existia**. Essa era a pergunta, e ela foi respondida.
+
+A fase 2 (economia, alquimia, refino) chegou no mesmo dia e pediu a **terceira projeção**:
+rebaixar `snapshot()` de v3 para v2 além de v1, esconder duas linhas novas de registro
+('Você chega ao mercador…', 'Uma bancada de alquimia…') e omitir dois campos do jogador
+(`moedas`, `armaNivel`). É a condição escrita acima, ao pé da letra.
+
+**Aposentado**, então, e não inchado: `test/golden-vanilla.test.ts` foi apagado. O que fica:
+
+- `legacy/isorogue-vanilla.html` e `tools/gen-golden.mjs` — a implementação e o gerador
+  originais, congelados, executáveis por quem quiser reconstruir a régua de 2026-07-28;
+- `test/golden/snapshots.json` — o oracle vanilla como ele era. Nenhum teste o lê hoje; ele
+  é documento, e está no repositório pelo mesmo motivo que um ADR revogado continua no
+  repositório;
+- `test/golden.test.ts` sobre `engine-snapshots.json` — a régua viva, agora de regressão.
+
+Quem no futuro quiser reabrir a pergunta "o port ainda é fiel ao vanilla de 2026-07-28?" tem
+tudo o que precisa para responder — só não vai encontrar a resposta pronta e verde a cada
+`npm run check`, porque manter essa resposta pronta custava mais do que ela vale.
+
 ## Alternativas descartadas
 
 | Alternativa | Por que não |
