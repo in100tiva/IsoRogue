@@ -12,11 +12,12 @@
  * está declarada aqui e no teste que fixa a ordem (test/ui.test.tsx).
  *
  * A TROCA (fase 2 da economia) é o segundo, e é CONDICIONAL: `TradePanel`
- * devolve `null` a menos que o jogador esteja sobre o mercador ou sobre a
- * bancada. Ele entra logo DEPOIS da bolsa por leitura: quem chega ao balcão lê
- * de cima para baixo "isto é o que eu carrego / isto é o que posso fazer com
- * ele". Como o bloco não existe na maior parte do tempo, a ordem fixada pelo
- * teste é a de sempre — e há um caso próprio para a ordem COM o painel aberto.
+ * devolve `null` a menos que o jogador esteja sobre o mercador ou sobre o
+ * caldeirão da estação de alquimia (`game.bancada`). Ele entra logo DEPOIS da
+ * bolsa por leitura: quem chega ao balcão lê de cima para baixo "isto é o que
+ * eu carrego / isto é o que posso fazer com ele". Como o bloco não existe na
+ * maior parte do tempo, a ordem fixada pelo teste é a de sempre — e há um caso
+ * próprio para a ordem COM o painel aberto.
  *
  * A única peça de estado desta casca é `forcarAtualizacao`: o painel de semente
  * escreve no registro (mesmas mensagens do vanilla, `registrarCopia` de
