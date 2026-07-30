@@ -24,10 +24,19 @@
  * correto, não uma exceção a tolerar. É o que os dois últimos casos deste
  * arquivo fixam.
  *
+ * A fase do TERRENO trouxe o quarto, e é o de maior alcance: o CHÃO virou
+ * sprite forjado (`src/render/tilesets/`), e com ele entraram três regras que
+ * só existem no renderer — a escolha da variante de piso pelo bucket de decor,
+ * a transparência das paredes do canto frontal aplicada agora a um `drawImage`,
+ * e o sorteio determinístico dos adereços, que precisa ceder o tile a tudo o
+ * que estiver de pé nele. Os casos do fim deste arquivo cobrem os três, nos
+ * DOIS caminhos: com atlas (um `document` de mentira faz a forja acreditar que
+ * há DOM) e sem atlas nenhum, que é o ambiente natural deste arquivo.
+ *
  * O que este arquivo NÃO tenta ser: teste de pixel. Sem contexto 2D real não há
  * sprite nenhum — e é justamente esse o caminho exercitado aqui, o desenho de
  * RESERVA que mantém o jogo desenhável em ambiente sem Canvas (§7.3 do
- * BESTIARIO, agora valendo também para item e para ponto de parada). A
+ * BESTIARIO, agora valendo também para item, ponto de parada e terreno). A
  * aparência dos rigs é julgada na bancada de revisão
  * (tools/preview-personagem.mjs), não aqui.
  *
@@ -35,14 +44,15 @@
  * `Game`, e quem move o jogador e recolhe item é o engine, por `store.dispatch`.
  */
 
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { CONFIG, DEFAULT_FACING, DIRS8, dirIndex } from '../src/engine/core';
 import { setStorage } from '../src/engine/save';
 import { store } from '../src/engine/store';
-import type { Item, ItemKind, Point } from '../src/engine/types';
+import type { Enemy, Game, Item, ItemKind, Point } from '../src/engine/types';
 import { IsoRenderer } from '../src/render/IsoRenderer';
 import { COL_HOVER_LINE, LEVELS, buildLuts } from '../src/render/palette';
+import { limparCacheAtlas, limparCacheLuz } from '../src/render/spriteForge';
 
 /* Sem localStorage: cada caso parte de um estado explícito. */
 setStorage(null);
@@ -74,10 +84,32 @@ interface Preenchimento {
   alfa: number;
 }
 
+/**
+ * Uma COLAGEM de sprite: o recorte pedido e onde ele foi parar, mais o alfa que
+ * estava armado no contexto.
+ *
+ * O par (`largura`, `altura`) é a assinatura de QUEM foi colado — cada rig tem
+ * um quadro de tamanho próprio, medido pelo forge a partir da geometria (e
+ * portanto igual com ou sem pixels de verdade). É o mesmo truque das elipses de
+ * raio conhecido que este arquivo já usava para contar despojos, aplicado ao
+ * caminho de sprite.
+ *
+ * `alfa` é o que prova a transparência das paredes do canto frontal: o
+ * `globalAlpha` do contexto compõe o `drawImage` como compõe o `fill()`.
+ */
+interface Colagem {
+  largura: number;
+  altura: number;
+  dx: number;
+  dy: number;
+  alfa: number;
+}
+
 interface ContextoFalso {
   ctx: CanvasRenderingContext2D;
   elipses: Elipse[];
   preenchimentos: Preenchimento[];
+  colagens: Colagem[];
 }
 
 /** Campos que `save()`/`restore()` precisam empilhar de verdade. */
@@ -92,6 +124,7 @@ interface EstadoCtx {
 function criarContextoFalso(): ContextoFalso {
   const elipses: Elipse[] = [];
   const preenchimentos: Preenchimento[] = [];
+  const colagens: Colagem[] = [];
   const pilha: EstadoCtx[] = [];
 
   const ctx = {
@@ -136,7 +169,16 @@ function criarContextoFalso(): ContextoFalso {
     clearRect(): void {},
     fillRect(): void {},
     fillText(): void {},
-    drawImage(): void {},
+    /* O renderer só usa a forma de 9 argumentos (recorte + destino) — é ela que
+     * `colarTerreno`, o elenco e os despojos chamam. */
+    drawImage(
+      _fonte: unknown, _sx: number, _sy: number, largura: number, altura: number,
+      dx: number, dy: number
+    ): void {
+      colagens.push({
+        largura: largura, altura: altura, dx: dx, dy: dy, alfa: ctx.globalAlpha
+      });
+    },
     arc(): void {},
     ellipse(cx: number, cy: number, rx: number, ry: number): void {
       elipses.push({ cx: cx, cy: cy, rx: rx, ry: ry, cor: String(ctx.fillStyle) });
@@ -149,7 +191,8 @@ function criarContextoFalso(): ContextoFalso {
   return {
     ctx: ctx as unknown as CanvasRenderingContext2D,
     elipses: elipses,
-    preenchimentos: preenchimentos
+    preenchimentos: preenchimentos,
+    colagens: colagens
   };
 }
 
@@ -270,7 +313,7 @@ function vizinhoLivre(px: number, py: number): Point {
  * convite apaga sob os pés dele. Misturar as duas coisas num caso de contagem
  * de peças só criaria ruído.
  */
-function tilesVisiveisLivres(quantos: number): Point[] {
+function todosOsTilesVisiveisLivres(): Point[] {
   const g = store.getGame();
   const map = g.map;
   const saida: Point[] = [];
@@ -280,9 +323,16 @@ function tilesVisiveisLivres(quantos: number): Point[] {
     const y = (i - x) / map.w;
     if (x === g.player.x && y === g.player.y) continue;
     saida.push({ x: x, y: y });
-    if (saida.length >= quantos) return saida;
   }
-  throw new Error('o campo de visão inicial não ofereceu ' + quantos + ' tiles livres');
+  return saida;
+}
+
+function tilesVisiveisLivres(quantos: number): Point[] {
+  const saida = todosOsTilesVisiveisLivres();
+  if (saida.length < quantos) {
+    throw new Error('o campo de visão inicial não ofereceu ' + quantos + ' tiles livres');
+  }
+  return saida.slice(0, quantos);
 }
 
 /**
@@ -292,6 +342,220 @@ function tilesVisiveisLivres(quantos: number): Point[] {
  */
 function facingDoMercador(r: IsoRenderer): number {
   return (r as unknown as { facingMercador: number }).facingMercador;
+}
+
+/* ------------------------------------------------------------------ *
+ * O TERRENO — o instrumental do caminho de SPRITE
+ *
+ * Nada aqui pinta um pixel: o que se mede é QUEM foi colado e ONDE. A ponte
+ * entre as duas coisas é o quadro do atlas — `larguraFrame × alturaFrame` sai
+ * da geometria do rig (o forge o calcula com `medirModelo`, que é matemática
+ * pura), então ele é o MESMO com ou sem rasterização de verdade. É a versão
+ * "caminho de sprite" das elipses de raio conhecido usadas acima.
+ * ------------------------------------------------------------------ */
+
+/** O que o renderer guarda em `atlasTerreno` — só o que este arquivo lê dele. */
+interface AtlasMedido {
+  larguraFrame: number;
+  alturaFrame: number;
+}
+
+/**
+ * O cache de atlas do terreno, por (nível, papel, índice). Privado no renderer
+ * pelo mesmo motivo de `facingMercador`: é estado de desenho, não API. Lê-lo
+ * aqui é o que permite reconhecer um bloco de piso ou um adereço nas colagens
+ * sem repetir no teste a tabela de rigs do tileset.
+ */
+function atlasesDoTerreno(r: IsoRenderer): Map<string, AtlasMedido | null> {
+  return (r as unknown as { atlasTerreno: Map<string, AtlasMedido | null> }).atlasTerreno;
+}
+
+/** `largura×altura` — a assinatura de um quadro, como chave de conjunto. */
+function medida(largura: number, altura: number): string {
+  return largura + 'x' + altura;
+}
+
+/** As assinaturas dos quadros de um papel do tileset já forjados. */
+function medidasDoPapel(r: IsoRenderer, papel: string): Set<string> {
+  const saida = new Set<string>();
+  for (const [chave, atlas] of atlasesDoTerreno(r)) {
+    if (!atlas) continue;
+    if (chave !== papel && chave.indexOf(papel + ':') !== 0) continue;
+    saida.add(medida(atlas.larguraFrame, atlas.alturaFrame));
+  }
+  return saida;
+}
+
+/** As colagens cujo quadro é de um dos atlas daquele papel. */
+function colagensDe(colagens: Colagem[], medidas: Set<string>): Colagem[] {
+  return colagens.filter((c) => medidas.has(medida(c.largura, c.altura)));
+}
+
+/**
+ * Todas as cores de ENTIDADE. Elas não marcam nada por si — entram aqui para
+ * serem SUBTRAÍDAS dos marcadores de terreno logo abaixo.
+ *
+ * O motivo é um falso positivo real, custou uma rodada de depuração: os três
+ * degraus da escada (`drawStairs`) são preenchidos com `SHADES.stone.dark`, e
+ * `stone.dark[12]` é EXATAMENTE a mesma string que `FLOOR_LIT[0][4][9]`
+ * (rgb(53,55,59)) — duas rampas de cinza-azulado que se cruzam num ponto. Um
+ * marcador que aceite essa cor acusa "o piso saiu geométrico" toda vez que a
+ * escada aparece no campo de visão.
+ */
+const CORES_DE_ENTIDADE = (() => {
+  const saida = new Set<string>();
+  for (const sh of Object.values(LUTS.SHADES)) {
+    for (const c of sh.main) saida.add(c);
+    for (const c of sh.dark) saida.add(c);
+    for (const c of sh.light) saida.add(c);
+  }
+  return saida;
+})();
+
+/**
+ * As cores que SÓ o losango geométrico do piso usa (`FLOOR_LIT`, menos o que
+ * colide com entidade). É por elas que se prova que o caminho de reserva rodou
+ * — ou que não rodou, quando há atlas. `FLOOR_DIM` fica de fora de propósito:
+ * `drawStairs` também a usa, e o marcador tem de ser inequívoco.
+ */
+const CORES_DE_PISO_GEOMETRICO = (() => {
+  const saida = new Set<string>();
+  for (const alt of LUTS.FLOOR_LIT) {
+    for (const bucket of alt) {
+      for (const c of bucket) if (!CORES_DE_ENTIDADE.has(c)) saida.add(c);
+    }
+  }
+  return saida;
+})();
+
+/** Idem para o prisma da parede — as três faces, acesas ou lembradas. */
+const CORES_DE_PAREDE_GEOMETRICA = (() => {
+  const saida = new Set<string>();
+  for (const face of LUTS.WALL_LIT) {
+    for (const bucket of face) {
+      for (const c of bucket) if (!CORES_DE_ENTIDADE.has(c)) saida.add(c);
+    }
+  }
+  for (const face of LUTS.WALL_DIM) {
+    for (const c of face) if (!CORES_DE_ENTIDADE.has(c)) saida.add(c);
+  }
+  return saida;
+})();
+
+function losangosDePiso(preenchimentos: Preenchimento[]): Preenchimento[] {
+  return preenchimentos.filter((p) => CORES_DE_PISO_GEOMETRICO.has(p.cor));
+}
+
+function prismasDeParede(preenchimentos: Preenchimento[]): Preenchimento[] {
+  return preenchimentos.filter((p) => CORES_DE_PAREDE_GEOMETRICA.has(p.cor));
+}
+
+/**
+ * Um contexto 2D MUDO para os canvases da forja.
+ *
+ * Ele não pode ser o contexto que o teste observa: `desenharModelo` pinta
+ * centenas de faces por quadro do atlas, e essas pinceladas afogariam as
+ * anotações do desenho de verdade. Aqui não se registra nada — o que importa da
+ * forja é só que ela ACONTEÇA.
+ *
+ * Os métodos são exatamente os que `model3d` e `spriteForge` usam. Faltam
+ * `getImageData`/`putImageData` de propósito: sem eles o forge pula o snap de
+ * paleta e a camada emissiva (ele já degrada assim em jsdom), o que aqui é
+ * ótimo — o atlas continua com o tamanho e a âncora certos, que é tudo o que
+ * estes casos medem, e a forja fica barata.
+ */
+function contextoMudo(): unknown {
+  return {
+    fillStyle: '#000',
+    strokeStyle: '#000',
+    lineWidth: 1,
+    lineCap: 'butt',
+    lineJoin: 'miter',
+    miterLimit: 10,
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    imageSmoothingEnabled: false,
+    save(): void {},
+    restore(): void {},
+    beginPath(): void {},
+    closePath(): void {},
+    moveTo(): void {},
+    lineTo(): void {},
+    rect(): void {},
+    fill(): void {},
+    stroke(): void {},
+    clearRect(): void {},
+    fillRect(): void {},
+    drawImage(): void {}
+  };
+}
+
+/**
+ * Instala um `document` de mentira, o mínimo que `spriteForge.criarCanvas`
+ * exige para acreditar que há DOM. Com ele a forja completa e `disponivel` sai
+ * verdadeiro — é o único jeito de exercitar o caminho de SPRITE em Node, onde
+ * não existe canvas nenhum.
+ *
+ * Os caches do forge são invalidados na entrada E na saída, e as duas metades
+ * importam: na entrada porque um caso anterior já pode ter memoizado o MESMO
+ * rig como indisponível (e o `null` memoizado venceria o `document` novo); na
+ * saída porque o inverso também é verdade — deixar um atlas "disponível" no
+ * cache faria os casos sem DOM caírem no caminho de sprite e testarem outra
+ * coisa. Sem essas duas linhas os casos deste arquivo passariam a depender da
+ * ordem em que rodam.
+ */
+function instalarDomDeForja(): void {
+  const raiz = globalThis as unknown as { document?: unknown };
+  raiz.document = {
+    createElement: (): unknown => ({
+      width: 0,
+      height: 0,
+      getContext: (): unknown => contextoMudo()
+    })
+  };
+  limparCacheAtlas();
+  limparCacheLuz();
+}
+
+function removerDomDeForja(): void {
+  const raiz = globalThis as unknown as { document?: unknown };
+  delete raiz.document;
+  limparCacheAtlas();
+  limparCacheLuz();
+}
+
+/** Um inimigo mínimo, só o que o desenho consulta. */
+function inimigo(id: number, x: number, y: number): Enemy {
+  return {
+    id: id, kind: 'chaser', x: x, y: y, hp: 5, maxHp: 5, atk: 1, range: 1,
+    state: 'idle', plan: '', lastDmg: 0, bump: 0
+  };
+}
+
+/**
+ * Transforma em PAREDE o primeiro dos três tiles do canto frontal do jogador —
+ * (x+1, y), (x, y+1), (x+1, y+1) —, que são os que o cobrem no passe de
+ * paredes. É a única forma de garantir o cenário do teste: o mapa gerado pode
+ * ter os três livres, e a transparência só existe quando há parede ali.
+ *
+ * O tile entra em `game.visible` à força porque a FOV não é recalculada: ele já
+ * era visível como chão, e o renderer só pergunta se o índice está no conjunto.
+ */
+function paredeNoCantoFrontal(g: Game): void {
+  const p = g.player;
+  const alvos: Point[] = [
+    { x: p.x + 1, y: p.y },
+    { x: p.x, y: p.y + 1 },
+    { x: p.x + 1, y: p.y + 1 }
+  ];
+  for (const a of alvos) {
+    if (a.x >= g.map.w || a.y >= g.map.h) continue;
+    const i = a.y * g.map.w + a.x;
+    g.map.tiles[i] = CONFIG.TILE.WALL;
+    g.visible.add(i);
+    return;
+  }
+  throw new Error('o jogador nasceu encostado na borda do mapa');
 }
 
 /* ------------------------------------------------------------------ *
@@ -691,3 +955,238 @@ describe('IsoRenderer — o mercador e a estação de alquimia', () => {
   });
 });
 
+
+/* ================================================================== *
+ * O TERRENO: piso, parede e adereços como sprite forjado
+ *
+ * O que estes casos protegem, e que nenhum outro alcança:
+ *
+ *   1. a BIFURCAÇÃO. Com atlas o chão é sprite; sem atlas é o losango do
+ *      vanilla. Os dois caminhos têm de continuar vivos — o segundo é o que
+ *      mantém o jogo desenhável em Node e em jsdom, e é o único que este
+ *      arquivo veria se ninguém montasse o `document` de mentira;
+ *   2. a TRANSPARÊNCIA do canto frontal. Ela é armada em `draw`, fora de
+ *      `drawWall`, com `ctx.globalAlpha` — e a fase do terreno trocou o que
+ *      está lá dentro (era `fill()`, virou `drawImage`). Se o alfa deixar de
+ *      atravessar, a parede volta a cobrir o herói e ninguém percebe até jogar;
+ *   3. o SORTEIO dos adereços. É a única lógica autoral desta fase: sem
+ *      `Math.random` (proibido nesta camada), estável de quadro para quadro, e
+ *      cedendo o tile a tudo o que estiver de pé nele.
+ * ================================================================== */
+
+describe('IsoRenderer — o terreno do tileset', () => {
+  let falso: ContextoFalso;
+  let renderer: IsoRenderer;
+
+  beforeEach(() => {
+    store.newRun(SEMENTE);
+    /* Com o `document` de mentira a forja completa e o caminho de SPRITE entra
+     * em cena. Os casos que precisam do contrário o desmontam no meio. */
+    instalarDomDeForja();
+    falso = criarContextoFalso();
+    renderer = new IsoRenderer(criarCanvasFalso(falso.ctx));
+  });
+
+  afterEach(() => {
+    removerDomDeForja();
+  });
+
+  it('o piso é SPRITE quando há atlas e volta ao losango geométrico sem canvas', () => {
+    const g = store.getGame();
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+
+    const pisos = colagensDe(falso.colagens, medidasDoPapel(renderer, '1:piso'));
+    expect(pisos.length, 'nenhum bloco de piso foi colado').toBeGreaterThan(0);
+    expect(
+      losangosDePiso(falso.preenchimentos).length,
+      'com o atlas na mão o renderer ainda pintou losango à mão'
+    ).toBe(0);
+
+    /* O MESMO andar sem canvas nenhum (Node cru, jsdom): a forja falha, o
+     * renderer guarda `null` e o chão volta a ser o losango do vanilla. Não é
+     * degradação tolerada — é o caminho que mantém o jogo desenhável. */
+    removerDomDeForja();
+    const semDom = criarContextoFalso();
+    const outro = new IsoRenderer(criarCanvasFalso(semDom.ctx));
+    outro.update(g, 0.016);
+    outro.draw(g);
+
+    expect(semDom.colagens.length, 'colou sprite sem ter canvas nenhum').toBe(0);
+    expect(
+      losangosDePiso(semDom.preenchimentos).length,
+      'sem canvas o chão simplesmente sumiu'
+    ).toBeGreaterThan(0);
+  });
+
+  it('a parede do canto frontal recebe alfa < 1 — no sprite e na reserva geométrica', () => {
+    const g = store.getGame();
+    paredeNoCantoFrontal(g);
+    /* Um passo de 0,1 s basta: o alfa desliza com `k = min(1, dt·9)`, então a
+     * primeira atualização já leva 1 → ~0,42 rumo a `ALFA_PAREDE_OCULTA`. */
+    renderer.update(g, 0.1);
+    renderer.draw(g);
+
+    const paredes = colagensDe(falso.colagens, medidasDoPapel(renderer, '1:parede'));
+    expect(paredes.length, 'nenhuma parede foi colada').toBeGreaterThan(0);
+    const translucidas = paredes.filter((c) => c.alfa < 0.995);
+    expect(
+      translucidas.length,
+      'a parede que encobre o herói não recebeu alfa nenhum no `drawImage`'
+    ).toBeGreaterThan(0);
+    for (const t of translucidas) {
+      expect(t.alfa, 'a parede translúcida ficou opaca demais').toBeLessThan(0.9);
+      /* Nunca invisível: abaixo de ~0,3 o bloco some contra o fundo escuro e o
+       * buraco lê como erro de desenho (ver `ALFA_PAREDE_OCULTA`). */
+      expect(t.alfa, 'a parede translúcida virou buraco').toBeGreaterThan(0.3);
+    }
+    expect(
+      paredes.some((c) => c.alfa === 1),
+      'TODAS as paredes ficaram translúcidas — o alfa vazou do canto frontal'
+    ).toBe(true);
+
+    /* E a reserva geométrica respeita o mesmo alfa, porque ele é do CONTEXTO e
+     * não do caminho: `fill()` e `drawImage` são compostos pelos dois. */
+    removerDomDeForja();
+    const semDom = criarContextoFalso();
+    const outro = new IsoRenderer(criarCanvasFalso(semDom.ctx));
+    outro.update(g, 0.1);
+    outro.draw(g);
+
+    const prismas = prismasDeParede(semDom.preenchimentos);
+    expect(prismas.length, 'nenhuma parede geométrica foi desenhada').toBeGreaterThan(0);
+    expect(
+      prismas.some((p) => p.alfa > 0.3 && p.alfa < 0.9),
+      'o prisma de reserva ignorou a transparência do canto frontal'
+    ).toBe(true);
+    expect(
+      prismas.some((p) => p.alfa === 1),
+      'TODOS os prismas ficaram translúcidos'
+    ).toBe(true);
+  });
+
+  it('o adereço não nasce sob entidade nem sob despojo', () => {
+    const g = store.getGame();
+    g.enemies = [];
+    g.items = [];
+    g.mercador = null;
+    g.bancada = null;
+    g.alquimiaExtras = [];
+
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    const medidas = medidasDoPapel(renderer, '1:adereco');
+    const n0 = colagensDe(falso.colagens, medidas).length;
+    expect(n0, 'o andar não recebeu adereço nenhum — o sorteio não está rodando')
+      .toBeGreaterThan(0);
+
+    /* Um monstro em CADA tile do campo de visão: como o adereço só é desenhado
+     * onde o piso é desenhado, cobrir o campo inteiro é cobrir todos os
+     * candidatos. Não pode sobrar nenhum. */
+    const tiles = todosOsTilesVisiveisLivres();
+    g.enemies = tiles.map((t, k) => inimigo(k + 1, t.x, t.y));
+    falso.colagens.length = 0;
+    renderer.draw(g);
+    expect(
+      colagensDe(falso.colagens, medidas).length,
+      'nasceu adereço embaixo de monstro'
+    ).toBe(0);
+
+    /* O mesmo com despojos no chão: eles são pequenos como o adereço, e é
+     * justamente por isso que um seixo por cima de uma gosma seria confusão. */
+    g.enemies = [];
+    g.items = tiles.map((t, k) => item(k + 1, 'gosma', t.x, t.y));
+    falso.colagens.length = 0;
+    renderer.draw(g);
+    expect(
+      colagensDe(falso.colagens, medidas).length,
+      'nasceu adereço embaixo de despojo'
+    ).toBe(0);
+
+    /* E VOLTA quando o tile esvazia, com a mesma conta do primeiro quadro: o
+     * sorteio é função de (x, y, decor) e de mais nada — nem de relógio, nem de
+     * `Math.random`, que esta camada proíbe (tools/check-boundaries.mjs). */
+    g.items = [];
+    falso.colagens.length = 0;
+    renderer.draw(g);
+    expect(
+      colagensDe(falso.colagens, medidas).length,
+      'o adereço não voltou quando o tile esvaziou'
+    ).toBe(n0);
+  });
+
+  it('o mesmo tile recebe o mesmo adereço em todo quadro', () => {
+    const g = store.getGame();
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    const medidas = medidasDoPapel(renderer, '1:adereco');
+    const assinar = (cs: Colagem[]): string[] =>
+      colagensDe(cs, medidas).map((c) => c.dx + ',' + c.dy + ':' + medida(c.largura, c.altura)).sort();
+
+    const primeiro = assinar(falso.colagens);
+    expect(primeiro.length, 'nenhum adereço para comparar').toBeGreaterThan(0);
+
+    /* Meio segundo de relógio visual depois (o `update` limita `dt` a 0,1 s, e
+     * a câmera já está no alvo, então nada na tela deveria ter se mexido). */
+    falso.colagens.length = 0;
+    for (let k = 0; k < 5; k++) renderer.update(g, 0.1);
+    renderer.draw(g);
+    expect(assinar(falso.colagens), 'o adereço mudou de lugar sozinho entre dois quadros')
+      .toEqual(primeiro);
+  });
+
+  it('o adereço cede o tile ao ponto de parada e ao herói', () => {
+    const g = store.getGame();
+    g.enemies = [];
+    g.items = [];
+    g.mercador = null;
+    g.bancada = null;
+    g.alquimiaExtras = [];
+
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    const medidas = medidasDoPapel(renderer, '1:adereco');
+    const contar = (): number => {
+      falso.colagens.length = 0;
+      renderer.draw(g);
+      return colagensDe(falso.colagens, medidas).length;
+    };
+    const n0 = colagensDe(falso.colagens, medidas).length;
+    expect(n0, 'o andar não recebeu adereço nenhum').toBeGreaterThan(0);
+
+    /* Onde há adereço e onde não há, achados por ELIMINAÇÃO: o caldeirão é
+     * posto em cada candidato e o total ou cai de exatamente um (aquele tile
+     * tinha adereço) ou não se mexe (não tinha). Se a regra não existisse, o
+     * total jamais cairia — é essa a prova. */
+    let comAdereco: Point | null = null;
+    let semAdereco: Point | null = null;
+    for (const c of todosOsTilesVisiveisLivres()) {
+      g.bancada = c;
+      const n = contar();
+      expect([n0, n0 - 1], 'o caldeirão mexeu em mais de um adereço (ou criou um)').toContain(n);
+      if (n === n0 - 1) {
+        if (!comAdereco) comAdereco = c;
+      } else if (!semAdereco) {
+        semAdereco = c;
+      }
+      if (comAdereco && semAdereco) break;
+    }
+    expect(comAdereco, 'nenhum tile cedeu o adereço ao caldeirão').not.toBeNull();
+    expect(semAdereco, 'o caso perdeu a graça: todo tile visível tem adereço').not.toBeNull();
+    g.bancada = null;
+
+    /* O HERÓI segue a mesma regra. A comparação é entre os DOIS destinos, e não
+     * contra `n0`, porque sair do tile de origem LIBERA o adereço de lá — o
+     * efeito colateral se cancela quando os dois quadros o têm. */
+    const alvoCom = comAdereco as Point;
+    const alvoSem = semAdereco as Point;
+    g.player.x = alvoSem.x;
+    g.player.y = alvoSem.y;
+    const nSemAdereco = contar();
+    g.player.x = alvoCom.x;
+    g.player.y = alvoCom.y;
+    const nComAdereco = contar();
+    expect(nComAdereco, 'o herói pisou no adereço e ele continuou desenhado')
+      .toBe(nSemAdereco - 1);
+  });
+});

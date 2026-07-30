@@ -22,6 +22,13 @@
  *     caldeirão da estação de alquimia (`game.bancada`), despacha os comandos
  *     certos e reflete bolsa, moedas e receitas — e os tiles de CENÁRIO da
  *     estação (`game.alquimiaExtras`) não abrem painel nenhum;
+ *   · o quadro de MISSÕES (fase 3) lista as caçadas do andar com progresso
+ *     de abate e de entrega, calcula a prontidão com o MESMO predicado
+ *     derivado do engine (`missaoPronta`: abate feito + despojos na bolsa,
+ *     porque `completa` só nasce na entrega), destaca em âmbar a pronta,
+ *     habilita o botão Entregar só AO LADO do mercador e entrega DE VERDADE
+ *     pelo engine — as missões de mentira são injetadas no estado na mão (o
+ *     mesmo padrão `store.getGame()` + setter direto dos testes do balcão);
  *   · o `IsoRenderer` degrada sem lançar quando `getContext('2d')` devolve null
  *     (jsdom não tem canvas 2D) — defensivo, não gambiarra;
  *   · o laço de rAF NÃO duplica com a montagem dupla do StrictMode e é
@@ -40,6 +47,7 @@ import { setStorage } from '../src/engine/save';
 import { App } from '../src/ui/App';
 import { sincronizar } from '../src/ui/cinematics';
 import { getRenderer } from '../src/ui/GameCanvas';
+import type { Missao } from '../src/engine/types';
 
 /* Sem localStorage nos testes: cada caso parte de um estado explícito. */
 setStorage(null);
@@ -151,11 +159,13 @@ describe('UI — smoke da casca React (§7.4)', () => {
 
     /* Ordem dos blocos fixada pelo §9 do CONTRACTS.md — com a Bolsa (fase 1
      * dos despojos) logo após os Vitais: o que o jogador é e o que ele carrega
-     * ficam juntos, antes de qualquer coisa sobre o andar (ver Sidebar.tsx). */
+     * ficam juntos, antes de qualquer coisa sobre o andar (ver Sidebar.tsx).
+     * As Missões (fase 3) entram entre a bolsa e a semente: o porquê de
+     * carregar, o que se carrega, e só então o andar. */
     const titulos = Array.from(container.ownerDocument.querySelectorAll('.painel .titulo'))
       .map((el) => (el.textContent || '').trim());
     expect(titulos, 'blocos do painel lateral fora de ordem ou ausentes').toEqual([
-      'Vitais', 'Bolsa', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+      'Vitais', 'Bolsa', 'Missões', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
     ]);
     expect(screen.getByText('Nível'), 'rótulo Nível ausente').toBeTruthy();
     expect(screen.getByText('Turno'), 'rótulo Turno ausente').toBeTruthy();
@@ -640,12 +650,12 @@ describe('UI — smoke da casca React (§7.4)', () => {
       acordar(0);
     });
 
-    /* O bloco entra entre a Bolsa e a Semente — o que carrego, e o que posso
-     * fazer com isso (ver Sidebar.tsx). */
+    /* O bloco entra entre as Missões e a Semente — o porquê de carregar, o
+     * que carrego, e o que posso fazer com isso (ver Sidebar.tsx). */
     const titulos = Array.from(document.querySelectorAll('.painel .titulo'))
       .map((el) => (el.textContent || '').trim());
     expect(titulos, 'o balcão entrou fora de lugar na barra lateral').toEqual([
-      'Vitais', 'Bolsa', 'Mercador', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+      'Vitais', 'Bolsa', 'Missões', 'Mercador', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
     ]);
     expect(document.getElementById('troca-moedas')!.textContent, 'moedas do balcão').toBe('0');
 
@@ -866,6 +876,245 @@ describe('UI — smoke da casca React (§7.4)', () => {
     expect(document.getElementById('troca-motivo-refino')!.textContent,
       'o teto do refino não foi explicado')
       .toBe('Refino máximo atingido (' + ARMA_NIVEL_MAX + ').');
+
+    esperarConsoleLimpo();
+  });
+
+  /* ================================================================ *
+   * O QUADRO DE MISSÕES (fase 3)
+   *
+   * Um jogo novo JÁ nasce com 1–3 caçadas geradas por `populate`, mas os
+   * casos abaixo injetam as suas na mão (`store.getGame()` + setter direto,
+   * o padrão dos testes do balcão) — controlar `progressoMatar` e a bolsa é
+   * muito mais barato e determinístico do que caçar de verdade.
+   *
+   * A posição do mercador também é movida na mão (perto = Chebyshev 1, longe
+   * = 5), como os testes do balcão movem os pontos de parada até o jogador.
+   *
+   * ATENÇÃO ao predicado da prontidão: `completa` NÃO é "objetivos feitos" —
+   * ela e `entregue` nascem juntas no comando `entregar` (types.ts). Pronta
+   * é DERIVADA: abate fechado (`progressoMatar >= matar`) E despojos da
+   * missão na bolsa (`>= entregar`), o mesmo predicado de `missaoPronta` no
+   * engine. As fixtures de "pronta" abaixo montam as duas condições.
+   * ================================================================ */
+
+  /** Uma caçada de mentira completa; o caso sobrescreve o que lhe interessa. */
+  function fabricarMissao(parcial: Partial<Missao>): Missao {
+    return {
+      key: 'abate-chaser',
+      alvo: 'chaser',
+      matar: 3,
+      itens: ['orelhaGoblin'],
+      entregar: 2,
+      progressoMatar: 2,
+      recompensaMoedas: 20,
+      recompensaItem: { kind: 'espadaGoblin', n: 1 },
+      nome: 'Caça ao Goblin',
+      desc: 'O mercador quer provas e silêncio.',
+      completa: false,
+      entregue: false,
+      ...parcial
+    };
+  }
+
+  it('o quadro lista as missões do andar com progresso de abate e de entrega', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.missoes = [
+        fabricarMissao({}),
+        /* Caçada só de coleta (`matar: 0`) e recompensa sem item bônus: prova
+         * os dois cortes defensivos — sem linha de abate e sem ' + …' no
+         * preço. (A geração atual impõe piso 1; o painel não depende disso.) */
+        fabricarMissao({
+          key: 'coleta-gosma',
+          alvo: 'linker',
+          matar: 0,
+          itens: ['gosma'],
+          entregar: 3,
+          progressoMatar: 0,
+          recompensaMoedas: 15,
+          recompensaItem: null,
+          nome: 'Coleta de Gosma'
+        })
+      ];
+      g.player.bag = { orelhaGoblin: 1 };
+      acordar(0);
+    });
+
+    /* A primeira, a fazer: nome, alvo em texto, os dois progressos e a
+     * recompensa anunciada — e NENHUM botão: quem a fazer está, caça. */
+    const linha = document.getElementById('missao-abate-chaser') as HTMLElement;
+    expect(linha, 'a missão do andar não apareceu no quadro').toBeTruthy();
+    expect(linha.querySelector('.bolsa-nome')!.textContent).toBe('Caça ao Goblin');
+    expect(document.getElementById('missao-abates-abate-chaser')!.textContent,
+      'o progresso de abate não saiu X/Y com o nome do arquétipo')
+      .toBe('2/3 abates · Perseguidor');
+    expect(document.getElementById('missao-bolsa-abate-chaser')!.textContent,
+      'o progresso de entrega não saiu "bolsa: tem de exigido"')
+      .toBe('bolsa: 1 de 2 itens');
+    expect(document.getElementById('missao-recompensa-abate-chaser')!.textContent,
+      'a recompensa (moedas + item) não foi anunciada')
+      .toBe('Recompensa: 20 moedas + 1 cimitarra de goblin');
+    expect(linha.className, 'caçada a fazer ganhou o destaque de pronta')
+      .not.toContain('missao-pronta');
+    expect(document.getElementById('entregar-abate-chaser'),
+      'caçada a fazer não pode ter botão de entrega').toBeNull();
+
+    /* A segunda: sem linha de abate (matar 0) e recompensa só em moedas. */
+    expect(document.getElementById('missao-abates-coleta-gosma'),
+      'caçada só de coleta ganhou linha de abate').toBeNull();
+    expect(document.getElementById('missao-bolsa-coleta-gosma')!.textContent)
+      .toBe('bolsa: 0 de 3 itens');
+    expect(document.getElementById('missao-recompensa-coleta-gosma')!.textContent)
+      .toBe('Recompensa: 15 moedas');
+
+    esperarConsoleLimpo();
+  });
+
+  it('a missão pronta destaca em âmbar; o botão abre ao lado do mercador e trava longe', () => {
+    montarApp();
+    const g = store.getGame();
+
+    /* LONGE: mercador a 5 tiles (Chebyshev > 1). A pronta monta as DUAS
+     * condições do predicado derivado (abate + despojos); a segunda caçada
+     * tem o abate fechado mas a bolsa NÃO tem o pé de ogro — ela é a prova de
+     * que a tela não lê prontidão de campo nenhum, calcula. */
+    act(() => {
+      g.missoes = [
+        fabricarMissao({ progressoMatar: 3 }),
+        fabricarMissao({
+          key: 'abate-sentinel',
+          alvo: 'sentinel',
+          matar: 1,
+          itens: ['peOgro'],
+          entregar: 1,
+          progressoMatar: 1,
+          nome: 'Troféu de Ogro'
+        })
+      ];
+      g.player.bag = { orelhaGoblin: 2 };
+      g.mercador = { x: g.player.x + 5, y: g.player.y };
+      acordar(0);
+    });
+
+    const linha = document.getElementById('missao-abate-chaser') as HTMLElement;
+    expect(linha.className, 'a caçada pronta não ganhou o destaque âmbar')
+      .toContain('missao-pronta');
+    expect(document.getElementById('missao-aviso-abate-chaser')!.textContent,
+      'o aviso da pronta não mandou o jogador ao mercador')
+      .toBe('Pronta! Vá ao mercador.');
+
+    /* Abate fechado SEM os despojos na bolsa: não é pronta, não tem botão —
+     * `completa` segue falsa até a entrega, prontidão é conta. */
+    const semDespojo = document.getElementById('missao-abate-sentinel') as HTMLElement;
+    expect(semDespojo.className, 'abate sem despojo destacou como pronta')
+      .not.toContain('missao-pronta');
+    expect(document.getElementById('entregar-abate-sentinel'),
+      'abate sem despojo ganhou botão de entrega').toBeNull();
+
+    const longe = document.getElementById('entregar-abate-chaser') as HTMLButtonElement;
+    expect(longe.tagName, 'o gatilho de entrega tem de ser um <button> de verdade')
+      .toBe('BUTTON');
+    expect(longe.disabled, 'a entrega longe do mercador tinha de estar travada').toBe(true);
+    expect(longe.getAttribute('title'), 'o botão travado não explicou o porquê na dica')
+      .toBe('Vá até o mercador');
+    expect(longe.getAttribute('aria-describedby'),
+      'o botão travado não aponta para o aviso').toBe('missao-aviso-abate-chaser');
+
+    /* Botão travado não despacha — e não custa turno. */
+    const espia = vi.spyOn(store, 'dispatch');
+    const turnoAntes = g.turn;
+    act(() => { fireEvent.click(longe); });
+    expect(espia.mock.calls.length, 'o botão travado despachou mesmo assim').toBe(0);
+    expect(g.turn, 'o clique no botão travado consumiu turno').toBe(turnoAntes);
+    espia.mockRestore();
+
+    /* PERTO: o mesmo mercador, agora ao lado (Chebyshev 1) — o botão abre. */
+    act(() => {
+      g.mercador = { x: g.player.x + 1, y: g.player.y };
+      acordar(1);
+    });
+
+    const perto = document.getElementById('entregar-abate-chaser') as HTMLButtonElement;
+    expect(perto.disabled, 'a entrega ao lado do mercador continuou travada').toBe(false);
+    expect(perto.getAttribute('title'), 'botão habilitado não tem dica de travado').toBeNull();
+
+    esperarConsoleLimpo();
+  });
+
+  it('clicar em Entregar despacha o comando e a missão passa a entregue', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.missoes = [fabricarMissao({ progressoMatar: 3 })];
+      g.player.bag = { orelhaGoblin: 2 };
+      g.player.moedas = 0;
+      g.mercador = { x: g.player.x + 1, y: g.player.y };
+      acordar(0);
+    });
+
+    const espia = vi.spyOn(store, 'dispatch');
+    const turnoAntes = g.turn;
+    act(() => {
+      fireEvent.click(document.getElementById('entregar-abate-chaser') as HTMLButtonElement);
+    });
+
+    /* O contrato: `{ kind: 'entregar' }`, sem carga — o engine varre TODAS as
+     * prontas na ordem de geração. E aqui a entrega é DE VERDADE: consome os
+     * despojos, paga moedas e bônus, fecha a caçada e custa um turno. */
+    expect(espia, 'o clique não despachou o comando da fase 3')
+      .toHaveBeenCalledWith({ kind: 'entregar' });
+    espia.mockRestore();
+    expect(g.turn, 'entregar custa um turno, como todo negócio no balcão')
+      .toBe(turnoAntes + 1);
+
+    const m = g.missoes[0];
+    expect(m.completa, 'a entrega não fechou a caçada').toBe(true);
+    expect(m.entregue, 'a entrega não marcou a recompensa paga').toBe(true);
+    expect(g.player.bag.orelhaGoblin, 'os despojos da entrega ficaram na bolsa')
+      .toBeUndefined();
+    expect(g.player.bag.espadaGoblin, 'o item bônus não chegou à bolsa').toBe(1);
+    expect(g.player.moedas, 'a recompensa em moedas não foi paga').toBe(20);
+    expect(document.getElementById('log')!.textContent, 'a entrega não foi narrada')
+      .toContain('Missão cumprida: Caça ao Goblin');
+
+    /* E a linha esmaece com o selo discreto no lugar do botão. */
+    const linha = document.getElementById('missao-abate-chaser') as HTMLElement;
+    expect(linha.className, 'a caçada entregue não esmaeceu').toContain('missao-entregue');
+    expect(linha.className, 'a entregue ficou com o destaque de pronta')
+      .not.toContain('missao-pronta');
+    expect(document.getElementById('missao-selo-abate-chaser')!.textContent,
+      'o selo discreto da entrega não apareceu').toBe('✓ Entregue');
+    expect(document.getElementById('entregar-abate-chaser'),
+      'o botão de entrega sobreviveu à entrega').toBeNull();
+    expect(document.getElementById('missao-aviso-abate-chaser'),
+      'o aviso de pronta sobreviveu à entrega').toBeNull();
+
+    esperarConsoleLimpo();
+  });
+
+  it('andar sem missão mostra a linha discreta, nunca um painel em branco', () => {
+    montarApp();
+    const g = store.getGame();
+
+    /* Um jogo novo gera 1–3 caçadas por andar (fase 3) — e o painel já as
+     * lista direto do estado real, sem fixture nenhuma. */
+    expect(g.missoes.length, 'o populate não gerou caçada nenhuma').toBeGreaterThan(0);
+    expect(document.getElementById('lista-missoes'),
+      'o quadro não listou as caçadas geradas').toBeTruthy();
+
+    /* O andar sem contrato (a lista vazia) diz isso com todas as letras. */
+    act(() => {
+      g.missoes = [];
+      acordar(0);
+    });
+    expect(document.getElementById('missoes-vazia')!.textContent,
+      'o andar sem missões não disse que não tem missões').toBe('Sem missões neste andar.');
+    expect(document.getElementById('lista-missoes'),
+      'a lista vazia não pode renderizar linhas').toBeNull();
 
     esperarConsoleLimpo();
   });

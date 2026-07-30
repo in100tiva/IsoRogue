@@ -49,6 +49,19 @@
  *   - O `facing` do inimigo é DERIVADO aqui, por observação da mudança de tile
  *     entre turnos (§0.2), e mora no `Vfx` desta classe. Nenhum campo novo em
  *     `Enemy`, em `snapshot()`, no save ou no oracle — ver `orientarInimigo`.
+ *
+ * O QUE MUDOU NA FASE DO TERRENO (src/render/tilesets/):
+ *   - O CHÃO deixou de ser losango pintado à mão e virou SPRITE forjado, pelo
+ *     mesmo pipeline do elenco: o piso, a parede e os adereços de cada andar são
+ *     rigs 3D que moram em `./tilesets/nivelN.ts`, chegam aqui por
+ *     `tilesetDoNivel(depth)` e são colados com a âncora no centro do losango —
+ *     a MESMA âncora dos personagens. Este arquivo não conhece grama nem areia.
+ *   - O desenho geométrico do piso e da parede NÃO saiu: virou o fallback de
+ *     quem não conseguiu forjar (jsdom, Node, qualquer ambiente sem contexto
+ *     2D), exatamente como já era para os monstros (§7.3 do BESTIARIO).
+ *   - A transparência das paredes do canto frontal continua onde estava, em
+ *     `draw`, e continua valendo: `globalAlpha` afeta `drawImage` como afetava
+ *     `fill()`. Ver o bloco de `ALFA_PAREDE_OCULTA` e `colarTerreno`.
  */
 
 import { CONFIG, DEFAULT_FACING, cheb, dirIndex, normalizeFacing } from '../engine/core';
@@ -174,6 +187,8 @@ import {
   RAMPAS_ALQUIMIA,
   RAMPA_DA_COR_ALQUIMIA
 } from './characters/alquimia';
+import { tilesetDoNivel } from './tilesets';
+import type { Tileset } from './tilesets';
 import { forjarAtlas, POSE_NEUTRA, quadroModulado } from './spriteForge';
 import type { AtlasPersonagem, Estado, OpcoesForja } from './spriteForge';
 import type { No } from './model3d';
@@ -888,6 +903,133 @@ const CONVITE_PERIODO = 2.4;
 const CONVITE_ALFA_MIN = 0.05;
 const CONVITE_ALFA_MAX = 0.16;
 
+/* ------------------------------------------------------------------ *
+ * O TERRENO (src/render/tilesets/) — o chão como SPRITE forjado
+ *
+ * O piso, a parede e os adereços de um andar são rigs 3D como o Guerreiro é um
+ * rig 3D, forjados pelo MESMO `spriteForge` e colados com a MESMA âncora (o
+ * centro do losango do tile). Quem sabe que o nível 1 é grama, terra e areia é
+ * `./tilesets/nivel1.ts`; este arquivo pergunta `tilesetDoNivel(depth)` e
+ * desenha o que vier — é a disciplina de `RETRATOS`, aplicada ao chão.
+ *
+ * ═══ AS QUATRO DECISÕES DESTA SEÇÃO ═══
+ *
+ * 1. AS OPÇÕES DE FORJA SÃO UMA CONSTANTE DERIVADA, uma por tileset
+ *    (`forjaDoTileset`). O forge memoiza por (modelo, opções) e a chave das
+ *    opções é uma serialização do objeto: montar `{ paleta, rampas, … }` a cada
+ *    chamada geraria chave nova e reforjaria o andar inteiro 60 vezes por
+ *    segundo. As forjas do elenco resolvem isso sendo constantes de módulo
+ *    escritas à mão; aqui não dá — o material é propriedade do TILESET, que só
+ *    se conhece em tempo de desenho —, então a constante é memoizada por objeto
+ *    de tileset. É a mesma regra, pelo mesmo motivo.
+ *
+ * 2. O CAMINHO GEOMÉTRICO NÃO FOI APAGADO. `drawFloor` e `drawWall` tentam o
+ *    sprite e caem no losango/prisma de sempre quando não há atlas (jsdom, Node,
+ *    qualquer ambiente sem contexto 2D). É a §7.3 do BESTIARIO valendo para o
+ *    chão: nunca deixar de desenhar. test/render.test.ts exercita os dois lados.
+ *
+ * 3. NÃO HÁ ÁGUA NESTA RODADA — e é decisão, não esquecimento. O tileset entrega
+ *    `agua` (o rig existe, calibrado e pronto), mas o ENGINE não tem tile de
+ *    água: a única fonte de variação por tile disponível aqui é `map.decor`, um
+ *    hash POR TILE (ver `computeDecor` em src/engine/mapgen.ts) sem nenhuma
+ *    correlação espacial. Qualquer predicado sobre ele — `(decor & 7) === 0`
+ *    inclusive — produz sal-e-pimenta, nunca uma poça: poça é uma REGIÃO
+ *    conexa, e um tile de água isolado no meio de um corredor de grama não lê
+ *    como água, lê como erro de tileset. Some-se a isso que o topo da água
+ *    afunda 1,2u (~3px) enquanto o herói continua assentando em z = 0, e que
+ *    água sugere ao jogador uma regra de travessia que o engine não tem. Um
+ *    tileset correto sem água vale mais do que poças aleatórias.
+ *    O dia em que a água entrar, ela entra pelo lugar certo: uma região marcada
+ *    no MAPA (flood fill no mapgen, um valor de `Tile` ou um bitmap ao lado do
+ *    decor), e aqui vira uma linha — `agua` já está no contrato do tileset.
+ *
+ * 4. O CUSTO. O atlas do forge é 8 direções × 9 poses = 72 quadros, e o terreno
+ *    lê exatamente UM deles: a coluna ('parado', 0) na linha `DIR_TERRENO`. Os
+ *    71 restantes são desperdício assumido — o forge não expõe canal para forjar
+ *    menos (nem `DIRECOES` nem `COLUNAS` são opção), e criar um seria mexer no
+ *    módulo que serve a todo o elenco para poupar o que se paga UMA vez por
+ *    andar. O que impede o desperdício de virar preço é o cache: um atlas por
+ *    (nível, papel, índice), memoizado sob demanda, mais a memoização do próprio
+ *    forge por (modelo, opções) — o nível 1 declara 8 entradas de piso mas só 3
+ *    modelos distintos, e as 5 repetições de grama não custam uma segunda forja.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Opções de forja de um tileset. Ver a decisão 1 acima: uma por objeto de
+ * tileset, montada na primeira vez e nunca mais.
+ *
+ * `WeakMap` e não `Map` porque a chave é o próprio objeto do tileset: um
+ * registro novo (o dia do nível 2) não deixa entrada órfã para trás.
+ */
+const FORJAS_DE_TILESET = new WeakMap<Tileset, OpcoesForja>();
+
+function forjaDoTileset(tileset: Tileset): OpcoesForja {
+  const pronta = FORJAS_DE_TILESET.get(tileset);
+  if (pronta) return pronta;
+  /* Os cinco campos de material do tileset, repassados inteiros — o renderer
+   * não escolhe cor de terreno, como não escolhe cor de monstro. `emissivas` é
+   * o que faz a flor laranja do nível 1 atravessar acesa a modulação de luz
+   * (§1.1 do BESTIARIO); lista vazia custa zero no forge. */
+  const nova: OpcoesForja = {
+    paleta: tileset.paleta,
+    rampas: tileset.rampas,
+    rampaDaCor: tileset.rampaDaCor,
+    repouso: tileset.repouso,
+    emissivas: tileset.emissivas
+  };
+  FORJAS_DE_TILESET.set(tileset, nova);
+  return nova;
+}
+
+/**
+ * Linha do atlas em que TODO bloco de terreno é lido — a mesma direção fixa dos
+ * despojos (`DIR_ITEM`), e aqui ela é mais que convenção: `giroParaFrente(0, 1)`
+ * é giro ZERO, ou seja, o bloco sai projetado exatamente como
+ * `./tilesets/nivel1.ts` o modelou e calibrou (5·S = `CONFIG.TW`). Qualquer
+ * outra linha giraria o quadrado do tile por dentro do losango e desalinharia os
+ * tufos que transbordam a quina.
+ */
+const DIR_TERRENO = DIR_ITEM;
+
+/**
+ * Um em cada quantos tiles de piso recebe adereço.
+ *
+ * Seis é o número que enche o chão sem virar mato: a referência do andar tem
+ * tufo/pedra/flor como PONTUAÇÃO do terreno, não como cobertura. Abaixo de ~4 o
+ * jogador perde a leitura do que é cenário e do que é coisa com a qual se
+ * interage (o despojo no chão é do mesmo tamanho); acima de ~10 o andar volta a
+ * parecer um tabuleiro vazio.
+ */
+const ADERECO_EM_CADA = 6;
+
+/**
+ * O sorteio do adereço de um tile: DETERMINÍSTICO, sem estado e sem relógio —
+ * `Math.random` é proibido nesta camada (tools/check-boundaries.mjs reprova) e
+ * seria pior que proibido: o tufo mudaria de lugar a cada quadro.
+ *
+ * A mistura é sobre (x, y) E sobre os bits ALTOS do decor do tile, por duas
+ * razões distintas:
+ *
+ *   - (x, y) sozinho daria o MESMO mapa de adereços em toda semente e em todo
+ *     andar (o hash não conhece a partida). `decor` é derivado da semente do
+ *     mapa (`computeDecor`, src/engine/mapgen.ts), então entra como tempero de
+ *     partida sem que este arquivo precise de um canal novo no engine;
+ *   - os bits BAIXOS (`decor & 7`) são o bucket que já escolhe a variante de
+ *     piso. Reaproveitá-los amarraria o adereço ao chão — flores só na areia,
+ *     pedra só na terra — e o padrão apareceria a olho nu. Os bits 3..7 estão
+ *     livres, e é deles que este sorteio vive.
+ *
+ * Avalanche à la Wang/xxhash: um bit de entrada mexe em todos os de saída, que
+ * é o que permite tirar DUAS decisões independentes do mesmo número (o `% 6` da
+ * frequência sai dos bits baixos; a escolha da peça, dos bits 8 em diante).
+ */
+function sorteioDeAdereco(x: number, y: number, decor: number): number {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263);
+  h = (h ^ Math.imul((decor >>> 3) + 1, 2246822519)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 2654435761);
+  return (h ^ (h >>> 13)) >>> 0;
+}
+
 /**
  * §6 — a troca de tile leva ~120 ms NA TELA. O estado lógico já mudou antes do
  * primeiro quadro desta interpolação: o turno não espera animação (R54).
@@ -1224,6 +1366,40 @@ export class IsoRenderer {
   private carimboItens = 0;
   /** Pops de coleta vivos. Poucos e de vida curtíssima — varridos sem índice. */
   private readonly coletas: ColetaVfx[] = [];
+
+  /* --- o TERRENO (ver a seção `O TERRENO`, acima) --- */
+  /**
+   * O tileset do andar corrente. Trocado só em `sincronizarTileset`, que roda
+   * na troca de mapa — e não por quadro: perguntar `tilesetDoNivel(depth)` no
+   * laço de pisos seria uma busca em tabela por tile para responder sempre a
+   * mesma coisa.
+   */
+  private tileset: Tileset = tilesetDoNivel(1);
+  /** Nível cujo tileset está hasteado acima (−1 = nenhum ainda). */
+  private nivelTileset = -1;
+  /**
+   * Atlas do terreno por (nível, papel, índice) — `1:piso:3`, `1:parede`,
+   * `1:adereco:2`. Mesmo protocolo de `atlasInimigo` e de `atlasItem`:
+   * `undefined` = nunca tentado, `null` GUARDADO = tentou e não há canvas
+   * (jsdom) — a forja jamais vira retentativa por quadro.
+   *
+   * A chave carrega o NÍVEL porque o cache sobrevive à descida: voltar ao andar
+   * 1 não deve reforjar a grama, e o piso 0 do nível 2 não pode ser servido no
+   * lugar do piso 0 do nível 1.
+   */
+  private readonly atlasTerreno = new Map<string, AtlasPersonagem | null>();
+  /**
+   * As chaves de `atlasTerreno` do andar corrente, montadas UMA vez por nível.
+   *
+   * Existem por uma razão de laço quente: o passe de pisos roda por tile
+   * VISÍVEL e por quadro (centenas de vezes a 60 fps), e concatenar
+   * `nivel + ':piso:' + k` ali dentro seria alocar uma string por tile por
+   * quadro — contra a invariante deste arquivo ("zero alocação de objeto no
+   * laço quente"). Com as chaves prontas, o custo por tile é um `Map.get`.
+   */
+  private chavesPiso: readonly string[] = [];
+  private chavesAdereco: readonly string[] = [];
+  private chaveParede = '';
 
   /* --- os pontos de parada (ver `FICHAS_DE_PARADA`) --- */
   /**
@@ -1845,12 +2021,23 @@ export class IsoRenderer {
         lvl = seen ? (d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0) : 0;
         bucket = decor ? decor[i] & 7 : 0;
         alt = ((x >> 2) + (y >> 2)) & 1;
-        this.drawFloor(ctx, sx, sy, hw, hh, bucket, alt, seen, lvl);
+        this.drawFloor(ctx, sx, sy, hw, hh, z, bucket, alt, seen, lvl);
         if (x > 0 && y > 0 && tiles[i - w - 1] === this.T_WALL) {
           this.drawWallShadow(ctx, sx, sy, hw, hh, seen);
         }
         if (t === this.T_STAIRS) this.drawStairs(ctx, sx, sy, hw, hh, seen, lvl);
         else if (t === this.T_DOOR) this.drawDoor(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+        /* O adereço do tileset, no fim do passe de PISOS: depois do bloco (ele
+         * fica em cima do chão) e da sombra da parede (que é decalque de chão),
+         * e antes das entidades desta mesma antidiagonal — que só são
+         * desenhadas no terceiro laço. É o que garante que o herói pise SOBRE o
+         * tufo, e não atrás dele.
+         *
+         * `else` do encadeamento acima porque escada e porta não recebem
+         * adereço: os dois já desenham no losango inteiro, e um seixo em cima
+         * do glifo da escada esconderia a única saída do andar. O resto das
+         * exclusões (quem está de pé no tile) é de `desenharAdereco`. */
+        else this.desenharAdereco(ctx, game, x, y, i, sx, sy + hh, z, decor ? decor[i] : 0, lvl);
       }
 
       /* --- paredes da antidiagonal (translúcidas quando encobrem o herói) --- */
@@ -1869,12 +2056,18 @@ export class IsoRenderer {
         bucket = decor ? decor[i] & 7 : 0;
         const wa = this.alfaParedes.get(i);
         if (wa !== undefined && wa < 0.995) {
+          /* A transparência do canto frontal, intacta desde o losango: o
+           * `globalAlpha` do contexto vale para o `drawImage` do sprite
+           * exatamente como valia para o `fill()` do prisma — é o alfa do
+           * COMPOSITOR, não uma propriedade do caminho. Os dois desenhos de
+           * `drawWall` (sprite e reserva geométrica) o respeitam sem saber que
+           * ele existe. */
           ctx.save();
           ctx.globalAlpha = wa;
-          this.drawWall(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+          this.drawWall(ctx, sx, sy, hw, hh, wh, z, bucket, seen, lvl);
           ctx.restore();
         } else {
-          this.drawWall(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+          this.drawWall(ctx, sx, sy, hw, hh, wh, z, bucket, seen, lvl);
         }
       }
 
@@ -2043,6 +2236,12 @@ export class IsoRenderer {
     this.atlasXp.clear();
     this.atlasItem.clear();
     this.atlasParada.clear();
+    // O terreno segue a mesma regra dos outros atlas: o forge continua com os
+    // pixels memoizados por (modelo, opções); aqui só soltamos as referências
+    // desta instância. `nivelTileset` volta a −1 para que um renderizador
+    // reaproveitado remonte as chaves no primeiro `syncRun`.
+    this.atlasTerreno.clear();
+    this.nivelTileset = -1;
     this.facingMercador = DEFAULT_FACING;
     this.itensVistos.clear();
     this.coletas.length = 0;
@@ -2120,6 +2319,10 @@ export class IsoRenderer {
   private syncRun(game: Game): void {
     if (this.lastMap === game.map) return;
     this.lastMap = game.map;
+    // Andar novo, terreno novo: o tileset e as chaves de cache dele são
+    // hasteados AQUI, uma vez por mapa. Os atlas já forjados ficam — a chave
+    // deles carrega o nível, e descer e voltar não pode reforjar a grama.
+    this.sincronizarTileset(game.map.depth);
     this.vfx = new Map<string, Vfx>();
     // Mapa novo = chão novo. Os rastros dos abates são do andar que ficou para
     // trás — como o sangue do Guerreiro, eles não descem a escada. Os ATLASES
@@ -2317,12 +2520,115 @@ export class IsoRenderer {
 
   /* ------------------------------------------------------------------ *
    * Piso, parede, sombras, escada e porta
+   *
+   * O piso e a parede são SPRITE (o bloco do tileset do andar) com o desenho
+   * geométrico do vanilla como reserva. Escada, porta e sombra de parede
+   * continuam sendo primitivas por cima do chão, sem uma vírgula alterada: os
+   * três são LINGUAGEM DE JOGO (aqui se desce, aqui se passa, ali há um vulto),
+   * não terreno, e não é o tileset que decide como o jogo fala com o jogador.
    * ------------------------------------------------------------------ */
 
+  /**
+   * O bloco de terreno de um tile, colado pela ÂNCORA do atlas sobre o centro
+   * do losango — o mesmo ponto onde o Guerreiro assenta as botas. É essa
+   * coincidência que faz o herói ficar EM CIMA do piso e ao PÉ da parede sem
+   * nenhum ajuste de offset: o rig do tileset põe o topo do piso em z = 0 (ver
+   * a calibração no cabeçalho de `./tilesets/nivel1.ts`) e a projeção de z = 0 é
+   * exatamente a âncora.
+   *
+   * A luz entra por `quadroModulado`, como no elenco: o terreno escurece com a
+   * distância, e as cores emissivas do tileset (a flor laranja do nível 1)
+   * atravessam acesas sem que este método saiba que elas existem.
+   *
+   * Devolve `false` quando não há pixel nenhum a colar (atlas indisponível) —
+   * o sinal de "desenhe do jeito antigo" para quem chamou.
+   *
+   * Posição arredondada e tamanho não: é o que o resto do arquivo faz com todo
+   * sprite, e no terreno tem uma consequência a mais que vale registrar. Em
+   * zoom 1 os tiles distam 32/16 px INTEIROS, então arredondar preserva o
+   * espaçamento exato e os blocos encaixam sem costura. Em zoom fracionário
+   * pode sobrar meio pixel entre dois blocos — e o que aparece nessa fresta não
+   * é o fundo, é a SAIA do bloco de trás (o corpo de 4u que desce abaixo do
+   * topo, desenhado antes por estar numa antidiagonal anterior). Ou seja: o pior
+   * caso é uma linha escura de um pixel onde o tileset já desenha o contorno
+   * entre blocos.
+   */
+  private colarTerreno(
+    ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem,
+    cx: number, cy: number, z: number, lvl: number
+  ): boolean {
+    const f = quadroModulado(atlas, DIR_TERRENO, 'parado', 0, lvl / (LEVELS - 1));
+    if (!f.fonte) return false;
+    const dx = Math.round(cx - atlas.ancoraX * z);
+    const dy = Math.round(cy - atlas.ancoraY * z);
+    const suave = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
+    ctx.imageSmoothingEnabled = suave;
+    return true;
+  }
+
+  /**
+   * O atlas de uma peça do terreno, forjado SOB DEMANDA e uma vez só — o padrão
+   * de `atlasDoInimigo`, com a chave (nível, papel, índice) de `atlasTerreno`.
+   * Sem canvas devolve `null` E GUARDA o `null`.
+   */
+  private atlasDoTerreno(chave: string, modelo: No): AtlasPersonagem | null {
+    const pronto = this.atlasTerreno.get(chave);
+    // `undefined` = nunca perguntado; `null` = já perguntado e não há atlas.
+    if (pronto !== undefined) return pronto;
+    const atlas = this.forjarSeguro(modelo, forjaDoTileset(this.tileset));
+    this.atlasTerreno.set(chave, atlas);
+    return atlas;
+  }
+
+  /**
+   * Hasteia o tileset do andar e monta as chaves de cache dele. Chamado por
+   * `syncRun` (troca de mapa), nunca no laço de desenho.
+   *
+   * Profundidade inválida (save antigo, `undefined`) cai no nível 1 — o mesmo
+   * espírito de `tilesetDoNivel`, que degrada para um terreno conhecido em vez
+   * de não desenhar chão nenhum.
+   */
+  private sincronizarTileset(depth: number): void {
+    const nivel = typeof depth === 'number' && isFinite(depth) && depth >= 1 ? Math.floor(depth) : 1;
+    if (nivel === this.nivelTileset) return;
+    this.nivelTileset = nivel;
+    const t = tilesetDoNivel(nivel);
+    this.tileset = t;
+    const piso: string[] = [];
+    for (let k = 0; k < t.piso.length; k++) piso.push(nivel + ':piso:' + k);
+    const aderecos: string[] = [];
+    for (let k = 0; k < t.aderecos.length; k++) aderecos.push(nivel + ':adereco:' + k);
+    this.chavesPiso = piso;
+    this.chavesAdereco = aderecos;
+    this.chaveParede = nivel + ':parede';
+  }
+
+  /**
+   * O piso: o bloco do tileset escolhido pelo BUCKET de decoração
+   * (`map.decor[i] & 7`, o mesmo número que antes escolhia a variação de cor do
+   * losango), fechado com módulo sobre a lista — é o tileset que decide a
+   * distribuição, declarando a mesma variante mais de uma vez (no nível 1, a
+   * grama ocupa 5 dos 8 buckets).
+   *
+   * Sem atlas, o losango pintado do vanilla, byte a byte: cor de
+   * `FLOOR_LIT`/`FLOOR_DIM` pelo par (alt, bucket) e a aresta de 1px no
+   * topo-esquerdo. `alt` (o xadrez de blocos 4×4) só vive aqui — o sprite tira a
+   * variação da geometria do rig, não de um segundo tom da mesma cor.
+   */
   private drawFloor(
-    ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number,
+    ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number, z: number,
     bucket: number, alt: number, seen: boolean, lvl: number
   ): void {
+    const piso = this.tileset.piso;
+    if (piso.length > 0) {
+      const k = bucket % piso.length;
+      const atlas = this.atlasDoTerreno(this.chavesPiso[k], piso[k]);
+      if (atlas && this.colarTerreno(ctx, atlas, sx, sy + hh, z, lvl)) return;
+    }
+
+    /* --- reserva: o losango de sempre (jsdom, Node, sem contexto 2D) --- */
     const luts = this.luts;
     ctx.fillStyle = seen ? luts.FLOOR_LIT[alt][bucket][lvl] : luts.FLOOR_DIM[alt][bucket];
     pathDiamond(ctx, sx, sy, hw, hh);
@@ -2336,6 +2642,78 @@ export class IsoRenderer {
     ctx.stroke();
   }
 
+  /**
+   * O adereço de um tile de piso (tufo, seixo, moita, flor): sorteado de forma
+   * determinística por `sorteioDeAdereco` e desenhado EM CIMA do bloco, na
+   * mesma âncora dele.
+   *
+   * A ordem das três guardas é a ordem do CUSTO, e é ela que mantém isto fora
+   * do orçamento do laço quente: primeiro a lista vazia (um andar sem adereço
+   * não paga nada), depois o sorteio (três `imul` que dispensam 5 de cada 6
+   * tiles) e só então a consulta de ocupação, que é a cara.
+   *
+   * O adereço CEDE o tile a quem estiver nele — herói, monstro, despojo,
+   * mercador ou peça da alquimia. O preço é honesto e está aqui escrito: o tufo
+   * SOME enquanto alguém pisa nele e volta quando o tile esvazia. É pop, e o
+   * pop é o menor dos males — a alternativa é uma moita de 4u nascendo no meio
+   * do sprite do goblin, e nenhum ajuste de ordem de desenho conserta um objeto
+   * que ocupa o mesmo volume que a entidade.
+   *
+   * Desenhado também no que é só MEMÓRIA (tile explorado fora do FOV), como o
+   * piso e a parede: adereço é terreno, e terreno lembrado não pisca. A luz
+   * disso é `lvl = 0`, o degrau mais escuro — o mesmo que o piso recebe ali.
+   * Consequência assumida: a flor laranja do nível 1 é EMISSIVA, e emissiva
+   * atravessa a modulação acesa (§1.1 do BESTIARIO) — ou seja, ela continua
+   * brilhando no que o herói só se lembra de ter visto. É o comportamento certo
+   * pela leitura (uma coisa que emite luz é justamente o que se enxerga de
+   * longe, e é para isso que o rig tem essa peça) e atinge ~3% dos tiles de
+   * piso: um adereço em cinco, num tile em seis.
+   */
+  private desenharAdereco(
+    ctx: CanvasRenderingContext2D, game: Game, x: number, y: number, i: number,
+    sx: number, cy: number, z: number, decor: number, lvl: number
+  ): void {
+    const lista = this.tileset.aderecos;
+    if (lista.length === 0) return;
+    const h = sorteioDeAdereco(x, y, decor);
+    if (h % ADERECO_EM_CADA !== 0) return;
+    if (!this.tileLivreParaAdereco(game, x, y, i)) return;
+    // Bits ALTOS para a peça: os baixos já foram gastos na frequência acima.
+    const k = (h >>> 8) % lista.length;
+    const atlas = this.atlasDoTerreno(this.chavesAdereco[k], lista[k]);
+    if (atlas) this.colarTerreno(ctx, atlas, sx, cy, z, lvl);
+  }
+
+  /**
+   * Há espaço para um adereço neste tile? Só se não houver NADA de pé nele.
+   *
+   * Entidade e despojo saem dos índices que `indexEntities` acabou de montar
+   * (`entAt`/`itemAt`) — a mesma leitura por índice de tile que o passe de
+   * entidades faz, sem varrer lista nenhuma. Os pontos de parada saem do `Game`
+   * porque não têm índice: são até quatro pontos no andar inteiro, e quatro
+   * comparações num tile que já passou pelo funil de 1-em-6 custam menos que o
+   * quinto array de índice deste arquivo.
+   */
+  private tileLivreParaAdereco(game: Game, x: number, y: number, i: number): boolean {
+    const p = game.player;
+    if (p && p.x === x && p.y === y) return false;
+    if (this.entAt && this.entAt[i] >= 0) return false;
+    // Só o primeiro slot da pilha: se ele está vazio, não há item nenhum aqui.
+    if (this.itemAt && this.itemAt[i * PILHA_MAX] >= 0) return false;
+    const merc = game.mercador;
+    if (merc && merc.x === x && merc.y === y) return false;
+    const cald = game.bancada;
+    if (cald && cald.x === x && cald.y === y) return false;
+    const extras = game.alquimiaExtras;
+    if (extras) {
+      for (let k = 0; k < extras.length; k++) {
+        const ex = extras[k];
+        if (ex && ex.x === x && ex.y === y) return false;
+      }
+    }
+    return true;
+  }
+
   private drawWallShadow(
     ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number, seen: boolean
   ): void {
@@ -2344,10 +2722,31 @@ export class IsoRenderer {
     ctx.fill();
   }
 
+  /**
+   * A parede: o bloco alto do tileset, ancorado no MESMO ponto do piso (o centro
+   * do losango). Quem sobe de z = 0 até `WALL_H` é o rig — o volume desenhado é
+   * o mesmo que o prisma geométrico ocupava, e é por isso que a silhueta do
+   * andar não mudou de lugar ao trocar de técnica.
+   *
+   * O alfa da transparência do canto frontal NÃO é decidido aqui: quem o arma é
+   * `draw`, com `ctx.globalAlpha` em volta da chamada (ver `ALFA_PAREDE_OCULTA`).
+   * Os dois caminhos abaixo o respeitam de graça — `drawImage` e `fill()` são os
+   * dois compostos pelo alfa do contexto.
+   *
+   * Sem atlas, o prisma do vanilla: topo em losango, face esquerda 18% mais
+   * escura, face direita 32%, contorno sutil e a aresta vertical central.
+   */
   private drawWall(
     ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number, wh: number,
-    bucket: number, seen: boolean, lvl: number
+    z: number, bucket: number, seen: boolean, lvl: number
   ): void {
+    const parede = this.tileset.parede;
+    if (parede) {
+      const atlas = this.atlasDoTerreno(this.chaveParede, parede);
+      if (atlas && this.colarTerreno(ctx, atlas, sx, sy + hh, z, lvl)) return;
+    }
+
+    /* --- reserva: o prisma de sempre (jsdom, Node, sem contexto 2D) --- */
     const luts = this.luts;
     const top = seen ? luts.WALL_LIT[0][bucket][lvl] : luts.WALL_DIM[0][bucket];
     const left = seen ? luts.WALL_LIT[1][bucket][lvl] : luts.WALL_DIM[1][bucket];

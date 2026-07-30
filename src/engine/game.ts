@@ -24,6 +24,7 @@ import type {
   LogClass,
   LogEntry,
   MaterialKind,
+  Missao,
   Player,
   Point,
   ReceitaKind,
@@ -53,15 +54,19 @@ import {
   ARCHETYPES,
   ARMA_NIVEL_MAX,
   ATK_POR_REFINO,
+  DROPS,
   ITEM_KINDS,
   ITENS,
   POTION_HEAL,
   PRECO_POCAO,
   RECEITAS,
+  descDaMissao,
   ehMaterial,
   faltasDaReceita,
   makeItem,
+  nomeDaMissao,
   normalizeItemKind,
+  normalizeMaterialKind,
   normalizeReceita,
   populate,
   processEnemies,
@@ -419,6 +424,10 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
     // A decoração da estação de alquimia acompanha o caldeirão — ela sai do
     // mesmo cálculo e nunca é recomposta em outro lugar.
     alquimiaExtras: pop.alquimiaExtras,
+    // As caçadas do andar 1 (fase 3): saem de `populate` com o resto da
+    // população, e daqui para frente são do JOGADOR — `descend` soma as do
+    // andar novo a estas, nunca zera a lista.
+    missoes: pop.missoes,
     enemies: pop.enemies,
     items: pop.items,
     // Continua a numeração de `populate` (1..N) — o primeiro despojo é N+1.
@@ -447,6 +456,7 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
     ui: { hover: null, debug: false, fovProbe: false, follow: true },
     lastRoomId: null,  // sala em que o jogador está (log de movimentação, R49)
     emTurno: false,    // trava de reentrância do fim de turno
+    ultimoLembreteMissao: null, // trava do lembrete de entrega (transitória)
     abatesRecentes: [] // §16 — fila visual dos flutuantes de XP (o renderer drena)
   };
   game.lastRoomId = idDaSala(map, game.player.x, game.player.y);
@@ -525,6 +535,23 @@ function largarDespojos(game: Game, ent: Enemy): void {
   }
 }
 
+/**
+ * Fase 3 — um abate alimenta TODA caçada aberta daquele arquétipo (a do
+ * andar 1 e a do andar 3 convivem na lista, e cada uma conta os seus). Sem
+ * linha de registro aqui de propósito: o progresso aparece no painel, e o
+ * registro só fala de missão quando ela INTEIRA fecha — na entrega.
+ */
+function registrarAbateEmMissoes(game: Game, kind: ArchetypeKey): void {
+  const missoes = game.missoes;
+  if (!missoes) return;
+  for (let i = 0; i < missoes.length; i++) {
+    const m = missoes[i];
+    if (!m || m.completa) continue;
+    if (m.alvo !== kind) continue;
+    m.progressoMatar += 1;
+  }
+}
+
 function atacarInimigo(game: Game, ent: Enemy): void {
   const dmg = rollDamage(game.rngCombat, game.player.atk);
   ent.hp -= dmg;
@@ -536,6 +563,7 @@ function atacarInimigo(game: Game, ent: Enemy): void {
     ent.hp = 0;
     removerInimigo(game, ent);
     game.stats.kills += 1;
+    registrarAbateEmMissoes(game, ent.kind);
     // §15 — o XP do abate vai no registro: é o único feedback visível da
     // escala enquanto a UI não mostra XP (a barra de XP é fase futura).
     const xp = xpPorAbate(game.player, ent);
@@ -729,6 +757,10 @@ function mover(game: Game, dx: number, dy: number): boolean {
   narrarSala(game);
   pegarItem(game, false);
   narrarParada(game);
+  /* Fase 3 — chegar ao lado do balcão com caçada pronta merece o lembrete
+   * (uma vez por encontro). Depois de `pegarItem`: o despojo recolhido NESTE
+   * passo já conta para a prontidão. */
+  lembrarEntrega(game);
   if (tileEm(map, nx, ny) === Tile.Stairs) {
     logMsg(game, 'Você pisa na escada. Use ">" ou Enter para descer ao nível ' +
       (game.depth + 1) + '.', 'aviso');
@@ -988,6 +1020,144 @@ function criar(game: Game, receitaBruta: ReceitaKind): boolean {
   return true;
 }
 
+/* ------------------------------------------------------------------ *
+ * Caçadas (fase 3) — a entrega é a quarta ação do balcão
+ *
+ * `entregar` segue a mesma anatomia de vender/comprar/criar (recusa muda em
+ * 'aviso' sem turno, efeito que consome turno) e NÃO encosta em sorteio —
+ * a caçada já foi sorteada na população do andar; aqui é só conferência.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Quantos despojos dos tipos da missão a bolsa tem, SOMANDO os tipos. A
+ * entrega é um total ('2 despojos de goblin'), não uma linha por tipo — é o
+ * que deixa uma orelha e uma cimitarra fecharem a mesma conta.
+ */
+function totalDaEntregaNaBolsa(bag: Player['bag'], m: Missao): number {
+  let total = 0;
+  for (let i = 0; i < m.itens.length; i++) {
+    total += bag[m.itens[i]] || 0;
+  }
+  return total;
+}
+
+/**
+ * A primeira caçada PRONTA para entregar: abate fechado (`progressoMatar >=
+ * matar`, predicado derivado) e despojos suficientes na bolsa. Varre a lista
+ * na ordem de geração — a mesma do painel e do `entregar`.
+ */
+function missaoPronta(game: Game): Missao | null {
+  const missoes = game.missoes;
+  if (!missoes) return null;
+  const bag = game.player.bag;
+  for (let i = 0; i < missoes.length; i++) {
+    const m = missoes[i];
+    if (!m || m.completa) continue;
+    if (m.progressoMatar < m.matar) continue;
+    if (totalDaEntregaNaBolsa(bag, m) < m.entregar) continue;
+    return m;
+  }
+  return null;
+}
+
+/**
+ * O lembrete do balcão: ao CHEGAR ao lado do mercador com uma caçada pronta,
+ * uma linha aponta o quadro. A trava (`game.ultimoLembreteMissao`) deixa a
+ * linha sair UMA vez por encontro — passear ao redor do mercador não repete,
+ * sair e voltar lembra de novo. É o bem-vindo sem o spam, no mesmo padrão da
+ * mensagem de esbarrão.
+ */
+function lembrarEntrega(game: Game): void {
+  const pronta = aoLadoDa(game, game.mercador) ? missaoPronta(game) : null;
+  if (!pronta) {
+    game.ultimoLembreteMissao = null;
+    return;
+  }
+  if (game.ultimoLembreteMissao === pronta.key) return;
+  game.ultimoLembreteMissao = pronta.key;
+  logMsg(game, 'O mercador aponta o quadro de caçadas: "' + pronta.nome +
+    '" está pronta — é só entregar.', 'info');
+}
+
+/**
+ * Entrega as caçadas prontas ao mercador (fase 3).
+ *
+ * Varre `game.missoes` NA ORDEM DE GERAÇÃO e liquida cada uma cujas DUAS
+ * partes estejam fechadas no instante da conferência — abate feito e bolsa
+ * com os despojos. A conferência é sequencial e a bolsa é lida de novo a cada
+ * missão: duas caçadas do mesmo arquétipo (a do andar 1 e a do andar 3)
+ * disputam a mesma orelha, e quem nasceu primeiro é servido primeiro — a
+ * ordem da lista é o desempate, aqui como no painel e no snapshot.
+ *
+ * O consumo sai da bolsa na ordem de `ITEM_KINDS` (a ordem canônica de
+ * leitura da bolsa, nunca a acidental das chaves), até fechar o total. Cada
+ * entrega marca `completa` e `entregue`, paga as moedas e o bônus, e escreve
+ * UMA linha com o nome da missão e a recompensa — é o único lugar onde o
+ * registro fala de missão fechada.
+ */
+function entregar(game: Game): boolean {
+  const p = game.player;
+  if (!aoLadoDa(game, game.mercador)) {
+    logMsg(game, 'Você precisa estar ao lado do mercador.', 'aviso');
+    return false;
+  }
+  const missoes = game.missoes || [];
+  let entregues = 0;
+  for (let i = 0; i < missoes.length; i++) {
+    const m = missoes[i];
+    if (!m || m.completa) continue;
+    if (m.progressoMatar < m.matar) continue;
+    if (totalDaEntregaNaBolsa(p.bag, m) < m.entregar) continue;
+
+    let falta = m.entregar;
+    for (let k = 0; k < ITEM_KINDS.length && falta > 0; k++) {
+      const kind = ITEM_KINDS[k];
+      if (!ehMaterial(kind)) continue;
+      if (m.itens.indexOf(kind) < 0) continue;
+      const tem = p.bag[kind] || 0;
+      const sai = Math.min(tem, falta);
+      if (sai > 0) {
+        tirarDaBolsa(p, kind, sai);
+        falta -= sai;
+      }
+    }
+    m.completa = true;
+    m.entregue = true;
+    p.moedas += m.recompensaMoedas;
+    let texto = 'Missão cumprida: ' + m.nome + '! O mercador paga ' +
+      moedasEmTexto(m.recompensaMoedas);
+    if (m.recompensaItem) {
+      p.bag[m.recompensaItem.kind] = (p.bag[m.recompensaItem.kind] || 0) + m.recompensaItem.n;
+      texto += ' e ' + quantiaDeItem(ITENS[m.recompensaItem.kind], m.recompensaItem.n) +
+        ' de bônus';
+    }
+    texto += '. Total: ' + moedasEmTexto(p.moedas) + '.';
+    logMsg(game, texto, 'bom');
+    entregues++;
+  }
+
+  if (entregues > 0) {
+    /* Entregue, a trava do lembrete morre com a caçada: a próxima pronta (se
+     * houver) ganha a sua vez de ser anunciada. */
+    game.ultimoLembreteMissao = null;
+    return true;
+  }
+
+  /* Recusa explicada: se há abate feito e faltam despojos, é isso que o
+   * jogador precisa ouvir; se nem abate há, a caçada ainda é caçada. */
+  for (let i = 0; i < missoes.length; i++) {
+    const m = missoes[i];
+    if (!m || m.completa) continue;
+    if (m.progressoMatar < m.matar) continue;
+    logMsg(game, 'O mercador aguarda os despojos de "' + m.nome + '": ' +
+      m.entregar + ' no total, e a bolsa tem ' + totalDaEntregaNaBolsa(p.bag, m) + '.',
+      'aviso');
+    return false;
+  }
+  logMsg(game, 'Nenhuma caçada pronta para entregar — o abate vem primeiro.', 'aviso');
+  return false;
+}
+
 // --------------------------------------------------------------------------
 // Porta única de comandos
 // --------------------------------------------------------------------------
@@ -1043,6 +1213,11 @@ export function applyCommand(g: Game, cmd: Command): boolean {
       break;
     case 'criar':
       consumiu = criar(g, cmd.receita);
+      break;
+    /* Fase 3 — a entrega de caçadas mora no mesmo balcão da venda: ao lado
+     * do mercador, sem parâmetro, e com turno consumido quando liquida. */
+    case 'entregar':
+      consumiu = entregar(g);
       break;
     default:
       return false;
@@ -1210,6 +1385,10 @@ export function descend(g: Game): void {
   g.mercador = pop.mercador;
   g.bancada = pop.bancada;
   g.alquimiaExtras = pop.alquimiaExtras;
+  /* As caçadas ATRAVESSAM a descida (são do jogador, como a bolsa): as do
+   * andar novo se SOMAM às pendentes — uma 'abate-chaser' do andar 1 continua
+   * valendo aqui, e o abate conta por arquétipo, não por andar. */
+  g.missoes = (g.missoes || []).concat(pop.missoes);
   // Andar novo, numeração de item nova: `populate` voltou a contar do 1.
   g.proxItemId = proximoIdDeItem(pop.items);
   g.rngCombat = makeRng(hash32(g.seedStr + '#combat' + depth));
@@ -1283,43 +1462,45 @@ function extrasEmTexto(lista: Point[] | null | undefined): string {
  * Resumo textual determinístico do estado. O golden test compara string com
  * string: o formato tem de sair estável byte a byte.
  *
- * FORMATO v4 (a fase 2.1 — a estação de alquimia com três tiles):
+ * FORMATO v5 (a fase 3 — as caçadas do quadro do mercador):
  *
- *   v4|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
+ *   v5|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
  *     |E[1:linker:9:14:20|2:chaser:12:18:9]
  *     |I[3:potion:11:7|7:orelhaGoblin:18:9|8:espadaGoblin:18:9]
  *     |B[gosma2|orelhaGoblin1]
+ *     |M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:1:26:espadaGoblin*1:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]
  *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364
  *     |merc=24,9|banc=8,31|alq=8,30;9,31|map=1f3ac2b9
  *
- * O que mudou do v3, e por quê:
- *  · nasceu `alq=`, a lista dos tiles de DECORAÇÃO da estação de alquimia
- *    (estante e mesa), no formato `x,y;x,y` e com `-` para lista vazia. Ela
- *    entra pelo mesmo motivo que `merc=` e `banc=` entraram: é estado de jogo
- *    que o mapa não carrega — o checksum de `map=` é cego a ela —, e é
- *    território RESERVADO, então duas partidas com a estação montada de lados
- *    diferentes precisam sair diferentes para o oracle;
- *  · o lugar é logo depois de `banc=`, porque o caldeirão e os extras são a
- *    mesma instalação e se leem juntos;
- *  · a etiqueta subiu de `v3` para `v4`: o golden gravado com o formato antigo
- *    DEVE reprovar, e reprovar dizendo qual é o problema (formato novo) em vez
- *    de fingir divergência de simulação.
+ * O que mudou do v4, e por quê:
+ *  · nasceu `M[...]`, a lista das caçadas, na ORDEM DE GERAÇÃO (andar a
+ *    andar, e `KINDS` dentro do andar) — estável por construção, sem sort
+ *    aqui, porque é essa mesma ordem que o painel lê e o `entregar` varre.
+ *    Cada missão sai como
  *
- * O que veio do v3 e continua valendo: `,mo<moedas>` e `,arm<armaNivel>` no FIM
- * do bloco do jogador, para que a leitura da esquerda continue idêntica à do
- * v2; e `merc=`/`banc=`, os dois pontos de parada, no formato `x,y` ou `-`.
+ *      key:alvo:matar:entregar:itens(+):progresso:moedas:bônus:completa:entregue
  *
- * O que veio do v2 (herança dos despojos): `I[...]` traz `id:kind:x:y` — sem o
- * `kind` o oracle não distingue uma orelha de uma clava caídas no mesmo tile;
- * `B[...]` é a bolsa na ordem fixa de `ITEM_KINDS`, só com contagem positiva
- * (bolsa vazia sai `B[]`); e `rngL=` é o estado do stream de despojos, que é
- * divergência de estado como qualquer outra.
+ *    com os tipos da entrega separados por `+` (o `|` já separa missões, o
+ *    `:` já separa campos), o bônus como `kind*n` ou `-`, e as duas flags
+ *    como 0/1. A receita INTEIRA entra — matar, entregar, itens e as duas
+ *    recompensas — porque duas 'abate-chaser' de andares diferentes só se
+ *    distinguem por ela, e um progresso sem a meta não diz nada;
+ *  · o lugar é logo depois de `B[...]`: a caçada é a outra face da bolsa (uma
+ *    pede o que a outra guarda), e a leitura esquerda→direita fica "o que eu
+ *    tenho" seguido de "o que me pediram";
+ *  · a etiqueta subiu de `v4` para `v5`: o golden gravado com o formato
+ *    antigo DEVE reprovar dizendo que o problema é o formato, e não fingir
+ *    divergência de simulação (a mesma razão de cada etiqueta anterior).
+ *
+ * O que veio do v3/v4 e continua valendo: `,mo<moedas>` e `,arm<armaNivel>`
+ * no fim do bloco do jogador; `merc=`/`banc=`/`alq=` antes do checksum; e
+ * tudo do v2 (`I[...]` com kind, `B[...]` na ordem da tabela, `rngL=`).
  */
 export function snapshot(game: Game): string {
   if (!game) return '';
   const p = game.player;
   const partes: string[] = [];
-  partes.push('v4');
+  partes.push('v5');
   partes.push('seed=' + game.seedStr);
   partes.push('d=' + game.depth);
   partes.push('t=' + game.turn);
@@ -1357,6 +1538,21 @@ export function snapshot(game: Game): string {
     if (n > 0) buf.push(kind + n);
   }
   partes.push('B[' + buf.join('|') + ']');
+
+  /* Caçadas na ordem de GERAÇÃO — estável por construção (andar a andar, e
+   * KINDS dentro do andar), então nada de sort aqui: a ordem que o painel lê
+   * é a ordem que o oracle grava. */
+  const missoes = game.missoes || [];
+  buf = [];
+  for (i = 0; i < missoes.length; i++) {
+    const m = missoes[i];
+    if (!m) continue;
+    buf.push(m.key + ':' + m.alvo + ':' + m.matar + ':' + m.entregar + ':' +
+      m.itens.join('+') + ':' + m.progressoMatar + ':' + m.recompensaMoedas + ':' +
+      (m.recompensaItem ? m.recompensaItem.kind + '*' + m.recompensaItem.n : '-') +
+      ':' + (m.completa ? 1 : 0) + ':' + (m.entregue ? 1 : 0));
+  }
+  partes.push('M[' + buf.join('|') + ']');
 
   const s = game.stats;
   partes.push('S=' + s.turns + ',' + s.kills + ',' + s.dmgDealt + ',' + s.dmgTaken +
@@ -1551,6 +1747,83 @@ function reconstruirExtras(bruto: unknown, map: GameMap, caldeirao: Point | null
 }
 
 /**
+ * Reconstrói as caçadas do save (fase 3).
+ *
+ * A disciplina é a de sempre: validar e estreitar campo a campo, degradar,
+ * nunca recusar. O que cada filtro faz:
+ *   · entrada que não é objeto, ou `alvo` fora dos três arquétipos, é
+ *     descartada — uma missão sem criatura não tem como progredir;
+ *   · `itens` aceita só materiais conhecidos (`normalizeMaterialKind`), sem
+ *     repetição; se nada sobrar, vale a tabela `DROPS[alvo]` — a receita de
+ *     geração, que é a leitura honesta de um campo apagado à mão;
+ *   · `matar`/`entregar` têm piso 1 (uma missão de zero fecha sozinha, e a
+ *     caçada não é dada de graça); `progressoMatar` tem piso 0;
+ *   · `entregue` implica `completa`: as duas nascem juntas no `entregar`, e
+ *     um save editado que as separe é lido da forma coerente (prêmio pago ⇒
+ *     caçada fechada), nunca da forma impossível;
+ *   · `nome`/`desc` vazios são regerados pela fórmula atual — texto é o
+ *     único dado que se pode reconstruir sem mentir.
+ *
+ * SAVE ANTIGO (sem o campo `missoes`): devolve a LISTA VAZIA, e o `restore`
+ * aplica por cima da lista que `createState` gerou. Não regerar é decisão,
+ * não esquecimento — ver `SaveData.missoes`.
+ */
+function reconstruirMissoes(bruto: unknown): Missao[] {
+  const out: Missao[] = [];
+  const lista = listaDe(bruto);
+  if (!lista) return out;
+  for (let i = 0; i < lista.length; i++) {
+    const o = objetoDe(lista[i]);
+    if (!o) continue;
+    const alvoBruto = o.alvo;
+    if (alvoBruto !== 'chaser' && alvoBruto !== 'sentinel' && alvoBruto !== 'linker') continue;
+    const alvo: ArchetypeKey = alvoBruto;
+
+    const itens: MaterialKind[] = [];
+    const itensBrutos = listaDe(o.itens);
+    if (itensBrutos) {
+      for (let k = 0; k < itensBrutos.length; k++) {
+        const kind = normalizeMaterialKind(itensBrutos[k]);
+        if (kind && itens.indexOf(kind) < 0) itens.push(kind);
+      }
+    }
+    if (itens.length === 0) {
+      const tabela = DROPS[alvo];
+      for (let k = 0; k < tabela.length; k++) itens.push(tabela[k].item);
+    }
+
+    const matar = clampInt(o.matar, 1, 99, 2);
+    const entregarN = clampInt(o.entregar, 1, 99, 1);
+
+    let bonus: { kind: MaterialKind; n: number } | null = null;
+    const rb = objetoDe(o.recompensaItem);
+    if (rb) {
+      const bKind = normalizeMaterialKind(rb.kind);
+      const bN = intOr(rb.n, 0);
+      if (bKind && bN > 0) bonus = { kind: bKind, n: bN };
+    }
+
+    const entregue = o.entregue === true;
+    out.push({
+      key: (typeof o.key === 'string' && o.key) ? o.key : ('abate-' + alvo),
+      alvo: alvo,
+      matar: matar,
+      itens: itens,
+      entregar: entregarN,
+      progressoMatar: clampInt(o.progressoMatar, 0, 999, 0),
+      recompensaMoedas: Math.max(0, intOr(o.recompensaMoedas, 0)),
+      recompensaItem: bonus,
+      nome: (typeof o.nome === 'string' && o.nome) ? o.nome : nomeDaMissao(alvo),
+      desc: (typeof o.desc === 'string' && o.desc) ? o.desc :
+        descDaMissao(alvo, matar, entregarN, itens),
+      completa: o.completa === true || entregue,
+      entregue: entregue
+    });
+  }
+  return out;
+}
+
+/**
  * Reconstrói um estado a partir do objeto lido do armazenamento.
  * O mapa NÃO vem do save: é regerado por seed+depth (determinismo garante que é
  * o mesmo mapa). Run morta não retoma — morte é permanente.
@@ -1678,6 +1951,12 @@ export function restore(dados: unknown): Game | null {
    * quando o save traz um caldeirão diferente. Sem lista salva, a estação
    * retoma sem decoração — o motivo por extenso está em `SaveData`. */
   game.alquimiaExtras = reconstruirExtras(obj.alquimiaExtras, map, game.bancada);
+
+  /* As caçadas SUBSTITUEM a lista que `createState` gerou — o save é a fonte
+   * da verdade porque a lista acumula andares e progresso, e nada disso
+   * renasce da semente. Save antigo (sem o campo) degrada para a lista vazia
+   * (decisão documentada em `SaveData.missoes`), nunca para uma recusa. */
+  game.missoes = reconstruirMissoes(obj.missoes);
 
   // Exploração
   decodificarExplored(game.explored, obj.explored);

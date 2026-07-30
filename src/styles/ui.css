@@ -335,6 +335,39 @@
   color: var(--ambar);
 }
 
+/* ----------------------------------------------------------------- missões */
+
+/* O quadro de missões (fase 3) não inventa primitivo: a lista é `.tabela` /
+   `.tabela-linha` (a mesma da bolsa e do balcão), o nome da missão é
+   `.bolsa-nome`, as linhas de progresso e de recompensa são `.bolsa-preco` e o
+   aviso 'Pronta! Vá ao mercador.' é `.troca-falta` — o âmbar de "olha para
+   cá" já medido. Entra aqui só o que ainda não tinha nome: o realce da missão
+   pronta, o esmaecimento da entregue e o selo de confirmação.
+
+   A borda esquerda âmbar é a marca de "ponto quente" do cabeçalho
+   (`.bloco-marca`) e do balcão (`.bloco-troca`), no tamanho de uma linha: a
+   missão pronta é a única do quadro pedindo uma ação AGORA. */
+.missao-pronta {
+  border-left: 2px solid var(--ambar);
+  padding-left: 10px;
+}
+
+/* Entregue = ESMAECIDA, com o nome riscado: a missão já pagou e não pode mais
+   disputar o olho com as que ainda pedem caça. Não some da lista — a linha
+   apagada é a confirmação de que a entrega aconteceu. */
+.missao-entregue { opacity: 0.55; }
+
+.missao-entregue .bolsa-nome { text-decoration: line-through; }
+
+/* O selo de entrega: pequeno e no verde de "deu certo" do registro
+   (`.log-bom`), discreto o bastante para não competir com o aviso âmbar. */
+.missao-selo {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--verde);
+}
+
 /* --------------------------------------------------------------- registro */
 
 .bloco-registro { padding-bottom: 16px; }

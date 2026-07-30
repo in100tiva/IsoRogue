@@ -21,11 +21,13 @@ import type {
   HistoryEntry,
   LogClass,
   LogEntry,
+  Missao,
   Player,
   Point,
   SaveData,
   SavedEnemy,
   SavedItem,
+  SavedMissao,
   Stats
 } from './types';
 import { Tile } from './types';
@@ -37,7 +39,7 @@ import { CONFIG, normalizeFacing } from './core';
  * já existe entre game e entities: ninguém lê estes bindings durante a
  * avaliação do módulo, apenas dentro de funções.
  */
-import { ITEM_KINDS, ehMaterial } from './entities';
+import { ITEM_KINDS, ehMaterial, normalizeMaterialKind } from './entities';
 
 /* ------------------------------------------------------------------ *
  * Armazenamento injetável
@@ -317,8 +319,54 @@ function copiaItens(lista: Game['items'] | null | undefined): SavedItem[] {
   return out;
 }
 
-function copiaStats(st: Stats | null | undefined): Stats {
-  const s = st || ({} as Partial<Stats>);
+/**
+ * Cópia defensiva das caçadas (fase 3): os campos no tipo do save — alvo e
+ * kinds como TEXTO, porque é assim que viajam no JSON —, `itens` filtrado aos
+ * materiais conhecidos e sem repetição, e a ordem da lista preservada: ela é
+ * a ordem de geração, que o `snapshot()` e o painel leem. Quem valida de
+ * verdade (contra `KINDS` e o mapa da partida) é o `restore`; aqui só
+ * garantimos que não gravamos lixo.
+ */
+function copiaMissoes(lista: Missao[] | null | undefined): SavedMissao[] {
+  const out: SavedMissao[] = [];
+  if (!lista || typeof lista.length !== 'number') return out;
+  for (let i = 0; i < lista.length; i++) {
+    const m = lista[i];
+    if (!m) continue;
+    const itens: string[] = [];
+    const itensBrutos = m.itens;
+    if (itensBrutos && typeof itensBrutos.length === 'number') {
+      for (let k = 0; k < itensBrutos.length; k++) {
+        const kind = normalizeMaterialKind(itensBrutos[k]);
+        if (kind && itens.indexOf(kind) < 0) itens.push(kind);
+      }
+    }
+    let bonus: SavedMissao['recompensaItem'] = null;
+    const rb = m.recompensaItem;
+    if (rb && typeof rb === 'object') {
+      const bKind = normalizeMaterialKind(rb.kind);
+      const bN = inteiro(rb.n);
+      if (bKind && bN > 0) bonus = { kind: bKind, n: bN };
+    }
+    out.push({
+      key: String(m.key || ''),
+      alvo: String(m.alvo || ''),
+      matar: inteiro(m.matar),
+      itens: itens,
+      entregar: inteiro(m.entregar),
+      progressoMatar: inteiro(m.progressoMatar),
+      recompensaMoedas: inteiro(m.recompensaMoedas),
+      recompensaItem: bonus,
+      nome: String(m.nome || ''),
+      desc: String(m.desc || ''),
+      completa: !!m.completa,
+      entregue: !!m.entregue
+    });
+  }
+  return out;
+}
+
+function copiaStats(st: Stats | null | undefined): Stats {  const s = st || ({} as Partial<Stats>);
   return {
     turns: inteiro(s.turns), kills: inteiro(s.kills),
     dmgDealt: inteiro(s.dmgDealt), dmgTaken: inteiro(s.dmgTaken),
@@ -375,6 +423,9 @@ function serializar(game: Game): SaveGravado {
      * é território RESERVADO do andar, e um andar retomado com a estante em
      * outro tile seria um andar diferente do que o jogador deixou. */
     alquimiaExtras: copiaExtras(game.alquimiaExtras),
+    /* As caçadas são do JOGADOR (atravessam a descida) e carregam progresso
+     * e flags que não renascem da semente — então são save, não geração. */
+    missoes: copiaMissoes(game.missoes),
     explored: bytesToBase64(explored),
     exploredLen: explored && typeof explored.length === 'number' ? explored.length : 0,
     stats: copiaStats(game.stats),

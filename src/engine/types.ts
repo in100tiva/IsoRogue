@@ -311,6 +311,68 @@ export type ReceitaKind = 'pocao' | 'refino';
  */
 export type CustoReceita = Partial<Record<MaterialKind, number>>;
 
+/* ------------------------------------------------------------------ *
+ * 6.5. Missões (fase 3)
+ * ------------------------------------------------------------------ */
+
+/**
+ * Chave de uma missão, em texto: 'abate-chaser' | 'abate-sentinel' |
+ * 'abate-linker'. Viaja no save e no `snapshot()`, então é nome de contrato.
+ *
+ * A chave NÃO é única por partida: as missões são geradas POR ANDAR e
+ * atravessam a descida, então o andar 3 pode oferecer uma segunda
+ * 'abate-chaser' convivendo com a do andar 1. Quem precisa distinguir duas
+ * com a mesma chave usa a receita inteira (matar/entregar/itens/recompensa),
+ * que é o que o `snapshot()` grava.
+ */
+export type MissaoKey = string;
+
+/**
+ * Uma CAÇADA oferecida pelo mercador (fase 3).
+ *
+ * Dois requisitos que se acumulam e só fecham JUNTOS:
+ *   · ABATE — matar `matar` monstros do arquétipo `alvo`. O progresso mora em
+ *     `progressoMatar` e a parte de abate está feita quando
+ *     `progressoMatar >= matar` (predicado derivado, sem campo próprio: uma
+ *     verdade guardada em dois lugares é uma mentira esperando a descida);
+ *   · ENTREGA — levar ao mercador `entregar` despojos NO TOTAL, somando os
+ *     tipos de `itens` (que são exatamente a tabela `DROPS[alvo]`).
+ *
+ * `completa` e `entregue` nascem juntas no comando `entregar` — fechou as
+ * duas partes, recebeu a recompensa. São dois campos, e não um, porque dizem
+ * coisas diferentes ("a caçada fechou" × "o prêmio foi pago") e o painel e o
+ * save as leem separado; nesta fase elas mudam no mesmo instante, mas o modelo
+ * já admite o dia em que completar e premiar forem passos separados.
+ *
+ * `nome` e `desc` são pt-BR gerados na criação e GRAVADOS (não reconstruídos
+ * na leitura): o texto que o jogador viu no andar 1 é o texto que ele lê no
+ * andar 5, mesmo que a fórmula do texto mude numa versão futura.
+ */
+export interface Missao {
+  key: MissaoKey;
+  /** Arquétipo que cai no abate. */
+  alvo: ArchetypeKey;
+  /** Quantos abates a missão exige. */
+  matar: number;
+  /** Tipos de despojo aceitos na entrega — a tabela `DROPS[alvo]` inteira. */
+  itens: MaterialKind[];
+  /** Quantos despojos entregar, NO TOTAL somando os tipos de `itens`. */
+  entregar: number;
+  /** Abates já feitos (vai no snapshot e no save). */
+  progressoMatar: number;
+  recompensaMoedas: number;
+  /** Item bônus do alvo (50% de chance na geração), ou `null`. */
+  recompensaItem: { kind: MaterialKind; n: number } | null;
+  /** pt-BR: 'Caça ao Goblin'. */
+  nome: string;
+  /** pt-BR: 'Mate 3 Goblins e entregue 2 despojos de goblin (…).' */
+  desc: string;
+  /** As DUAS partes fecharam e a entrega aconteceu. */
+  completa: boolean;
+  /** Completou E recebeu a recompensa (ver o comentário do par, acima). */
+  entregue: boolean;
+}
+
 /** Retorno de `populate(map, depth, heroLevel)`. */
 export interface Population {
   enemies: Enemy[];
@@ -333,6 +395,17 @@ export interface Population {
    * lista pode ser mais curta (ou vazia) num cômodo apertado.
    */
   alquimiaExtras: Point[];
+  /**
+   * As caçadas do andar (fase 3): 1 a 3 missões, uma por arquétipo sorteado,
+   * sem repetir arquétipo no mesmo andar. Saem de `populate` — e não de uma
+   * função posterior — porque o sorteio tem de ser do stream de POPULAÇÃO
+   * (`seed + '#pop#' + depth`): encostar em `rngCombat` ou `rngLoot` faria a
+   * caçada depender da sorte do combate, que é o acoplamento que a fase 1
+   * desfez. Geradas POR ÚLTIMO em `populate`, depois das paradas, para que o
+   * consumo novo de stream não desloque a posição de um inimigo sequer dos
+   * andares já gerados (a mesma disciplina que as paradas impuseram à fase 1).
+   */
+  missoes: Missao[];
 }
 
 /**
@@ -498,6 +571,20 @@ export interface Game {
    * nunca acontece é a estação existir sem caldeirão.
    */
   alquimiaExtras: Point[];
+  /**
+   * As caçadas aceitas no quadro do mercador (fase 3). Lista de VIDA LONGA do
+   * jogador, como a bolsa e as moedas: gerada por andar (1 a 3 novas a cada
+   * `populate`) e ATRAVESSA a descida — `descend` SOMA as do andar novo às
+   * pendentes, nunca zera. Uma missão do andar 1 continua valendo no andar 5:
+   * o abate conta por ARQUÉTIPO, não por andar, e a entrega acontece em
+   * qualquer mercador.
+   *
+   * A ordem da lista é contrato (é a ordem de geração: andar a andar, e
+   * dentro do andar a ordem de `KINDS`): é ela que o painel lê, que o
+   * `snapshot()` grava e que o `entregar` varre quando duas missões disputam
+   * o mesmo despojo da bolsa.
+   */
+  missoes: Missao[];
   enemies: Enemy[];
   items: Item[];
   /**
@@ -552,6 +639,15 @@ export interface Game {
    */
   ultimoEsbarrao?: 'mercador' | 'alquimia' | null;
   /**
+   * Chave da última missão cujo lembrete de entrega foi narrado. Campo
+   * TRANSITÓRIO, não serializado, no mesmo estatuto de `ultimoEsbarrao`: sem
+   * ele, cada passo ao redor do mercador repetiria "a caçada está pronta" —
+   * e o registro é o lugar que o jogador lê o combate. Volta a `null` quando
+   * o jogador se afasta do balcão, então sair e voltar lembra de novo (uma
+   * vez por encontro, que é o bem-vindo sem o spam).
+   */
+  ultimoLembreteMissao?: MissaoKey | null;
+  /**
    * Fila de abates para efeito visual (ver `AbateVisual`). APENAS ANIMAÇÃO:
    * o renderer a drena a cada quadro; fora dele (testes, oracle headless) ela
    * só acumula até o teto de segurança — nunca cresce sem bound.
@@ -573,6 +669,14 @@ export interface Game {
  *   · `{ kind: 'comprar', item: 'potion', quantidade: 1 }` ⇄ `'comprar:potion,1'`
  *   · `{ kind: 'criar', receita: 'pocao' }`                ⇄ `'criar:pocao'`
  *
+ * A fase 3 acrescenta o comando de ENTREGA de caçadas, sem parâmetro nenhum:
+ *   · `{ kind: 'entregar' }`                              ⇄ `'entregar'`
+ * Não há 'entregar:abate-chaser' de propósito: o comando varre TODAS as
+ * missões prontas (abate feito + despojos na bolsa) e liquida cada uma, na
+ * ordem da lista. Escolher missão no comando seria pedir que a interface
+ * soubesse o que o engine já sabe — o mesmo motivo pelo qual não existe
+ * 'vender:gosma,tudo'.
+ *
  * `quantidade` é sempre um NÚMERO: não existe `'vender:gosma,tudo'`. Quem
  * traduz "vender tudo" para o número é a interface, que é quem sabe o que está
  * na bolsa na hora do clique — o engine não adivinha intenção.
@@ -588,7 +692,8 @@ export type Command =
   | { kind: 'descend' }
   | { kind: 'vender'; item: MaterialKind; quantidade: number }
   | { kind: 'comprar'; item: 'potion'; quantidade: number }
-  | { kind: 'criar'; receita: ReceitaKind };
+  | { kind: 'criar'; receita: ReceitaKind }
+  | { kind: 'entregar' };
 
 /* ------------------------------------------------------------------ *
  * 8. Persistência (save.ts)
@@ -618,6 +723,26 @@ export interface SavedItem {
   x: number;
   y: number;
   heal: number;
+}
+
+/**
+ * Missão como sai do save. `alvo`/`itens`/o kind do bônus chegam como `string`
+ * porque vêm de JSON não confiável — quem valida e estreita (contra `KINDS` e
+ * `normalizeMaterialKind`) é `restore`, no mesmo padrão de `SavedEnemy.kind`.
+ */
+export interface SavedMissao {
+  key: string;
+  alvo: string;
+  matar: number;
+  itens: string[];
+  entregar: number;
+  progressoMatar: number;
+  recompensaMoedas: number;
+  recompensaItem: { kind: string; n: number } | null;
+  nome: string;
+  desc: string;
+  completa: boolean;
+  entregue: boolean;
 }
 
 /**
@@ -665,6 +790,19 @@ export interface SaveData {
    * discreto; cenário no lugar errado é bug visível.
    */
   alquimiaExtras: Point[];
+  /**
+   * As caçadas da partida (fase 3), com progresso, flags e receita. Vão para
+   * o save porque são do JOGADOR e atravessam a descida — regerá-las por
+   * seed+depth não serviria: a lista acumula andares, e o progresso de abate
+   * e as flags de entrega não nascem da semente.
+   *
+   * Ausente num save antigo, `restore` degrada para a LISTA VAZIA — e NÃO para
+   * a lista que `createState` acabou de gerar. Uma caçada a menos é discreto
+   * (o andar seguinte oferece outras); uma caçada inventada a meio da run,
+   * com progresso zerado numa partida avançada, é o jogo mentindo. Lista
+   * vazia, nunca recusa de run.
+   */
+  missoes: SavedMissao[];
   /** Já decodificado por `read()`; base64 na forma gravada. */
   explored: Uint8Array | null;
   exploredB64?: string;
