@@ -84,3 +84,30 @@ quatro rigs novos revisados na folha de preview, com a fileira "despojos e parad
 
 Vizinhos: [[despojos-e-bolsa]] · [[2026-07-30-economia-alquimia-e-refino]] ·
 [[o-frasco-que-nao-tinha-gosma]] · [[legibilidade-em-40px]]
+
+---
+
+## Adendo (mesma data) — a fase 2.2: móvel e NPC são sólidos
+
+O teste do dono continuou: *"faltou colisão na parte de alquimia e na do mercador, para que
+ao colidir com eles abra o menu"*. Fazia sentido e era barato — móvel e NPC não se atravessa.
+
+- **Colisão**: os quatro tiles de parada (mercador, caldeirão, estante, mesa) passam a
+  recusar o passo do jogador, como parede — sem consumir turno. Inimigos idem, somando os
+  tiles ao `Set occupied` de `makeContext` (o Dijkstra continua `{ blocked: null }`; o
+  bloqueio é só na escolha do passo, que é o mecanismo que já impede dois inimigos no mesmo
+  tile).
+- **Interação por adjacência**: vender, comprar e criar passam a exigir **Chebyshev ≤ 1** —
+  encostar. E a estação é uma coisa só: criar funciona a partir de qualquer uma das três
+  peças, porque exigir o caldeirão exato faria o jogador adivinhar o tile.
+- **O esbarrão anuncia uma vez**: a mensagem mora num campo transitório não serializado —
+  sem ela, martelar a direção do mercador encheria o registro de "O mercador ergue os olhos".
+- **Nada de estado novo**: a abertura do painel é derivada da posição; o snapshot não ganhou
+  campo. O que mudou foi a simulação (ninguém anda por cima de móvel), então o oracle foi
+  **regenerado deliberadamente**.
+
+A pegadinha que o processo pegou: os testes da fase 2 punham o jogador EM CIMA do tile — uma
+posição que o jogo nunca mais produz. Teste que começa em estado impossível não prova
+comportamento, prova cenário. Os helpers passaram a colocar **ao lado**, no primeiro vizinho
+caminhável, e o critério "cada balcão só aceita o seu ofício" teve de aprender que mercador
+e estação dividem a sala inicial.

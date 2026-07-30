@@ -625,6 +625,50 @@ function sobreOPonto(game: Game, ponto: Point | null): boolean {
 }
 
 /**
+ * O jogador está AO LADO (Chebyshev ≤ 1) do ponto? É o que habilita a
+ * negociação: móvel e NPC são sólidos desde a fase 2.2, então ninguém mais
+ * fica EM CIMA — interagir é encostar.
+ */
+function aoLadoDa(game: Game, ponto: Point | null): boolean {
+  if (!ponto) return false;
+  return cheb(game.player.x, game.player.y, ponto.x, ponto.y) <= 1;
+}
+
+/**
+ * Esbarrar numa parada: narra UMA vez por encontro e devolve `true` (o passo
+ * é recusado, como numa parede). A trava anti-repetição mora num campo
+ * transitório (`game.ultimoEsbarrao`, não serializado): sem ela, martelar a
+ * direção do mercador encheria o registro de "O mercador ergue os olhos" — e
+ * o registro é o lugar que o jogador lê o combate, não o vendedor.
+ */
+function esbarrar(game: Game, x: number, y: number): boolean {
+  let qual: 'mercador' | 'alquimia' | null = null;
+  let texto: string | null = null;
+  if (game.mercador && x === game.mercador.x && y === game.mercador.y) {
+    qual = 'mercador';
+    texto = 'O mercador ergue os olhos: há o que negociar.';
+  } else if (game.bancada && x === game.bancada.x && y === game.bancada.y) {
+    qual = 'alquimia';
+    texto = 'O caldeirão borbulha. A estação pede gosma e ferro.';
+  } else if (game.alquimiaExtras) {
+    for (let i = 0; i < game.alquimiaExtras.length; i++) {
+      const e = game.alquimiaExtras[i];
+      if (e.x === x && e.y === y) {
+        qual = 'alquimia';
+        texto = 'A estação de alquimia. O caldeirão fica ao lado.';
+        break;
+      }
+    }
+  }
+  if (!qual) return false;
+  if (game.ultimoEsbarrao !== qual) {
+    game.ultimoEsbarrao = qual;
+    logMsg(game, texto as string, 'info');
+  }
+  return true;
+}
+
+/**
  * Narra a chegada a um ponto de parada. Vale a cada passo que TERMINA no tile,
  * inclusive voltando ao mesmo ponto: pisar de novo é chegar de novo, e o
  * jogador precisa da lembrança de que ali se negocia.
@@ -675,6 +719,10 @@ function mover(game: Game, dx: number, dy: number): boolean {
     if (!isWalkable(map, p.x + dx, p.y)) return false;
     if (!isWalkable(map, p.x, p.y + dy)) return false;
   }
+  // As paradas são SÓLIDAS: móvel e NPC não se atravessa. O passo é recusado
+  // como numa parede (sem consumir turno), e o esbarrão narra uma vez — é o
+  // convite para quem ainda não notou que ali se negocia.
+  if (esbarrar(game, nx, ny)) return false;
   if (!isWalkable(map, nx, ny)) return false;
   p.x = nx;
   p.y = ny;
@@ -770,8 +818,8 @@ function tirarDaBolsa(p: Player, kind: MaterialKind, n: number): void {
  */
 function vender(game: Game, item: MaterialKind, quantidade: number): boolean {
   const p = game.player;
-  if (!sobreOPonto(game, game.mercador)) {
-    logMsg(game, 'Não há mercador aqui.', 'aviso');
+  if (!aoLadoDa(game, game.mercador)) {
+    logMsg(game, 'Você precisa estar ao lado do mercador.', 'aviso');
     return false;
   }
   if (!ehMaterial(item)) {
@@ -807,8 +855,8 @@ function vender(game: Game, item: MaterialKind, quantidade: number): boolean {
  */
 function comprar(game: Game, item: 'potion', quantidade: number): boolean {
   const p = game.player;
-  if (!sobreOPonto(game, game.mercador)) {
-    logMsg(game, 'Não há mercador aqui.', 'aviso');
+  if (!aoLadoDa(game, game.mercador)) {
+    logMsg(game, 'Você precisa estar ao lado do mercador.', 'aviso');
     return false;
   }
   if (item !== 'potion') {
@@ -871,11 +919,27 @@ function aplicarReceita(game: Game, receita: ReceitaDef): void {
   }
 }
 
+/**
+ * A estação é UMA coisa de três tiles: criar funciona a partir de qualquer
+ * uma das peças (caldeirão, estante ou mesa). Exigir o caldeirão exato seria
+ * pedir que o jogador adivinhasse qual tile é o certo.
+ */
+function aoLadoDaEstacao(game: Game): boolean {
+  if (aoLadoDa(game, game.bancada)) return true;
+  const extras = game.alquimiaExtras;
+  if (extras) {
+    for (let i = 0; i < extras.length; i++) {
+      if (aoLadoDa(game, extras[i])) return true;
+    }
+  }
+  return false;
+}
+
 /** Usa a bancada: alquimia (`'pocao'`) ou refino (`'refino'`). */
 function criar(game: Game, receitaBruta: ReceitaKind): boolean {
   const p = game.player;
-  if (!sobreOPonto(game, game.bancada)) {
-    logMsg(game, 'Não há bancada aqui.', 'aviso');
+  if (!aoLadoDaEstacao(game)) {
+    logMsg(game, 'Você precisa estar ao lado da estação de alquimia.', 'aviso');
     return false;
   }
   /* Normaliza mesmo já vindo tipado, pela mesma razão de `ehMaterial` em

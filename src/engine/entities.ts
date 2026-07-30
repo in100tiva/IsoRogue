@@ -1224,6 +1224,18 @@ export function makeContext(game: Game): TurnContext {
   const map = game.map;
   const occupied = new Set<number>();
   occupied.add(idx(map.w, game.player.x, game.player.y));
+  /* Móvel e NPC são sólidos também para os inimigos: nenhum monstro termina o
+   * turno em cima do mercador nem da mobília da estação. O campo de Dijkstra
+   * em si não muda ({ blocked: null } continua — recalculá-lo por turno é o
+   * custo que a arquitetura evita); o bloqueio é só na escolha do passo. */
+  if (game.mercador) occupied.add(idx(map.w, game.mercador.x, game.mercador.y));
+  if (game.bancada) occupied.add(idx(map.w, game.bancada.x, game.bancada.y));
+  const extras = game.alquimiaExtras;
+  if (extras) {
+    for (let i = 0; i < extras.length; i++) {
+      occupied.add(idx(map.w, extras[i].x, extras[i].y));
+    }
+  }
   const alive: Enemy[] = [];
   for (let i = 0; i < game.enemies.length; i++) {
     const e = game.enemies[i];

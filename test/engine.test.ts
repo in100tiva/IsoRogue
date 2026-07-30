@@ -1517,6 +1517,11 @@ function estadoDeComercio(game: Game): string {
  * assunto do movimento (T6/T7), e fazer o teste andar até lá o tornaria refém
  * da IA dos monstros do andar.
  */
+/**
+ * Coloca o jogador AO LADO do ponto, não em cima: desde a fase 2.2 o tile é
+ * sólido, e um teste que começa numa posição que o jogo nunca produziria não
+ * prova comportamento, prova um estado impossível.
+ */
 function partidaNoPonto(semente: string, onde: 'mercador' | 'bancada'): Game {
   const game = createState(semente, 1);
   game.player.maxHp = 999;
@@ -1524,8 +1529,20 @@ function partidaNoPonto(semente: string, onde: 'mercador' | 'bancada'): Game {
   const ponto = onde === 'mercador' ? game.mercador : game.bancada;
   expect(ponto, 'T13: a semente ' + semente + ' não tem ' + onde).not.toBe(null);
   if (ponto) {
-    game.player.x = ponto.x;
-    game.player.y = ponto.y;
+    let vizinho = null;
+    for (let i = 0; i < DIRS8.length; i++) {
+      const x = ponto.x + DIRS8[i][0];
+      const y = ponto.y + DIRS8[i][1];
+      if (isWalkable(game.map, x, y)) {
+        vizinho = { x: x, y: y };
+        break;
+      }
+    }
+    expect(vizinho, 'T13: ' + onde + ' sem vizinho caminhável').not.toBe(null);
+    if (vizinho) {
+      game.player.x = vizinho.x;
+      game.player.y = vizinho.y;
+    }
   }
   return game;
 }
@@ -1669,12 +1686,19 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
 
     /* Cada balcão só aceita o seu ofício: no mercador não se forja, na bancada
      * não se vende. */
+    /* Fase 2.2: mercador e estação dividem a sala inicial, então ao lado do
+     * mercador a alquimia PODE valer (a estação é uma coisa só). O que não
+     * pode é o contrário: comprar e vender fora dele. */
     const noMercador = partidaNoPonto(semente, 'mercador');
     noMercador.player.bag.gosma = 9;
+    noMercador.player.moedas = 500;  /* compra exige moedas, não só estar ao lado */
     const antesM = estadoDeComercio(noMercador);
-    expect(aplicar(noMercador, 'criar:pocao'), 'T13.2: alquimia aceita no mercador').toBe(false);
-    expect(estadoDeComercio(noMercador), 'T13.2: a recusa no mercador mexeu no estado')
-      .toBe(antesM);
+    for (const texto of ['vender:gosma,3', 'comprar:potion,1']) {
+      expect(aplicar(noMercador, texto), 'T13.2: "' + texto + '" aceito no mercador')
+        .toBe(true);
+    }
+    expect(estadoDeComercio(noMercador) === antesM, 'T13.2: vender/comprar no mercador não mudou nada')
+      .toBe(false);
 
     const naBancada = partidaNoPonto(semente, 'bancada');
     naBancada.player.bag.gosma = 9;
@@ -2023,12 +2047,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       'T13.11: ponto ausente devia sair como "-" — ' + String(snapshot(game))).toBe(true);
   }, LENTO);
 
-  it('pisar no ponto anuncia o mercador e a bancada, no padrão do registro', () => {
+  it('esbarrar na parada anuncia o balcão, uma vez por encontro, e o passo é recusado', () => {
     const semente = sementeComParadas();
 
     const paradas: Array<['mercador' | 'bancada', string]> = [
-      ['mercador', 'Você chega ao mercador. Ele avalia sua bolsa.'],
-      ['bancada', 'Uma bancada de alquimia. Há um caldeirão e uma bigorna.']
+      ['mercador', 'O mercador ergue os olhos: há o que negociar.'],
+      ['bancada', 'O caldeirão borbulha. A estação pede gosma e ferro.']
     ];
     for (const [qual, frase] of paradas) {
       const game = createState(semente, 1);
@@ -2048,11 +2072,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       game.player.y = ponto.y + vizinho[1];
 
       const marcaLog = game.log.length;
+      /* O tile é SÓLIDO: o passo é recusado e o jogador fica onde estava. */
       const aceito = aplicar(game, 'move:' + (-vizinho[0]) + ',' + (-vizinho[1]));
-      expect(aceito, 'T13.12: o passo até ' + qual + ' não foi aceito').toBe(true);
+      expect(aceito, 'T13.12: o esbarrão em ' + qual + ' consumiu turno').toBe(false);
       expect(game.player.x === ponto.x && game.player.y === ponto.y,
-        'T13.12: o jogador não chegou ao tile d' + (qual === 'bancada' ? 'a' : 'o') + ' ' + qual)
-        .toBe(true);
+        'T13.12: o jogador atravessou ' + (qual === 'bancada' ? 'a' : 'o') + ' ' + qual)
+        .toBe(false);
       expect(
         game.log.slice(marcaLog).some((l) => l.text === frase),
         'T13.12: a chegada a' + (qual === 'bancada' ? '' : 'o') + ' ' + qual +
@@ -2290,19 +2315,33 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
     game.player.bag.espadaGoblin = 4;
     game.player.moedas = 500;
 
+    /* Fase 2.2: o extra é cenário, mas a ESTAÇÃO é uma coisa só — a peça de
+     * decoração também abre a oficina, porque exigir o caldeirão exato faria o
+     * jogador adivinhar o tile. O que o extra NÃO é: um mercador. */
     for (const extra of game.alquimiaExtras) {
-      game.player.x = extra.x;
-      game.player.y = extra.y;
+      /* Ao lado do extra (o tile dele é sólido), no primeiro vizinho livre. */
+      let achou = false;
+      for (let i = 0; i < DIRS8.length && !achou; i++) {
+        const x = extra.x + DIRS8[i][0];
+        const y = extra.y + DIRS8[i][1];
+        if (isWalkable(game.map, x, y)) {
+          game.player.x = x;
+          game.player.y = y;
+          achou = true;
+        }
+      }
+      expect(achou, 'T14.5: extra sem vizinho caminhável em ' + extra.x + ',' + extra.y)
+        .toBe(true);
       const antes = estadoDeComercio(game);
       const marcaLog = game.log.length;
-      for (const texto of ['criar:pocao', 'criar:refino', 'vender:gosma,3', 'comprar:potion,1']) {
+      for (const texto of ['vender:gosma,3', 'comprar:potion,1']) {
         expect(aplicar(game, texto),
-          'T14.5: "' + texto + '" foi aceito sobre a DECORAÇÃO em ' + extra.x + ',' + extra.y)
+          'T14.5: "' + texto + '" foi aceito ao lado da DECORAÇÃO em ' + extra.x + ',' + extra.y)
           .toBe(false);
       }
       expect(estadoDeComercio(game), 'T14.5: a recusa sobre o extra mexeu no estado').toBe(antes);
       /* A recusa da oficina é a mesma de sempre — o extra não é meia bancada. */
-      expect(game.log.slice(marcaLog).map((l) => l.text).indexOf('Não há bancada aqui.') >= 0,
+      expect(game.log.slice(marcaLog).map((l) => l.text).indexOf('Você precisa estar ao lado do mercador.') >= 0,
         'T14.5: a recusa saiu fora do padrão — ' +
           JSON.stringify(game.log.slice(marcaLog).map((l) => l.text))).toBe(true);
     }
