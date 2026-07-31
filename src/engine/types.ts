@@ -22,7 +22,20 @@ export const enum Tile {
   Wall = 0,
   Floor = 1,
   Door = 2,
-  Stairs = 3
+  Stairs = 3,
+  /**
+   * O VAZIO do penhasco (fase da água): o tile que cerca o construído entre
+   * ele e a moldura externa do mapa. Decisão do dono, sem rediscussão:
+   *   · BLOQUEIA o passo de jogador e inimigos como a parede — não é abismo
+   *     que mata, é borda de precipício com visual próprio;
+   *   · nasce só no mapgen (toda parede longe da divisa do construído), nunca
+   *     dentro de sala e nunca no anel externo, que continua parede;
+   *   · entra no checksum `map=` do `snapshot()` como tile comum, sem custo
+   *     extra de formato — é um valor de tile, não um canal novo;
+   *   · NÃO bloqueia luz: o abismo se enxerga (blocksLight continua só Wall).
+   * O valor 4 é contrato congelado: viaja no checksum de tiles.
+   */
+  Void = 4
 }
 
 /** Par (x, y) em coordenadas de grade. Nunca em pixels. */
@@ -102,6 +115,29 @@ export interface GameMap {
   tiles: Uint8Array;
   /** w*h, 0..255 — variação visual determinística. */
   decor: Uint8Array;
+  /**
+   * w*h, 0 ou 1 — o bitmap de ÁGUA (fase do penhasco). `1` marca uma POÇA:
+   * tile de piso que BLOQUEIA o passo de jogador e inimigos, como a parede.
+   *
+   * Por que um canal paralelo, e não um valor novo em `Tile` nem bits altos
+   * do `decor`:
+   *   1. o tile da poça continua `Floor` — o visual é piso com água por cima
+   *      (o renderer já prevê exatamente isto: "uma região marcada no MAPA,
+   *      um bitmap ao lado do decor"), e o checksum `map=` não precisa de
+   *      formato novo para o relevo interno;
+   *   2. o `decor` é hash POR TILE sem correlação espacial — bit alto dele
+   *      jamais codificaria uma REGIÃO, e roubar bits mudaria a variação
+   *      visual de todo andar já gerado;
+   *   3. o bitmap é função pura de (seed, depth) — o mapa NÃO é serializado
+   *      (CONTRACTS.md §9), então o save não carrega `agua`: o restore a
+   *      regera byte a byte idêntica, e o `snapshot()` a verifica pelo
+   *      campo `agua=` (v6).
+   *
+   * A poça NÃO é atravessável a nado (decisão do dono): `isWalkable` devolve
+   * `false` para ela, e é essa única mudança que fecha o bloqueio para o
+   * jogador, o Dijkstra, a IA e a validação do restore.
+   */
+  agua: Uint8Array;
   rooms: Room[];
   start: Point;
   stairs: Point;
@@ -632,12 +668,15 @@ export interface Game {
   /** Trava de reentrância do fim de turno. */
   emTurno: boolean
   /**
-   * Último tipo de parada em que o jogador esbarrou ('mercador' | 'alquimia').
-   * Campo TRANSITÓRIO, não serializado: existe só para a mensagem de esbarrão
-   * não repetir enquanto o jogador martela a mesma direção. Sai do snapshot
-   * de propósito — é rumo de diálogo, não de estado.
+   * Último tipo de obstáculo em que o jogador esbarrou ('mercador' |
+   * 'alquimia' | 'agua' | 'vazio'). Campo TRANSITÓRIO, não serializado:
+   * existe só para a mensagem de esbarrão não repetir enquanto o jogador
+   * martela a mesma direção. Sai do snapshot de propósito — é rumo de
+   * diálogo, não de estado. Os dois tipos de TERRENO ('agua'/'vazio', fase
+   * do penhasco) dividem a mesma trava: esbarrão é esbarrão, mude o que
+   * mudou o que está à frente.
    */
-  ultimoEsbarrao?: 'mercador' | 'alquimia' | null;
+  ultimoEsbarrao?: 'mercador' | 'alquimia' | 'agua' | 'vazio' | null;
   /**
    * Chave da última missão cujo lembrete de entrega foi narrado. Campo
    * TRANSITÓRIO, não serializado, no mesmo estatuto de `ultimoEsbarrao`: sem

@@ -45,7 +45,7 @@ export const CONFIG = {
   VERSION: '1.0.0',
   MAP_W: 45,
   MAP_H: 45,
-  TILE: { WALL: Tile.Wall, FLOOR: Tile.Floor, DOOR: Tile.Door, STAIRS: Tile.Stairs },
+  TILE: { WALL: Tile.Wall, FLOOR: Tile.Floor, DOOR: Tile.Door, STAIRS: Tile.Stairs, VOID: Tile.Void },
   TW: 64, // largura do losango do piso
   TH: 32, // altura do losango do piso
   WALL_H: 36, // altura vertical da parede em px

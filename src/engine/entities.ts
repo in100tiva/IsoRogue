@@ -40,6 +40,7 @@ import type {
   Step
 } from './types';
 import { CONFIG, DIRS4, DIRS8, cheb, hash32, idx, makeRng } from './core';
+import { Tile } from './types';
 import { inBounds as mapInBounds, isWalkable, roomAt } from './mapgen';
 import {
   ITEM_KINDS,
@@ -1391,6 +1392,19 @@ export function makeContext(game: Game): TurnContext {
     for (let i = 0; i < extras.length; i++) {
       occupied.add(idx(map.w, extras[i].x, extras[i].y));
     }
+  }
+  /* Água e vazio entram no `occupied` como as paradas (decisão do dono, fase
+   * do penhasco): os dois tiles BLOQUEIAM o passo dos inimigos. A recusa já
+   * viria de `isWalkable` — o campo de Dijkstra (blocked: null, sempre) e o
+   * `makeBlocker` a consultam —, então este bloco é a trava explícita, na
+   * mesma disciplina de cinto e segurança das paradas: o dia em que alguém
+   * alargar `isWalkable`, o monstro continua fora da poça e do precipício.
+   * `moveTo` nunca remove estes índices porque nenhum inimigo está sobre eles
+   * (populate e restore já os excluem pela mesma `isWalkable`). */
+  const tiles = map.tiles;
+  const agua = map.agua;
+  for (let i = 0; i < tiles.length; i++) {
+    if (tiles[i] === Tile.Void || (agua && agua[i])) occupied.add(i);
   }
   const alive: Enemy[] = [];
   for (let i = 0; i < game.enemies.length; i++) {

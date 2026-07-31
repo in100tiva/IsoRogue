@@ -697,6 +697,37 @@ function esbarrar(game: Game, x: number, y: number): boolean {
 }
 
 /**
+ * Esbarrar em TERRENO intransponível (fase do penhasco): água e vazio barram
+ * o passo como a parede — sem consumir turno — mas com voz própria, uma vez
+ * por encontro, na mesma disciplina da trava de `esbarrar` (fase 2.2): a
+ * mensagem sai quando o obstáculo à frente MUDA de tipo, e martelar a mesma
+ * direção não repete. Água não é travessia a nado e vazio não é abismo que
+ * mata — a frase diz exatamente isso, sem prometer regra que o jogo não tem.
+ */
+function esbarrarTerreno(game: Game, x: number, y: number): boolean {
+  const map = game.map;
+  const i = idx(map.w, x, y);
+  let qual: 'agua' | 'vazio' | null = null;
+  let texto: string | null = null;
+  if (map.tiles[i] === Tile.Void) {
+    qual = 'vazio';
+    texto = 'Um abismo sem fundo.';
+  } else {
+    const agua = map.agua;
+    if (agua && agua[i]) {
+      qual = 'agua';
+      texto = 'A água barra o caminho.';
+    }
+  }
+  if (!qual) return false;
+  if (game.ultimoEsbarrao !== qual) {
+    game.ultimoEsbarrao = qual;
+    logMsg(game, texto as string, 'info');
+  }
+  return true;
+}
+
+/**
  * Narra a chegada a um ponto de parada. Vale a cada passo que TERMINA no tile,
  * inclusive voltando ao mesmo ponto: pisar de novo é chegar de novo, e o
  * jogador precisa da lembrança de que ali se negocia.
@@ -751,6 +782,10 @@ function mover(game: Game, dx: number, dy: number): boolean {
   // como numa parede (sem consumir turno), e o esbarrão narra uma vez — é o
   // convite para quem ainda não notou que ali se negocia.
   if (esbarrar(game, nx, ny)) return false;
+  // Água e vazio também são sólidos (fase do penhasco), com a mesma anatomia:
+  // recusa sem turno, uma frase por encontro. Antes da recusa MUDA da parede,
+  // para o esbarrão terreno ter a sua voz em vez do silêncio da alvenaria.
+  if (esbarrarTerreno(game, nx, ny)) return false;
   if (!isWalkable(map, nx, ny)) return false;
   p.x = nx;
   p.y = ny;
@@ -1421,10 +1456,16 @@ export function descend(g: Game): void {
 // Snapshot determinístico
 // --------------------------------------------------------------------------
 
-function checksumTiles(tiles: Uint8Array): string {
+/**
+ * FNV-1a 32 bits sobre um canal de bytes do mapa — os tiles OU o bitmap de
+ * água. É o mesmo mix do `hash32`, byte a byte: o checksum `map=` (e agora o
+ * `agua=`) do snapshot sai daqui desde o vanilla, e não se muda o que o
+ * oracle congelou.
+ */
+function checksumBytes(bytes: Uint8Array): string {
   let h = 2166136261;
-  for (let i = 0; i < tiles.length; i++) {
-    h ^= tiles[i];
+  for (let i = 0; i < bytes.length; i++) {
+    h ^= bytes[i];
     h = Math.imul(h, 16777619);
   }
   return ((h >>> 0)).toString(16);
@@ -1462,45 +1503,39 @@ function extrasEmTexto(lista: Point[] | null | undefined): string {
  * Resumo textual determinístico do estado. O golden test compara string com
  * string: o formato tem de sair estável byte a byte.
  *
- * FORMATO v5 (a fase 3 — as caçadas do quadro do mercador):
+ * FORMATO v6 (a fase do penhasco — vazio e água barram o passo):
  *
- *   v5|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
+ *   v6|seed=K7QX-3M9P|d=1|t=12|over=0|p=22,7,38/42,atk7,poc3,lv1:50,mo24,arm1
  *     |E[1:linker:9:14:20|2:chaser:12:18:9]
  *     |I[3:potion:11:7|7:orelhaGoblin:18:9|8:espadaGoblin:18:9]
  *     |B[gosma2|orelhaGoblin1]
  *     |M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:1:26:espadaGoblin*1:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]
  *     |S=12,3,41,18,1,1,23.4|rng=2748472837|rngL=91827364
- *     |merc=24,9|banc=8,31|alq=8,30;9,31|map=1f3ac2b9
+ *     |merc=24,9|banc=8,31|alq=8,30;9,31|agua=27c1e90a|map=1f3ac2b9
  *
- * O que mudou do v4, e por quê:
- *  · nasceu `M[...]`, a lista das caçadas, na ORDEM DE GERAÇÃO (andar a
- *    andar, e `KINDS` dentro do andar) — estável por construção, sem sort
- *    aqui, porque é essa mesma ordem que o painel lê e o `entregar` varre.
- *    Cada missão sai como
- *
- *      key:alvo:matar:entregar:itens(+):progresso:moedas:bônus:completa:entregue
- *
- *    com os tipos da entrega separados por `+` (o `|` já separa missões, o
- *    `:` já separa campos), o bônus como `kind*n` ou `-`, e as duas flags
- *    como 0/1. A receita INTEIRA entra — matar, entregar, itens e as duas
- *    recompensas — porque duas 'abate-chaser' de andares diferentes só se
- *    distinguem por ela, e um progresso sem a meta não diz nada;
- *  · o lugar é logo depois de `B[...]`: a caçada é a outra face da bolsa (uma
- *    pede o que a outra guarda), e a leitura esquerda→direita fica "o que eu
- *    tenho" seguido de "o que me pediram";
- *  · a etiqueta subiu de `v4` para `v5`: o golden gravado com o formato
+ * O que mudou do v5, e por quê:
+ *  · nasceu `agua=`, o checksum FNV do bitmap de água (`map.agua`), entre
+ *    `alq=` e `map=`. Água e vazio são função pura de seed+depth — o mapa
+ *    nunca viaja no save —, mas entram no resumo porque é o resumo que o
+ *    golden lê: sem o campo, duas partidas com poças diferentes seriam a
+ *    mesma linha, e uma retomada que regerasse o relevo errado passaria
+ *    em silêncio. O VAZIO não precisa de campo próprio: é `Tile.Void`, um
+ *    valor de tile comum, e já está coberto pelo `map=` (que por isso muda
+ *    em todo andar desta fase em diante);
+ *  · a etiqueta subiu de `v5` para `v6`: o golden gravado com o formato
  *    antigo DEVE reprovar dizendo que o problema é o formato, e não fingir
  *    divergência de simulação (a mesma razão de cada etiqueta anterior).
  *
- * O que veio do v3/v4 e continua valendo: `,mo<moedas>` e `,arm<armaNivel>`
- * no fim do bloco do jogador; `merc=`/`banc=`/`alq=` antes do checksum; e
- * tudo do v2 (`I[...]` com kind, `B[...]` na ordem da tabela, `rngL=`).
+ * O que veio do v5 e continua valendo: o bloco `M[...]` das caçadas logo
+ * depois de `B[...]`. Do v3/v4: `,mo<moedas>` e `,arm<armaNivel>` no fim do
+ * bloco do jogador; `merc=`/`banc=`/`alq=` antes dos checksums. Do v2:
+ * `I[...]` com kind, `B[...]` na ordem da tabela, `rngL=`.
  */
 export function snapshot(game: Game): string {
   if (!game) return '';
   const p = game.player;
   const partes: string[] = [];
-  partes.push('v5');
+  partes.push('v6');
   partes.push('seed=' + game.seedStr);
   partes.push('d=' + game.depth);
   partes.push('t=' + game.turn);
@@ -1562,7 +1597,11 @@ export function snapshot(game: Game): string {
   partes.push('merc=' + pontoEmTexto(game.mercador));
   partes.push('banc=' + pontoEmTexto(game.bancada));
   partes.push('alq=' + extrasEmTexto(game.alquimiaExtras));
-  partes.push('map=' + checksumTiles(game.map.tiles));
+  /* O bitmap de água fecha o relevo: sem ele, duas partidas com poças
+   * diferentes seriam a mesma linha. Mapa fabricado à mão (sem o canal)
+   * sai com o checksum do bitmap vazio — degradado, nunca um erro. */
+  partes.push('agua=' + checksumBytes(game.map.agua ? game.map.agua : new Uint8Array(0)));
+  partes.push('map=' + checksumBytes(game.map.tiles));
   return partes.join('|');
 }
 

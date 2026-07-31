@@ -4,16 +4,28 @@
  * áreas isoladas por túnel e regeneração com seed derivada.
  * Cobre R12..R17 e R19. Tudo determinístico a partir de (seed, depth).
  *
+ * Fase do penhasco (decisão do dono, sem rediscussão): DEPOIS de salas,
+ * corredores e escada, o mapa ganha VAZIO nas bordas (toda parede a mais de
+ * VOID_CRUST anéis da divisa do construído vira `Tile.Void` — o nível inteiro
+ * é um penhasco) e ÁGUA dentro das salas (poças 4-conexas de 2..5 tiles no
+ * bitmap paralelo `map.agua`). Os dois bloqueiam o passo como a parede —
+ * jogador E inimigos. Água não é travessia a nado; vazio não é abismo que
+ * mata. São barreiras com visual diferente, e a prova de que nada ficou
+ * isolado por causa delas é a BFS de conectividade refeita no fim da geração.
+ *
  * Porte 1:1 de legacy/src-vanilla/10-mapgen.js. A ORDEM DE CONSUMO DO RNG é
- * parte do contrato: um u32() a mais ou a menos muda todos os mapas.
+ * parte do contrato: um u32() a mais ou a menos muda todos os mapas. A água
+ * consome um stream PRÓPRIO ('#agua'), criado depois do layout final, então
+ * nenhum stream pré-existente (bsp/rooms/corr/decor) muda um passo.
  */
-import { CONFIG, hash32, idx, DIRS4, normalizeSeed, makeRng } from './core';
-import type { GameMap, RegionsResult, Rng, Room, RoomShape } from './types';
+import { CONFIG, hash32, idx, DIRS4, DIRS8, normalizeSeed, makeRng } from './core';
+import type { GameMap, Point, RegionsResult, Rng, Room, RoomShape } from './types';
 
 const WALL = CONFIG.TILE.WALL;
 const FLOOR = CONFIG.TILE.FLOOR;
 const DOOR = CONFIG.TILE.DOOR;
 const STAIRS = CONFIG.TILE.STAIRS;
+const VOID = CONFIG.TILE.VOID;
 
 // --- parâmetros do gerador (fixos: fazem parte do determinismo) -----------
 const MIN_LEAF = 7;        // folha mínima 7x7
@@ -25,6 +37,29 @@ const SPLIT_MAX = 0.65;
 const WIDE_CORRIDOR_CHANCE = 0.15;
 const MAX_REPAIRS = 3;     // reparos por tentativa
 const SHAPES: RoomShape[] = ['rect', 'cross', 'round', 'pillared', 'notched'];
+
+// --- parâmetros da fase do penhasco (fixos: fazem parte do determinismo) ---
+/* VOID_CRUST = 1: o vazio fica a MAIS de um anel da parede de divisa (isto é,
+ * a dois anéis do piso). A régua de exemplo da fase era 2 — medida em 72
+ * andares, ela deixava 12 deles (1 em 6) sem tile de vazio NENHUM, média de
+ * 8 tiles num mapa de 45×45: o "penhasco ao redor do construído" não se
+ * materializava. Com 1 anel de crosta, todo andar tem penhasco (mínimo 32
+ * tiles na mesma amostra) e o invariante estrutural é o mesmo: o vazio jamais
+ * é 8-adjacente a um tile caminhável — há sempre a divisa entre ele e a sala,
+ * que é a borda que a cachoeira precisa. */
+const VOID_CRUST = 1;      // anéis de parede preservados ao redor do construído
+const AGUA_CHANCE = 0.60;  // ~60% das salas ganham uma poça
+const AGUA_MIN = 2;        // tamanho mínimo da região de água
+const AGUA_MAX = 5;        // tamanho máximo da região de água
+/* Tentativas de poça por sala sorteada. A garantia de conectividade é DURA
+ * (uma poça que isole qualquer tile é revertida por inteiro), e nas salas com
+ * gargalo de um tile — a cruz de braços finos é a campeã — a primeira posição
+ * sorteada costuma isolar um braço. Medida em 72 andares: uma tentativa
+ * vinga 44% das salas; três, ~55% (o restante são salas em que quase toda
+ * poça de 2..5 tiles isola algo — aí a sala fica seca, que é a degradação
+ * legítima). O consumo do stream é por tentativa: um `int` de tamanho e os
+ * sorteios do crescimento, tudo função da seed. */
+const AGUA_TENTATIVAS = 3;
 
 const SHAPE_NOME: Record<RoomShape, [string, string]> = {
   rect: ['retangular', 'retangulares'],
@@ -121,8 +156,17 @@ function mixTile(seedNum: number, x: number, y: number): number {
 // Estruturas de varredura (BFS)
 // -------------------------------------------------------------------------
 
-/** BFS 4-vizinhança a partir de (sx,sy) sobre tiles caminháveis. */
-function bfsFrom(tiles: Uint8Array, w: number, h: number, sx: number, sy: number): BfsResult {
+/** BFS 4-vizinhança a partir de (sx,sy) sobre tiles caminháveis.
+ *  `agua` (opcional) exclui as poças do passeio: é a BFS da caminhabilidade
+ *  EFETIVA, usada na validação da água e na conectividade final do mapa. */
+function bfsFrom(
+  tiles: Uint8Array,
+  w: number,
+  h: number,
+  sx: number,
+  sy: number,
+  agua?: Uint8Array | null
+): BfsResult {
   const n = w * h;
   const dist = new Int32Array(n);
   dist.fill(-1);
@@ -131,7 +175,8 @@ function bfsFrom(tiles: Uint8Array, w: number, h: number, sx: number, sy: number
   let tail = 0;
   let reached = 0;
   const s = sy * w + sx;
-  if (sx < 0 || sy < 0 || sx >= w || sy >= h || !isWalkVal(tiles[s])) {
+  const passa = (i: number): boolean => isWalkVal(tiles[i]) && !(agua && agua[i]);
+  if (sx < 0 || sy < 0 || sx >= w || sy >= h || !passa(s)) {
     return { dist: dist, reached: 0 };
   }
   dist[s] = 0;
@@ -147,7 +192,7 @@ function bfsFrom(tiles: Uint8Array, w: number, h: number, sx: number, sy: number
       const ny = cy + DIRS4[k][1];
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       const ni = ny * w + nx;
-      if (dist[ni] !== -1 || !isWalkVal(tiles[ni])) continue;
+      if (dist[ni] !== -1 || !passa(ni)) continue;
       dist[ni] = dc;
       queue[tail++] = ni;
       reached++;
@@ -194,10 +239,10 @@ function labelRegions(tiles: Uint8Array, w: number, h: number): RegionResult {
   return { labels: labels, count: count, sizes: sizes, lists: lists };
 }
 
-function countWalkable(tiles: Uint8Array): number {
+function countWalkable(tiles: Uint8Array, agua?: Uint8Array | null): number {
   let total = 0;
   for (let i = 0; i < tiles.length; i++) {
-    if (isWalkVal(tiles[i])) total++;
+    if (isWalkVal(tiles[i]) && !(agua && agua[i])) total++;
   }
   return total;
 }
@@ -626,6 +671,241 @@ function shapeSummary(rooms: Room[]): string {
 }
 
 // -------------------------------------------------------------------------
+// Fase do penhasco — vazio nas bordas, água nas salas
+//
+// Os dois nascem DEPOIS de salas, corredores e escada, sempre nesta ordem:
+// primeiro o vazio (geometria pura, sem rng), depois a água (stream próprio
+// derivado de seed+depth). Nenhum dos dois consome um u32 dos streams do
+// layout — bsp/rooms/corr/decor saem byte a byte como antes.
+// -------------------------------------------------------------------------
+
+/**
+ * Converte em `Tile.Void` a parede LONGE do construído: o nível inteiro é um
+ * penhasco, e o vazio é o que fica ENTRE o construído e a moldura externa.
+ *
+ * A régua, em três passos determinísticos:
+ *   1. DIVISA — toda parede que encosta (8-vizinhança) em piso, porta ou
+ *      escada é parede de divisa: a borda do construído. Elas são as sementes
+ *      de uma BFS de 8 direções limitada a VOID_CRUST anéis;
+ *   2. CROSTA — toda parede alcançada (distância Chebyshev <= VOID_CRUST da
+ *      divisa) PERMANECE parede: é o rebordo do precipício. Não cortamos o
+ *      vazio onde ele se encostaria na sala — a cachoeira precisa da borda,
+ *      e mesmo com um anel só de crosta o vazio nunca toca um tile
+ *      caminhável (quem encosta no piso é a divisa, distância 0);
+ *   3. CONVERSÃO — a parede que sobrou fora da crosta vira Void, COM DUAS
+ *      EXCEÇÕES DURAS: nada dentro de nenhum retângulo de sala (o recorte da
+ *      sala 'notched' e as colunas da 'pillared' são arquitetura, não
+ *      penhasco) e nada no anel externo do mapa (a moldura continua parede,
+ *      como sempre foi).
+ *
+ * Só escreve sobre WALL — nunca sobre tile caminhável — então a conversão
+ * não toca a conectividade e dispensa revalidação. Devolve a contagem.
+ */
+function carveVoid(tiles: Uint8Array, w: number, h: number, rooms: Room[]): number {
+  const n = w * h;
+  /* Máscara dos retângulos de sala: o vazio NUNCA entra numa sala. */
+  const emSala = new Uint8Array(n);
+  for (let r = 0; r < rooms.length; r++) {
+    const sala = rooms[r];
+    for (let y = sala.y; y < sala.y + sala.h; y++) {
+      for (let x = sala.x; x < sala.x + sala.w; x++) {
+        emSala[y * w + x] = 1;
+      }
+    }
+  }
+
+  /* Distância até a parede de divisa mais próxima (BFS 8 direções, -1 =
+   * "além da crosta"). As sementes (dist 0) são as divisas. */
+  const dist = new Int32Array(n);
+  dist.fill(-1);
+  const fila = new Int32Array(n);
+  let ini = 0;
+  let fim = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (tiles[i] !== WALL) continue;
+      let divisa = false;
+      for (let d = 0; d < DIRS8.length && !divisa; d++) {
+        const nx = x + DIRS8[d][0];
+        const ny = y + DIRS8[d][1];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        if (isWalkVal(tiles[ny * w + nx])) divisa = true;
+      }
+      if (divisa) {
+        dist[i] = 0;
+        fila[fim++] = i;
+      }
+    }
+  }
+  while (ini < fim) {
+    const cur = fila[ini++];
+    const dc = dist[cur];
+    if (dc >= VOID_CRUST) continue;
+    const cx = cur % w;
+    const cy = (cur - cx) / w;
+    for (let d = 0; d < DIRS8.length; d++) {
+      const nx = cx + DIRS8[d][0];
+      const ny = cy + DIRS8[d][1];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = ny * w + nx;
+      if (dist[ni] !== -1 || tiles[ni] !== WALL) continue;
+      dist[ni] = dc + 1;
+      fila[fim++] = ni;
+    }
+  }
+
+  /* A varredura 1..w-2 × 1..h-2 é a moldura preservada: o anel externo
+   * continua parede, e o vazio mora entre ele e o construído. */
+  let convertidos = 0;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      if (tiles[i] !== WALL || dist[i] !== -1 || emSala[i]) continue;
+      tiles[i] = VOID;
+      convertidos++;
+    }
+  }
+  return convertidos;
+}
+
+/** Tile elegível para poça: FLOOR puro da sala, fora do início, ainda seco.
+ *  A escada já sai de graça (é STAIRS, não FLOOR); a porta idem (é DOOR) —
+ *  poça é poça de piso, nunca um vão molhado de passagem. */
+function elegivelAgua(
+  tiles: Uint8Array,
+  agua: Uint8Array,
+  w: number,
+  room: Room,
+  start: Point,
+  x: number,
+  y: number
+): boolean {
+  if (x < room.x || y < room.y || x >= room.x + room.w || y >= room.y + room.h) return false;
+  const i = y * w + x;
+  if (tiles[i] !== FLOOR) return false;
+  if (x === start.x && y === start.y) return false;
+  return !agua[i];
+}
+
+/**
+ * Sorteia UMA região 4-conexa de água dentro da sala, crescendo a partir de
+ * uma semente sorteada: a cada passo um tile da fronteira é promovido à
+ * região e os vizinhos elegíveis dele engrossam a fronteira. Devolve os
+ * índices da região (menor que AGUA_MIN se a sala não comportou a poça —
+ * quem decide se ela vinga é o chamador).
+ *
+ * Todo sorteio vem do rng da água, na ordem fixa: semente, depois um `int`
+ * por tile promovido. A ordem de varredura dos elegíveis é o índice linear
+ * (linha a linha), como em todo o mapgen.
+ */
+function regiaoDeAgua(
+  tiles: Uint8Array,
+  agua: Uint8Array,
+  w: number,
+  room: Room,
+  start: Point,
+  tamanho: number,
+  rng: Rng
+): number[] {
+  const cand: number[] = [];
+  for (let y = room.y; y < room.y + room.h; y++) {
+    for (let x = room.x; x < room.x + room.w; x++) {
+      if (elegivelAgua(tiles, agua, w, room, start, x, y)) cand.push(y * w + x);
+    }
+  }
+  if (cand.length === 0) return [];
+
+  const regiao: number[] = [];
+  const naRegiao = new Set<number>();
+  const fronteira: number[] = [];
+  const naFronteira = new Set<number>();
+  const promover = (i: number): void => {
+    regiao.push(i);
+    naRegiao.add(i);
+    const px = i % w;
+    const py = (i - px) / w;
+    for (let d = 0; d < 4; d++) {
+      const nx = px + DIRS4[d][0];
+      const ny = py + DIRS4[d][1];
+      const ni = ny * w + nx;
+      if (naRegiao.has(ni) || naFronteira.has(ni)) continue;
+      if (!elegivelAgua(tiles, agua, w, room, start, nx, ny)) continue;
+      fronteira.push(ni);
+      naFronteira.add(ni);
+    }
+  };
+
+  promover(cand[rng.int(0, cand.length - 1)]);
+  while (regiao.length < tamanho && fronteira.length > 0) {
+    const k = rng.int(0, fronteira.length - 1);
+    const prox = fronteira.splice(k, 1)[0];
+    naFronteira.delete(prox);
+    promover(prox);
+  }
+  return regiao;
+}
+
+interface AguaResult {
+  agua: Uint8Array;
+  regioes: number;
+  pocas: number;
+}
+
+/**
+ * Planta as poças do nível: no máximo UMA região por sala, em ~AGUA_CHANCE
+ * das salas, com 2..5 tiles 4-conexos. O bitmap é paralelo aos tiles — a
+ * poça continua FLOOR em `map.tiles` (piso no visual) e é `agua[i] = 1` que
+ * a torna intransponível.
+ *
+ * A GARANTIA DE CONECTIVIDADE é por região e global: aplicada a poça, a BFS
+ * do início (caminhabilidade efetiva — piso seco, porta e escada) tem de
+ * continuar alcançando TODOS os tiles ainda secos. Uma poça que isole
+ * qualquer coisa — o start, a escada, um braço de cruz — é REVERTIDA por
+ * inteiro e a sala tenta outra posição, até AGUA_TENTATIVAS vezes; se
+ * nenhuma vingar, a sala amanhece seca. Não há poça parcial: ou a região
+ * inteira fica, ou nada fica. Como a conectividade crua é 100% quando isto
+ * roda (a geração só aceita mapa pleno), a invariante sai daqui provada,
+ * não esperada.
+ *
+ * `rng` é o stream dedicado ('#agua'): consumido por sala, na ordem de id —
+ * um `chance` sempre, e, se a sala foi sorteada, um `int` de tamanho e os
+ * sorteios do crescimento POR TENTATIVA.
+ */
+function plantarAgua(
+  tiles: Uint8Array,
+  w: number,
+  h: number,
+  rooms: Room[],
+  start: Point,
+  rng: Rng
+): AguaResult {
+  const agua = new Uint8Array(w * h);
+  const totalSeco = countWalkable(tiles);
+  let regioes = 0;
+  let pocas = 0;
+  for (let r = 0; r < rooms.length; r++) {
+    if (!rng.chance(AGUA_CHANCE)) continue;
+    for (let tent = 0; tent < AGUA_TENTATIVAS; tent++) {
+      const tamanho = rng.int(AGUA_MIN, AGUA_MAX);
+      const regiao = regiaoDeAgua(tiles, agua, w, rooms[r], start, tamanho, rng);
+      if (regiao.length < AGUA_MIN) continue; // sala sem poça: degrada, não força
+      for (let k = 0; k < regiao.length; k++) agua[regiao[k]] = 1;
+      const scan = bfsFrom(tiles, w, h, start.x, start.y, agua);
+      if (scan.reached < totalSeco - pocas - regiao.length) {
+        /* A poça isolou algo: reverte por inteiro e tenta outra posição. */
+        for (let k = 0; k < regiao.length; k++) agua[regiao[k]] = 0;
+        continue;
+      }
+      pocas += regiao.length;
+      regioes++;
+      break; // uma poça por sala, vingou — próxima sala
+    }
+  }
+  return { agua: agua, regioes: regioes, pocas: pocas };
+}
+
+// -------------------------------------------------------------------------
 // API pública
 // -------------------------------------------------------------------------
 
@@ -633,10 +913,29 @@ export function inBounds(map: GameMap, x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < map.w && y < map.h;
 }
 
+/**
+ * Caminhável para efeito de PASSO: piso, porta ou escada — e NÃO poça.
+ *
+ * A fase do penhasco mudou esta função em um único ponto, e é por ele que a
+ * decisão do dono vira regra sem que mais nada precise saber por quê:
+ *   · o VAZIO (`Tile.Void`) cai fora do trio de valores caminháveis, como a
+ *     parede — sem linha nova;
+ *   · a ÁGUA é piso com o bitmap `map.agua` marcado, e o bitmap a exclui.
+ *
+ * Tudo que lê caminhabilidade herda o bloqueio de graça: o passo do jogador
+ * (game.ts), o campo de Dijkstra e o passo do gradiente (dijkstra.ts), a IA
+ * (entities.ts), a colocação de inimigos, itens e paradas (populate) e a
+ * validação de posições do restore (game.ts). `map.agua` ausente (mapa
+ * fabricado à mão por ferramenta) degrada para "sem poças", nunca para erro.
+ */
 export function isWalkable(map: GameMap, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
-  const v = map.tiles[y * map.w + x];
-  return v === FLOOR || v === DOOR || v === STAIRS;
+  const i = y * map.w + x;
+  const v = map.tiles[i];
+  if (v !== FLOOR && v !== DOOR && v !== STAIRS) return false;
+  const agua = map.agua;
+  if (agua && agua[i]) return false;
+  return true;
 }
 
 export function blocksLight(map: GameMap, x: number, y: number): boolean {
@@ -792,6 +1091,30 @@ export function generate(seedStr: string, depth: number): GameMap {
   }
   tiles[idx(w, stairX, stairY)] = STAIRS;
 
+  /* -------------------------------------------------------------- *
+   * Fase do penhasco — DEPOIS de salas, corredores e escada.
+   *
+   * A escolha da escada usa o `dist` do mapa CRU (pré-água) de propósito: a
+   * escada é decidida sobre o relevo completo, e a água nunca a cobre
+   * (STAIRS não é FLOOR). O vazio vem primeiro (geometria pura, sem rng) e
+   * a água depois, com stream PRÓPRIO derivado de seed+depth — nenhum u32
+   * dos streams do layout é consumido aqui, então salas e corredores saem
+   * byte a byte como antes da fase.
+   * -------------------------------------------------------------- */
+  const vazios = carveVoid(tiles, w, h, rooms);
+  const rngAgua = makeRng(hash32(seed + '#' + d + '#agua'));
+  const aguas = plantarAgua(tiles, w, h, rooms, { x: startX, y: startY }, rngAgua);
+  const agua = aguas.agua;
+
+  /* Conectividade EFETIVA: a água barra o passo, então os números públicos
+   * (`connectivity`, `walkable`) e a nota correspondente passam a medir o
+   * relevo de verdade — piso seco. A validação por região de `plantarAgua`
+   * garante 100% aqui; recomputar é registrar a prova, não torcer por ela. */
+  walk = countWalkable(tiles, agua);
+  scan = bfsFrom(tiles, w, h, startX, startY, agua);
+  reach = scan.reached;
+  connectivity = walk > 0 ? reach / walk : 0;
+
   recomputeAreas(tiles, w, rooms);
   const decor = computeDecor(tiles, w, h, built.decorSeed);
 
@@ -809,6 +1132,17 @@ export function generate(seedStr: string, depth: number): GameMap {
     ' em (' + stairX + ',' + stairY + '), a ' + Math.max(0, bestDist) + ' ' +
     plural(Math.max(0, bestDist), 'passo', 'passos') + ' do início.');
 
+  if (vazios > 0) {
+    notes.push('O nível é um penhasco: ' + vazios + ' ' +
+      plural(vazios, 'tile de vazio cerca', 'tiles de vazio cercam') +
+      ' o construído, entre ele e a borda.');
+  }
+  if (aguas.regioes > 0) {
+    notes.push(aguas.regioes + ' ' + plural(aguas.regioes, 'poça', 'poças') +
+      ' de água (' + aguas.pocas + ' ' + plural(aguas.pocas, 'tile', 'tiles') +
+      '): a água barra o passo como a parede.');
+  }
+
   const unreachable = walk - reach;
   if (connectivity >= 1) {
     notes.push('Conectividade 100,0% — ' + walk + ' tiles caminháveis, todos alcançáveis a partir do início.');
@@ -824,6 +1158,7 @@ export function generate(seedStr: string, depth: number): GameMap {
     h: h,
     tiles: tiles,
     decor: decor,
+    agua: agua,
     rooms: rooms,
     start: { x: startX, y: startY },
     stairs: { x: stairX, y: stairY },

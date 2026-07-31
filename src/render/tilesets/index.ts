@@ -32,6 +32,11 @@ import type { No, Pose } from '../model3d';
 import {
   CORES_EMISSIVAS_NIVEL1,
   MODELO_FLORES,
+  MODELO_FLORES_TURQUESA,
+  MODELO_PAREDE_TIJOLO,
+  MODELO_PISO_LAJOTA,
+  MODELO_PISO_TIJOLO,
+  MODELO_PISO_TIJOLO_GRAMA,
   MODELO_FLOR_LARANJA,
   MODELO_MOITA,
   MODELO_PAREDE_TERRA,
@@ -80,6 +85,13 @@ export interface Tileset {
   readonly agua: No | null;
   /** Adereços que ficam em cima do piso. Pode ser vazia. */
   readonly aderecos: readonly No[];
+  /**
+   * Uma SEGUNDA parede, de outro material (no nível 1: alvenaria de tijolo com
+   * grama por cima). Fica pronta para o renderer alternar parede por sala e
+   * quebrar a monotonia do andar; enquanto ele não usa, o rig já está revisado
+   * e não custa nada — atlas só é forjado quando alguém pede.
+   */
+  readonly paredeAlternativa: No | null;
 }
 
 /**
@@ -98,17 +110,21 @@ export const TILESET_NIVEL1: Tileset = {
    * da referência, onde o verde domina e a areia é a exceção. */
   piso: [
     MODELO_PISO_GRAMA,
-    MODELO_PISO_GRAMA,
+    MODELO_PISO_LAJOTA,
     MODELO_PISO_TERRA,
     MODELO_PISO_GRAMA,
     MODELO_PISO_AREIA,
-    MODELO_PISO_GRAMA,
+    MODELO_PISO_TIJOLO_GRAMA,
     MODELO_PISO_TERRA,
-    MODELO_PISO_GRAMA
+    MODELO_PISO_TIJOLO
   ],
   parede: MODELO_PAREDE_TERRA,
+  paredeAlternativa: MODELO_PAREDE_TIJOLO,
   agua: MODELO_PISO_AGUA,
-  aderecos: [MODELO_TUFO, MODELO_PEDRA, MODELO_MOITA, MODELO_FLORES, MODELO_FLOR_LARANJA]
+  aderecos: [
+    MODELO_TUFO, MODELO_PEDRA, MODELO_MOITA,
+    MODELO_FLORES, MODELO_FLORES_TURQUESA, MODELO_FLOR_LARANJA
+  ]
 };
 
 /**
