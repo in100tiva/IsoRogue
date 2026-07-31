@@ -29,17 +29,21 @@
  */
 
 import type { No, Pose } from '../model3d';
+import { ART_POR_U, PIXEL } from '../model3d';
 import {
   CORES_EMISSIVAS_NIVEL1,
   MODELO_FLORES,
   MODELO_FLORES_TURQUESA,
+  MODELO_PAREDE_CAPIM,
+  MODELO_PAREDE_FOLHAGEM,
+  MODELO_PAREDE_SEBE,
+  MODELO_PAREDE_SUCULENTA,
   MODELO_PAREDE_TIJOLO,
   MODELO_PISO_LAJOTA,
   MODELO_PISO_TIJOLO,
   MODELO_PISO_TIJOLO_GRAMA,
   MODELO_FLOR_LARANJA,
   MODELO_MOITA,
-  MODELO_PAREDE_TERRA,
   MODELO_PEDRA,
   MODELO_PISO_AGUA,
   MODELO_PISO_AREIA,
@@ -81,8 +85,45 @@ export interface Tileset {
   readonly piso: readonly No[];
   /** O bloco alto. Sujeito ao sistema de transparência do canto frontal. */
   readonly parede: No;
+  /**
+   * TODAS as paredes do mesmo material do andar — a muralha viva do nível 1 são
+   * quatro sebes diferentes (folhas arredondadas, capim, folhagem grande e
+   * suculenta), e a referência do dono é justamente um mostruário de variantes.
+   *
+   * Por que uma LISTA e não um `if` no renderer: é o mesmo contrato de `piso`.
+   * O renderer fecha o índice com módulo sobre o bucket que o mapa já produz
+   * (`map.decor[i] & 7`), e com isso a variação sai DETERMINÍSTICA e por TILE —
+   * a mesma parede na mesma casa em toda partida com a mesma semente, sem o
+   * render sortear nada (sortear no desenho é como um replay deixa de bater).
+   *
+   * Duas regras que este campo carrega:
+   *
+   *   1. `parede` continua sendo A parede — é ela que o renderer desenha hoje, e
+   *      é ela que responde pelo alfa do canto frontal. Enquanto o sorteio por
+   *      tile não entrar, esta lista é rig revisado à espera; o dia em que
+   *      entrar, é uma linha lá e nada aqui;
+   *   2. `parede` PRECISA ser uma das variantes. Se não fosse, ligar o sorteio
+   *      trocaria o visual de todo o andar de uma vez — a lista existe para
+   *      ACRESCENTAR variedade, nunca para substituir o que já se viu na tela.
+   *
+   * Lista vazia é legítima: o andar não varia e todo tile usa `parede`.
+   */
+  readonly paredesVariantes: readonly No[];
   /** Piso especial de água, quando o tileset tem um. */
   readonly agua: No | null;
+  /**
+   * Quanto o topo da água afunda abaixo do plano do chão, em **px de tela a
+   * zoom 1** — não em `u`, porque quem consome é o renderer e ele trabalha em
+   * px (o fator `ART_POR_U × PIXEL` é assunto da forja, não dele).
+   *
+   * Existe porque dois efeitos de TELA precisam saber onde está a lâmina
+   * d'água e não têm como descobrir: o brilho que corre pela poça e a
+   * cachoeira que escorre pela borda. Sem este número os dois desenhariam no
+   * plano do chão seco, acima da lâmina, e o fluxo nasceria no ar.
+   *
+   * Tileset sem água declara 0 e nada o consulta.
+   */
+  readonly aguaAfundaPx: number;
   /** Adereços que ficam em cima do piso. Pode ser vazia. */
   readonly aderecos: readonly No[];
   /**
@@ -97,6 +138,13 @@ export interface Tileset {
 /**
  * "Ruínas Verdes" — o andar 1: grama, terra batida, areia e poças, com tufos,
  * pedras, moitas e flores. A flor laranja é o único adereço emissivo.
+ *
+ * As PAREDES são muralha viva: sebes densas e intransponíveis, no lugar do
+ * barranco de terra que o andar tinha. É leitura de regra, não estilo — parede
+ * de terra com grama por cima usa exatamente as mesmas cores do piso de grama,
+ * e o que separava "chão" de "obstáculo" era só a altura. Sebe é outro material,
+ * outro verde e outra textura: não dá para confundir com o gramado nem de
+ * relance, que é o que se pede de uma parede.
  */
 export const TILESET_NIVEL1: Tileset = {
   nome: 'Ruínas Verdes',
@@ -118,9 +166,23 @@ export const TILESET_NIVEL1: Tileset = {
     MODELO_PISO_TERRA,
     MODELO_PISO_TIJOLO
   ],
-  parede: MODELO_PAREDE_TERRA,
+  parede: MODELO_PAREDE_SEBE,
+  /* A ordem É a distribuição, como em `piso`: a sebe de folhas arredondadas
+   * abre a lista porque é a mais neutra das quatro — ela é o verde de fundo
+   * contra o qual o capim claro, a folhagem grande e a suculenta escura se
+   * distinguem. E é a mesma de `parede` acima, pela regra 2 do contrato. */
+  paredesVariantes: [
+    MODELO_PAREDE_SEBE,
+    MODELO_PAREDE_CAPIM,
+    MODELO_PAREDE_FOLHAGEM,
+    MODELO_PAREDE_SUCULENTA
+  ],
   paredeAlternativa: MODELO_PAREDE_TIJOLO,
   agua: MODELO_PISO_AGUA,
+  /* Em px de tela: a calibração do rig é em `u`, e é aqui que ela vira o número
+   * que o renderer entende. Derivado, nunca digitado duas vezes — mudar
+   * `afundamentoAgua` em nivel1.ts move a lâmina, o brilho e a cachoeira juntos. */
+  aguaAfundaPx: PROPORCOES_NIVEL1.afundamentoAgua * ART_POR_U * PIXEL,
   aderecos: [
     MODELO_TUFO, MODELO_PEDRA, MODELO_MOITA,
     MODELO_FLORES, MODELO_FLORES_TURQUESA, MODELO_FLOR_LARANJA

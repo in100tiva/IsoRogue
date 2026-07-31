@@ -7,16 +7,26 @@
  * Fase do penhasco (decisão do dono, sem rediscussão): DEPOIS de salas,
  * corredores e escada, o mapa ganha VAZIO nas bordas (toda parede a mais de
  * VOID_CRUST anéis da divisa do construído vira `Tile.Void` — o nível inteiro
- * é um penhasco) e ÁGUA dentro das salas (poças 4-conexas de 2..5 tiles no
- * bitmap paralelo `map.agua`). Os dois bloqueiam o passo como a parede —
- * jogador E inimigos. Água não é travessia a nado; vazio não é abismo que
- * mata. São barreiras com visual diferente, e a prova de que nada ficou
- * isolado por causa delas é a BFS de conectividade refeita no fim da geração.
+ * é um penhasco) e ÁGUA em duas mãos, no bitmap paralelo `map.agua`: POÇAS
+ * 4-conexas de 2..5 tiles dentro das salas e CANAIS — as enseadas — que
+ * nascem na costa do penhasco e avançam COMENDO PAREDE. Os três bloqueiam o
+ * passo como a parede — jogador E inimigos. Água não é travessia a nado;
+ * vazio não é abismo que mata. São barreiras com visual diferente, e a prova
+ * de que nada ficou isolado por causa delas é a BFS de conectividade refeita
+ * no fim da geração.
+ *
+ * O CANAL É ÁGUA NO LUGAR DO MURO (referência do dono: a ilha em que o mar
+ * delimita o terreno). Ele só escreve sobre `WALL`, nunca sobre piso, e por
+ * isso o conjunto de tiles caminháveis do andar atravessa a fase intacto: a
+ * enseada troca o visual da barreira sem mover uma vírgula de conectividade,
+ * de população ou dos demais streams de rng.
  *
  * Porte 1:1 de legacy/src-vanilla/10-mapgen.js. A ORDEM DE CONSUMO DO RNG é
  * parte do contrato: um u32() a mais ou a menos muda todos os mapas. A água
  * consome um stream PRÓPRIO ('#agua'), criado depois do layout final, então
- * nenhum stream pré-existente (bsp/rooms/corr/decor) muda um passo.
+ * nenhum stream pré-existente (bsp/rooms/corr/decor) muda um passo — e os
+ * canais entram no FIM desse mesmo stream, depois das poças, para que nem as
+ * poças mudem.
  */
 import { CONFIG, hash32, idx, DIRS4, DIRS8, normalizeSeed, makeRng } from './core';
 import type { GameMap, Point, RegionsResult, Rng, Room, RoomShape } from './types';
@@ -60,6 +70,45 @@ const AGUA_MAX = 5;        // tamanho máximo da região de água
  * legítima). O consumo do stream é por tentativa: um `int` de tamanho e os
  * sorteios do crescimento, tudo função da seed. */
 const AGUA_TENTATIVAS = 3;
+
+/* --- parâmetros dos CANAIS (fixos: fazem parte do determinismo) -----------
+ *
+ * O canal é a água que SUBSTITUI PAREDE: uma faixa que nasce na crosta do
+ * penhasco — a beira onde o construído encosta no vazio — e avança para
+ * dentro comendo o muro. É a enseada da referência do dono: o mar de fora
+ * entrando pelo terreno, barrando a passagem no lugar do muro.
+ *
+ * As réguas abaixo saíram de medição em 180 andares (60 sementes ×
+ * profundidades 1..3), com o gerador travado nos valores finais:
+ *   · 100% dos andares ganham pelo menos uma enseada, e TODA ela nasce
+ *     encostada no vazio — nenhuma vira piscina no meio da rocha;
+ *   · 1 a 3 corpos de canal por andar (média 1,9) e 3 a 31 tiles de canal por
+ *     andar (média 13,3): grande o bastante para o olho ler "enseada",
+ *     pequeno o bastante para não virar um lago que engole o andar.
+ * Comprimento é medido no EIXO do canal (os tiles do traçado); a largura 2
+ * acrescenta a companhia lateral por cima disso. */
+const CANAL_MIN = 1;             // canais sorteados por andar (piso)
+const CANAL_MAX = 3;             // canais sorteados por andar (teto)
+const CANAL_COMP_MIN = 3;        // comprimento mínimo do eixo, em tiles
+const CANAL_COMP_MAX = 8;        // comprimento máximo do eixo, em tiles
+const CANAL_LARGO_CHANCE = 0.45; // chance de o canal ter 2 tiles de largura
+/* Viés de seguir em frente. Sem ele o traçado vira um novelo em cima da boca
+ * (a crosta é estreita e o passeio aleatório volta sobre si); com ele o braço
+ * entra, dobra ao encontrar o piso e corre pela margem — que é o desenho de
+ * enseada. */
+const CANAL_RETO = 0.62;
+const CANAL_TENTATIVAS = 3;      // tentativas por canal antes de desistir
+/* Preferência por boca perto de água que já existe (poça do §água ou canal
+ * anterior): é o que dá CONSISTÊNCIA DE AMBIENTE — a poça da sala vira a
+ * margem interna da mesma enseada em vez de uma piscina avulsa no meio da
+ * rocha. Não é regra dura: 40% das bocas saem de qualquer ponto da costa,
+ * senão todo canal do andar se amontoaria no mesmo canto. */
+const CANAL_PERTO_DAGUA = 0.60;
+/* Raio de Chebyshev que define "mesmo corpo d'água" para a preferência acima.
+ * 3 é a distância em que uma poça na beira da sala e uma boca na crosta ainda
+ * se leem como uma coisa só: a crosta tem 2 anéis, então a boca já nasce a
+ * 2 tiles do piso mais próximo. */
+const CANAL_RAIO_CORPO = 3;
 
 const SHAPE_NOME: Record<RoomShape, [string, string]> = {
   rect: ['retangular', 'retangulares'],
@@ -680,6 +729,27 @@ function shapeSummary(rooms: Room[]): string {
 // -------------------------------------------------------------------------
 
 /**
+ * Máscara dos RETÂNGULOS de sala (1 = dentro de alguma sala).
+ *
+ * Mora fora de `carveVoid` porque é a MESMA régua que o vazio e o canal
+ * precisam obedecer: o recorte da sala 'notched' e as colunas da 'pillared'
+ * são arquitetura, não penhasco e não enseada. Duas cópias desta varredura
+ * seriam duas chances de divergir no dia em que a régua mudar.
+ */
+function mascaraDeSalas(w: number, h: number, rooms: Room[]): Uint8Array {
+  const emSala = new Uint8Array(w * h);
+  for (let r = 0; r < rooms.length; r++) {
+    const sala = rooms[r];
+    for (let y = sala.y; y < sala.y + sala.h; y++) {
+      for (let x = sala.x; x < sala.x + sala.w; x++) {
+        emSala[y * w + x] = 1;
+      }
+    }
+  }
+  return emSala;
+}
+
+/**
  * Converte em `Tile.Void` a parede LONGE do construído: o nível inteiro é um
  * penhasco, e o vazio é o que fica ENTRE o construído e a moldura externa.
  *
@@ -704,15 +774,7 @@ function shapeSummary(rooms: Room[]): string {
 function carveVoid(tiles: Uint8Array, w: number, h: number, rooms: Room[]): number {
   const n = w * h;
   /* Máscara dos retângulos de sala: o vazio NUNCA entra numa sala. */
-  const emSala = new Uint8Array(n);
-  for (let r = 0; r < rooms.length; r++) {
-    const sala = rooms[r];
-    for (let y = sala.y; y < sala.y + sala.h; y++) {
-      for (let x = sala.x; x < sala.x + sala.w; x++) {
-        emSala[y * w + x] = 1;
-      }
-    }
-  }
+  const emSala = mascaraDeSalas(w, h, rooms);
 
   /* Distância até a parede de divisa mais próxima (BFS 8 direções, -1 =
    * "além da crosta"). As sementes (dist 0) são as divisas. */
@@ -906,6 +968,313 @@ function plantarAgua(
 }
 
 // -------------------------------------------------------------------------
+// Canais — a água que SUBSTITUI a parede (a enseada da referência do dono)
+//
+// A poça é relevo de sala; o canal é relevo de ANDAR. Ele nasce na costa (a
+// parede da crosta que encosta no vazio), avança comendo muro e deixa margem
+// dos dois lados: onde o canal passa, a parede some e a água toma o lugar.
+// Para o jogador, água e parede barram igual — a diferença é o que o olho lê,
+// e é exatamente essa diferença que o dono pediu.
+//
+// AS TRÊS TRAVAS QUE FAZEM ISTO SER BARATO E SEGURO, nesta ordem:
+//
+//   1. O CANAL SÓ COME PAREDE. Nunca piso, porta, escada ou o retângulo de
+//      uma sala. É a trava estrutural: um tile que já era intransponível
+//      continua intransponível, então o CONJUNTO DE TILES CAMINHÁVEIS do
+//      andar sai do canal byte a byte igual ao que entrou. Disso decorre, de
+//      graça, que nenhuma sala, escada, início, mercador ou estação pode ser
+//      isolada — e que `populate` (que sorteia sobre `isWalkable`) devolve os
+//      MESMOS inimigos e os MESMOS itens de antes da fase da enseada.
+//   2. TODO CANAL TEM MARGEM. Pelo menos um tile do leito precisa encostar
+//      (4-vizinhança) em piso seco. Um braço d'água enterrado no meio da
+//      rocha, que nenhuma sala enxerga, não é enseada — é desperdício de
+//      geração; e, além do estético, é a margem que mantém o canal dentro da
+//      região caminhável CRUA do mapa (a água continua sendo `Tile.Floor`).
+//   3. A CONECTIVIDADE É REVALIDADA MESMO ASSIM. Aplicado o leito, a BFS de
+//      caminhabilidade efetiva refaz o passeio do início: se um tile seco
+//      qualquer deixou de ser alcançável, o canal INTEIRO é revertido e o
+//      andar tenta outro traçado. Pela trava 1 isso nunca dispara, e é
+//      justamente por isso que ela fica: no dia em que alguém deixar o canal
+//      morder piso, o gerador degrada sozinho em vez de entregar um andar
+//      partido em silêncio.
+//
+// O stream é o '#agua' que já existia, consumido DEPOIS das poças. A ordem
+// não é gosto: as poças precisam sair do gerador com os mesmos sorteios de
+// sempre — elas mexem em `isWalkable`, e mexer nelas moveria inimigo e item
+// de todo andar já gerado. Os canais, que não mexem, entram por último.
+// -------------------------------------------------------------------------
+
+/**
+ * Tile elegível para leito de canal: parede pura, fora de sala e dentro da
+ * moldura. O tile que um canal anterior já comeu deixou de ser `WALL` (virou
+ * piso com o bitmap marcado), então o próprio teste de parede impede que dois
+ * canais se sobreponham — não há caso especial para água aqui.
+ */
+function elegivelCanal(
+  tiles: Uint8Array,
+  emSala: Uint8Array,
+  w: number,
+  h: number,
+  x: number,
+  y: number
+): boolean {
+  if (x < 1 || y < 1 || x > w - 2 || y > h - 2) return false; // moldura intacta
+  const i = y * w + x;
+  if (tiles[i] !== WALL) return false;
+  return !emSala[i];
+}
+
+/** Há piso SECO encostado (4-vizinhança) em (x,y)? É o teste de margem. */
+function temMargem(
+  tiles: Uint8Array,
+  agua: Uint8Array,
+  w: number,
+  h: number,
+  x: number,
+  y: number
+): boolean {
+  for (let d = 0; d < 4; d++) {
+    const nx = x + DIRS4[d][0];
+    const ny = y + DIRS4[d][1];
+    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+    const ni = ny * w + nx;
+    if (isWalkVal(tiles[ni]) && !agua[ni]) return true;
+  }
+  return false;
+}
+
+/**
+ * Bocas de canal: tiles elegíveis que encostam (4-vizinhança) no VAZIO.
+ *
+ * É a costa do andar — a linha em que o construído dá de cara com o penhasco.
+ * Ancorar ali é o que faz o braço ler como MAR ENTRANDO pelo mapa, e não como
+ * piscina cavada no meio da rocha: a água nasce na beira do abismo e o
+ * renderer, que já sabe desenhar a cachoeira onde a água encosta no vazio,
+ * fecha a leitura sozinho.
+ *
+ * Devolve pares (índice do tile, índice da direção de ENTRADA em DIRS4) — a
+ * direção é o oposto de onde está o vazio, isto é, para dentro do terreno.
+ */
+function bocasDeCanal(
+  tiles: Uint8Array,
+  emSala: Uint8Array,
+  w: number,
+  h: number
+): { i: number; dir: number }[] {
+  const out: { i: number; dir: number }[] = [];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (!elegivelCanal(tiles, emSala, w, h, x, y)) continue;
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DIRS4[d][0];
+        const ny = y + DIRS4[d][1];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        if (tiles[ny * w + nx] !== VOID) continue;
+        out.push({ i: y * w + x, dir: (d + 2) % 4 }); // entra ao contrário do mar
+        break;
+      }
+    }
+  }
+  return out;
+}
+
+/** Há água a até `raio` (Chebyshev) do tile? Define "mesmo corpo d'água". */
+function pertoDeAgua(
+  agua: Uint8Array,
+  w: number,
+  h: number,
+  x: number,
+  y: number,
+  raio: number
+): boolean {
+  const x0 = Math.max(0, x - raio);
+  const x1 = Math.min(w - 1, x + raio);
+  const y0 = Math.max(0, y - raio);
+  const y1 = Math.min(h - 1, y + raio);
+  for (let yy = y0; yy <= y1; yy++) {
+    for (let xx = x0; xx <= x1; xx++) {
+      if (agua[yy * w + xx]) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Traça o LEITO de um canal a partir da boca, sem escrever nada no mapa.
+ *
+ * O passeio é enviesado: a cada passo, se o tile na direção atual for
+ * elegível, ele é tomado com probabilidade `CANAL_RETO`; senão (ou no azar do
+ * sorteio) o passo sai por sorteio uniforme entre os vizinhos elegíveis, na
+ * ordem fixa de `DIRS4`. A direção corrente passa a ser a do passo dado — o
+ * braço "escoa" em vez de zigue-zaguear em torno da boca.
+ *
+ * Largura 2: uma única companheira lateral por tile do eixo, sempre do MESMO
+ * lado (sorteado uma vez para o canal inteiro). Alternar o lado tile a tile
+ * produziria uma mancha gorda no meio e pontas finas; um lado só produz uma
+ * faixa — que é o que uma enseada é.
+ *
+ * Consumo do rng, por canal e nesta ordem: um `chance` de largura, um `int`
+ * de lado, e por passo do eixo um `chance` de seguir reto mais, quando o reto
+ * não vinga, um `int` de escolha. Nada é sorteado na fase da largura.
+ */
+function tracarCanal(
+  tiles: Uint8Array,
+  emSala: Uint8Array,
+  w: number,
+  h: number,
+  boca: { i: number; dir: number },
+  comprimento: number,
+  rng: Rng
+): number[] {
+  const eixo: number[] = [boca.i];
+  const dirs: number[] = [boca.dir];
+  const noLeito = new Set<number>([boca.i]);
+  let dir = boca.dir;
+  let cx = boca.i % w;
+  let cy = (boca.i - cx) / w;
+
+  const largo = rng.chance(CANAL_LARGO_CHANCE);
+  const lado = rng.int(0, 1); // 0 = perpendicular horária, 1 = anti-horária
+
+  while (eixo.length < comprimento) {
+    /* Candidatos na ordem fixa de DIRS4 — a mesma varredura determinística de
+     * todo o mapgen. A volta sobre o próprio leito fica de fora: canal não
+     * come a si mesmo. */
+    const cand: number[] = [];
+    let reto = -1;
+    for (let d = 0; d < 4; d++) {
+      const nx = cx + DIRS4[d][0];
+      const ny = cy + DIRS4[d][1];
+      if (!elegivelCanal(tiles, emSala, w, h, nx, ny)) continue;
+      const ni = ny * w + nx;
+      if (noLeito.has(ni)) continue;
+      cand.push(d);
+      if (d === dir) reto = d;
+    }
+    if (cand.length === 0) break; // encalhou: o braço termina onde chegou
+    let escolha: number;
+    if (reto >= 0 && rng.chance(CANAL_RETO)) {
+      escolha = reto;
+    } else {
+      escolha = cand[rng.int(0, cand.length - 1)];
+    }
+    cx += DIRS4[escolha][0];
+    cy += DIRS4[escolha][1];
+    dir = escolha;
+    const ni = cy * w + cx;
+    eixo.push(ni);
+    dirs.push(dir);
+    noLeito.add(ni);
+  }
+
+  if (!largo) return eixo;
+
+  /* Alargamento: a perpendicular do escoamento local, sempre do mesmo lado.
+   * O que não for elegível simplesmente não entra — o canal afina onde a
+   * rocha aperta, que é o desenho certo para uma enseada. */
+  const leito = eixo.slice();
+  for (let k = 0; k < eixo.length; k++) {
+    const perp = lado === 0 ? (dirs[k] + 1) % 4 : (dirs[k] + 3) % 4;
+    const px = (eixo[k] % w) + DIRS4[perp][0];
+    const py = ((eixo[k] - (eixo[k] % w)) / w) + DIRS4[perp][1];
+    if (!elegivelCanal(tiles, emSala, w, h, px, py)) continue;
+    const pi = py * w + px;
+    if (noLeito.has(pi)) continue;
+    noLeito.add(pi);
+    leito.push(pi);
+  }
+  return leito;
+}
+
+interface CanalResult {
+  /** Canais que vingaram. Todos nascem colados no vazio, por construção. */
+  canais: number;
+  /** Tiles de parede que viraram água. */
+  tiles: number;
+}
+
+/**
+ * Escava de `CANAL_MIN` a `CANAL_MAX` canais no andar, no bitmap `agua` e nos
+ * `tiles` (a parede comida vira `Tile.Floor` com o bitmap marcado — a mesma
+ * representação da poça, e por isso o renderer, o Dijkstra, a IA e o restore
+ * já sabem o que fazer com ela sem uma linha nova).
+ *
+ * Cada canal tenta até `CANAL_TENTATIVAS` traçados; um traçado é RECUSADO
+ * quando fica mais curto que `CANAL_COMP_MIN` (não lê como braço), quando não
+ * encosta em piso seco nenhum (não tem margem) ou quando a BFS de
+ * conectividade efetiva perde um tile seco (a trava dura). Recusa não escreve
+ * nada: ou o leito inteiro entra, ou o andar segue sem aquele canal.
+ */
+function escavarCanais(
+  tiles: Uint8Array,
+  w: number,
+  h: number,
+  rooms: Room[],
+  agua: Uint8Array,
+  start: Point,
+  rng: Rng
+): CanalResult {
+  const emSala = mascaraDeSalas(w, h, rooms);
+  const quantos = rng.int(CANAL_MIN, CANAL_MAX);
+  let canais = 0;
+  let escavados = 0;
+
+  for (let c = 0; c < quantos; c++) {
+    for (let tent = 0; tent < CANAL_TENTATIVAS; tent++) {
+      /* A costa é recalculada a cada tentativa: o canal anterior comeu parede
+       * e pode ter aberto (ou fechado) bocas. */
+      const bocas = bocasDeCanal(tiles, emSala, w, h);
+      if (bocas.length === 0) return { canais: canais, tiles: escavados };
+
+      /* Consistência de ambiente: com 60% de chance a boca sai de perto de
+       * água que já existe, para que poça e canal se leiam como o MESMO
+       * corpo d'água. Sem candidata perto, cai na costa inteira. */
+      const perto = bocas.filter((b) =>
+        pertoDeAgua(agua, w, h, b.i % w, (b.i - (b.i % w)) / w, CANAL_RAIO_CORPO));
+      const lista = (perto.length > 0 && rng.chance(CANAL_PERTO_DAGUA)) ? perto : bocas;
+      const boca = lista[rng.int(0, lista.length - 1)];
+      const comprimento = rng.int(CANAL_COMP_MIN, CANAL_COMP_MAX);
+      const leito = tracarCanal(tiles, emSala, w, h, boca, comprimento, rng);
+      if (leito.length < CANAL_COMP_MIN) continue; // braço curto demais: não vale
+
+      /* Margem obrigatória (trava 2): o braço tem de encostar em piso seco. */
+      let margem = false;
+      for (let k = 0; k < leito.length && !margem; k++) {
+        const lx = leito[k] % w;
+        const ly = (leito[k] - lx) / w;
+        if (temMargem(tiles, agua, w, h, lx, ly)) margem = true;
+      }
+      if (!margem) continue;
+
+      /* Aplica o leito inteiro: a parede some, a água toma o lugar. */
+      for (let k = 0; k < leito.length; k++) {
+        tiles[leito[k]] = FLOOR;
+        agua[leito[k]] = 1;
+      }
+
+      /* Trava 3: a conectividade efetiva refeita do zero. Pela trava 1 ela
+       * não pode cair — o canal só comeu tile que já barrava —, e é por isso
+       * que a comparação é com o total RECONTADO agora, e não com um número
+       * guardado antes: se um dia o canal morder piso, a conta acusa. */
+      const secos = countWalkable(tiles, agua);
+      const scan = bfsFrom(tiles, w, h, start.x, start.y, agua);
+      if (scan.reached < secos) {
+        for (let k = 0; k < leito.length; k++) {
+          tiles[leito[k]] = WALL;
+          agua[leito[k]] = 0;
+        }
+        continue;
+      }
+
+      canais++;
+      escavados += leito.length;
+      break;
+    }
+  }
+  return { canais: canais, tiles: escavados };
+}
+
+// -------------------------------------------------------------------------
 // API pública
 // -------------------------------------------------------------------------
 
@@ -914,19 +1283,20 @@ export function inBounds(map: GameMap, x: number, y: number): boolean {
 }
 
 /**
- * Caminhável para efeito de PASSO: piso, porta ou escada — e NÃO poça.
+ * Caminhável para efeito de PASSO: piso, porta ou escada — e NÃO água.
  *
  * A fase do penhasco mudou esta função em um único ponto, e é por ele que a
  * decisão do dono vira regra sem que mais nada precise saber por quê:
  *   · o VAZIO (`Tile.Void`) cai fora do trio de valores caminháveis, como a
  *     parede — sem linha nova;
- *   · a ÁGUA é piso com o bitmap `map.agua` marcado, e o bitmap a exclui.
+ *   · a ÁGUA é piso com o bitmap `map.agua` marcado, e o bitmap a exclui —
+ *     tanto a poça da sala quanto o canal que substituiu parede.
  *
  * Tudo que lê caminhabilidade herda o bloqueio de graça: o passo do jogador
  * (game.ts), o campo de Dijkstra e o passo do gradiente (dijkstra.ts), a IA
  * (entities.ts), a colocação de inimigos, itens e paradas (populate) e a
  * validação de posições do restore (game.ts). `map.agua` ausente (mapa
- * fabricado à mão por ferramenta) degrada para "sem poças", nunca para erro.
+ * fabricado à mão por ferramenta) degrada para "sem água", nunca para erro.
  */
 export function isWalkable(map: GameMap, x: number, y: number): boolean {
   if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
@@ -1100,11 +1470,21 @@ export function generate(seedStr: string, depth: number): GameMap {
    * a água depois, com stream PRÓPRIO derivado de seed+depth — nenhum u32
    * dos streams do layout é consumido aqui, então salas e corredores saem
    * byte a byte como antes da fase.
+   *
+   * A ÁGUA VEM EM DUAS MÃOS, e a ordem é contrato:
+   *   1. POÇAS, dentro das salas, sobre piso — mexem em `isWalkable`, logo
+   *      mexem nos candidatos de `populate`. Vêm PRIMEIRO e com os mesmos
+   *      sorteios de sempre, para que inimigo e item de todo andar já gerado
+   *      continuem exatamente onde estavam;
+   *   2. CANAIS, sobre parede — as enseadas. Consomem o MESMO stream '#agua',
+   *      logo depois das poças, e por só comerem tile que já barrava o passo
+   *      não movem uma vírgula da população.
    * -------------------------------------------------------------- */
   const vazios = carveVoid(tiles, w, h, rooms);
   const rngAgua = makeRng(hash32(seed + '#' + d + '#agua'));
   const aguas = plantarAgua(tiles, w, h, rooms, { x: startX, y: startY }, rngAgua);
   const agua = aguas.agua;
+  const canais = escavarCanais(tiles, w, h, rooms, agua, { x: startX, y: startY }, rngAgua);
 
   /* Conectividade EFETIVA: a água barra o passo, então os números públicos
    * (`connectivity`, `walkable`) e a nota correspondente passam a medir o
@@ -1141,6 +1521,12 @@ export function generate(seedStr: string, depth: number): GameMap {
     notes.push(aguas.regioes + ' ' + plural(aguas.regioes, 'poça', 'poças') +
       ' de água (' + aguas.pocas + ' ' + plural(aguas.pocas, 'tile', 'tiles') +
       '): a água barra o passo como a parede.');
+  }
+  if (canais.canais > 0) {
+    notes.push(canais.canais + ' ' + plural(canais.canais, 'canal', 'canais') +
+      ' de água (' + canais.tiles + ' ' + plural(canais.tiles, 'tile', 'tiles') +
+      ') ' + plural(canais.canais, 'entra', 'entram') + ' pela beira do penhasco: ' +
+      'onde a enseada passa, a parede deu lugar à água.');
   }
 
   const unreachable = walk - reach;
