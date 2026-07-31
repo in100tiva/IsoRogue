@@ -1275,6 +1275,8 @@ export class IsoRenderer {
   private readonly ZMIN: number;
   private readonly ZMAX: number;
   private readonly T_WALL: number;
+  /** Tile.Void do mapgen (fase 2.3): a beira do penhasco. −1 quando o mapa não tem. */
+  private readonly T_VOID: number;
   private readonly T_DOOR: number;
   private readonly T_STAIRS: number;
 
@@ -1400,6 +1402,8 @@ export class IsoRenderer {
   private chavesPiso: readonly string[] = [];
   private chavesAdereco: readonly string[] = [];
   private chaveParede = '';
+  /** Chave de cache do rig de água do andar (vazia quando o tileset não tem). */
+  private chaveAgua = '';
 
   /* --- os pontos de parada (ver `FICHAS_DE_PARADA`) --- */
   /**
@@ -1491,6 +1495,7 @@ export class IsoRenderer {
     this.ZMIN = C.ZOOM_MIN;
     this.ZMAX = C.ZOOM_MAX;
     this.T_WALL = C.TILE.WALL;
+    this.T_VOID = (C.TILE as { VOID?: number }).VOID ?? -1;
     this.T_DOOR = C.TILE.DOOR;
     this.T_STAIRS = C.TILE.STAIRS;
     this.luts = buildLuts(this.FOV_R);
@@ -2011,6 +2016,11 @@ export class IsoRenderer {
         i = y * w + x;
         t = tiles[i];
         if (t === this.T_WALL) continue;
+        // O VAZIO não desenha nada: é a beira do penhasco, e o que fica embaixo
+        // é o fundo escuro do canvas — nenhum piso, parede ou adereço. A
+        // cachoeira que escorre para dentro dele é desenhada pela parede/piso
+        // da borda, nunca por ele.
+        if (t === this.T_VOID) continue;
         seen = vis.has(i);
         known = seen || (expl ? expl[i] !== 0 : false);
         if (!known) continue; // nunca visto: nada é desenhado (R29)
@@ -2021,12 +2031,17 @@ export class IsoRenderer {
         lvl = seen ? (d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0) : 0;
         bucket = decor ? decor[i] & 7 : 0;
         alt = ((x >> 2) + (y >> 2)) & 1;
-        this.drawFloor(ctx, sx, sy, hw, hh, z, bucket, alt, seen, lvl);
+        const agua = !!(game.map.agua && game.map.agua[i]);
+        this.drawFloor(ctx, sx, sy, hw, hh, z, bucket, alt, seen, lvl, agua);
         if (x > 0 && y > 0 && tiles[i - w - 1] === this.T_WALL) {
           this.drawWallShadow(ctx, sx, sy, hw, hh, seen);
         }
         if (t === this.T_STAIRS) this.drawStairs(ctx, sx, sy, hw, hh, seen, lvl);
         else if (t === this.T_DOOR) this.drawDoor(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
+        /* A cachoeira: onde a água tem vazio ou o limite do mapa à frente
+         * (sul/leste), o fluxo escorre por cima da borda. Efeito de render
+         * puro — nada no Game. */
+        if (agua) this.desenharCachoeira(ctx, game, x, y, sx, sy, hw, hh, z, seen);
         /* O adereço do tileset, no fim do passe de PISOS: depois do bloco (ele
          * fica em cima do chão) e da sombra da parede (que é decalque de chão),
          * e antes das entidades desta mesma antidiagonal — que só são
@@ -2553,14 +2568,85 @@ export class IsoRenderer {
    * caso é uma linha escura de um pixel onde o tileset já desenha o contorno
    * entre blocos.
    */
+  /**
+   * A CACHOEIRA: onde uma poça encosta no vazio, a água escorre por cima da
+   * borda e cai no abismo.
+   *
+   * É efeito de TELA, não rig: o fluxo é uma faixa vertical desenhada a partir
+   * da quina do tile de água para dentro do vazio, com espuma marchando por
+   * `dt` (o relógio visual da instância). Modelá-lo como caixa exigiria um rig
+   * por combinação de borda; como faixa, uma função resolve as quatro.
+   *
+   * Determinismo: a variação de fase vem de um hash de (x, y) — nada de
+   * `Math.random`, que é proibido no render e o lint pega.
+   */
+  private desenharCachoeira(
+    ctx: CanvasRenderingContext2D, game: Game, x: number, y: number,
+    sx: number, sy: number, hw: number, hh: number, z: number, seen: boolean
+  ): void {
+    if (!seen || this.T_VOID < 0) return;
+    const map = game.map;
+    const w = map.w;
+    const tiles = map.tiles;
+    /* Só as bordas que a projeção MOSTRA: sul (y+1) e leste (x+1). As outras
+     * duas ficam atrás do próprio bloco e o fluxo nunca apareceria. */
+    const paraSul = y + 1 < map.h && tiles[(y + 1) * w + x] === this.T_VOID;
+    const paraLeste = x + 1 < w && tiles[y * w + x + 1] === this.T_VOID;
+    if (!paraSul && !paraLeste) return;
+
+    /* As cores vêm do TILESET, não das LUTs do renderer: a água do andar 2
+     * pode ser lava, e o fluxo tem de acompanhar o terreno. */
+    const paleta = this.tileset.paleta;
+    const claro = paleta.aguaBase ?? '#2b8fd8';
+    const espuma = paleta.aguaEspuma ?? '#e8f7ff';
+    /* Fase do fluxo: hash do tile + o relógio, para as quedas não marcharem
+     * todas juntas como um metrônomo. */
+    let h = ((x * 374761393) ^ (y * 668265263) ^ 0x9e3779b9) >>> 0;
+    h = (h * 1664525 + 1013904223) >>> 0;
+    const fase = (this.t * 1.6 + (h / 4294967296)) % 1;
+    const queda = (hh * 3.2) * z;
+
+    const desenhar = (px: number): void => {
+      const largura = Math.max(1, hw * 0.34);
+      ctx.save();
+      ctx.globalAlpha = ctx.globalAlpha * 0.9;
+      ctx.fillStyle = claro;
+      ctx.fillRect(px - largura / 2, sy + hh, largura, queda);
+      /* Três lâminas de espuma descendo, defasadas: é o que dá movimento sem
+       * animar textura nenhuma. */
+      ctx.fillStyle = espuma;
+      for (let k = 0; k < 3; k++) {
+        const t = (fase + k / 3) % 1;
+        const yy = sy + hh + t * queda;
+        ctx.fillRect(px - largura / 2 + 1, yy, Math.max(1, largura - 2), Math.max(1, 2 * z));
+      }
+      ctx.restore();
+    };
+
+    if (paraSul) desenhar(sx - hw * 0.42);
+    if (paraLeste) desenhar(sx + hw * 0.42);
+  }
+
   private colarTerreno(
     ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem,
     cx: number, cy: number, z: number, lvl: number
   ): boolean {
     const f = quadroModulado(atlas, DIR_TERRENO, 'parado', 0, lvl / (LEVELS - 1));
     if (!f.fonte) return false;
-    const dx = Math.round(cx - atlas.ancoraX * z);
-    const dy = Math.round(cy - atlas.ancoraY * z);
+    // O terreno é âncora de CAIXA, não de corpo: o rig foi calibrado na origem
+    // (z = 0 é o topo do piso e o corpo desce em -Z), então o retículo do atlas
+    // o envolve com a âncora no plano da superfície e NÃO no meio do quadro.
+    // Colar por `ancoraX/Y` desloca o losango para cima — é o que fazia a
+    // fileira de trás ser coberta e a frente ficar vazia, e deslocava o
+    // desenho conforme a direção. O piso não gira e não sobe: o centro do
+    // quadro é a resposta certa, e é estável para todas as peças do tileset.
+    // E o centro do quadro no EIXO DA TELA é um tiquinho abaixo do centro do
+    // frame: o retículo do atlas cresce para BAIXO da âncora (o corpo do rig
+    // desce em -Z), então colar no meio do quadro sobe a peça metade do corpo.
+    // `alturaFrame - ancoraY` é exatamente a distância da âncora ao topo: o
+    // deslocamento vertical certo para a superfície cair no centro do losango.
+    const dx = Math.round(cx - (atlas.larguraFrame / 2) * z);
+    const dy = Math.round(cy - (atlas.alturaFrame / 2) * z) + Math.round((atlas.alturaFrame - atlas.ancoraY) * z / 2);
     const suave = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);
@@ -2603,6 +2689,7 @@ export class IsoRenderer {
     this.chavesPiso = piso;
     this.chavesAdereco = aderecos;
     this.chaveParede = nivel + ':parede';
+    this.chaveAgua = nivel + ':agua';
   }
 
   /**
@@ -2619,13 +2706,18 @@ export class IsoRenderer {
    */
   private drawFloor(
     ctx: CanvasRenderingContext2D, sx: number, sy: number, hw: number, hh: number, z: number,
-    bucket: number, alt: number, seen: boolean, lvl: number
+    bucket: number, alt: number, seen: boolean, lvl: number, agua?: boolean
   ): void {
     const piso = this.tileset.piso;
     if (piso.length > 0) {
-      const k = bucket % piso.length;
-      const atlas = this.atlasDoTerreno(this.chavesPiso[k], piso[k]);
-      if (atlas && this.colarTerreno(ctx, atlas, sx, sy + hh, z, lvl)) return;
+      if (agua && this.tileset.agua) {
+        const atlas = this.atlasDoTerreno(this.chaveAgua, this.tileset.agua);
+        if (atlas && this.colarTerreno(ctx, atlas, sx, sy + hh, z, lvl)) return;
+      } else {
+        const k = bucket % piso.length;
+        const atlas = this.atlasDoTerreno(this.chavesPiso[k], piso[k]);
+        if (atlas && this.colarTerreno(ctx, atlas, sx, sy + hh, z, lvl)) return;
+      }
     }
 
     /* --- reserva: o losango de sempre (jsdom, Node, sem contexto 2D) --- */
