@@ -975,7 +975,15 @@ function forjaDoTileset(tileset: Tileset): OpcoesForja {
     rampas: tileset.rampas,
     rampaDaCor: tileset.rampaDaCor,
     repouso: tileset.repouso,
-    emissivas: tileset.emissivas
+    emissivas: tileset.emissivas,
+    /* §2.1 — o terreno é a ÚNICA forja em `'local'`; personagens e despojos
+     * continuam no `'fixo'` (o default), e é isso que os faz saltar do cenário.
+     * Um traço duro por bloco desenharia uma grade sobre o piso inteiro, que é
+     * ruído: o terreno é fundo, e fundo não disputa a leitura com quem anda em
+     * cima dele. Nas cores que já estão no piso da paleta (`vazio`, `água` e
+     * `argamassa` do nível 1 caem lá pela rampa) a borda simplesmente não é
+     * repintada — ver a escada em `tabelaBordaLocal`. */
+    modoContorno: 'local'
   };
   FORJAS_DE_TILESET.set(tileset, nova);
   return nova;

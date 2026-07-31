@@ -576,6 +576,31 @@ const PESO_R = 2;
 const PESO_G = 4;
 const PESO_B = 3;
 
+/** §2.1 — como o contorno de silhueta escolhe a cor. Ver `OpcoesForja.modoContorno`. */
+export type ModoContorno = 'fixo' | 'local';
+
+/**
+ * Fator de escurecimento padrão do modo `'local'`. 0,5 escurece o suficiente para
+ * a borda ler como contorno sem sair da família da cor — e é multiplicação em
+ * sRGB CRU, que não é o mesmo escurecimento que `fatorLuz`/`quantizar` aplicam no
+ * `model3d` sobre a rampa autorada. As duas réguas discordam sobre "um degrau
+ * mais escuro" de propósito: esta aqui vale só para a silhueta.
+ */
+const FATOR_CONTORNO_LOCAL = 0.5;
+
+/**
+ * Luminância ponderada de um degrau, na MESMA métrica de `maisProximo`.
+ *
+ * Usar aqui a luma de vídeo (0.299/0.587/0.114) seria o erro clássico: o passe
+ * de contorno decidiria "mais escuro" por uma régua e a busca de cor por outra,
+ * e o desacordo entre as duas é exatamente onde nasce um halo claro. Divide por
+ * `PESO_R + PESO_G + PESO_B` só para manter a escala em 0..255 — a comparação é
+ * relativa, então o divisor não muda nenhuma decisão.
+ */
+function lumSnap(r: number, g: number, b: number): number {
+  return (PESO_R * r + PESO_G * g + PESO_B * b) / (PESO_R + PESO_G + PESO_B);
+}
+
 /** As cores legais do sprite, desdobradas em canais para busca sem alocação. */
 interface PaletaSnap {
   r: Uint8Array;
@@ -583,6 +608,18 @@ interface PaletaSnap {
   b: Uint8Array;
   /** Índice do contorno dentro dos arrays acima, ou −1 se o contorno está desligado. */
   contorno: number;
+  /**
+   * 1 onde o degrau é EMISSIVO (§1.1 do docs/BESTIARIO.md). O modo `'local'` usa
+   * isto duas vezes: para não escurecer um pixel de olho, e para nunca eleger a
+   * cor de um olho como cor de borda.
+   */
+  emissiva: Uint8Array;
+  /**
+   * RGB empacotado (`r<<16 | g<<8 | b`) → índice do degrau. Depois do passe 1
+   * todo pixel opaco está EXATAMENTE numa cor declarada, então o modo `'local'`
+   * recupera o índice por igualdade, sem repetir a busca por proximidade.
+   */
+  indicePorRgb: Map<number, number>;
 }
 
 function lerHexRgb(hex: string): [number, number, number] | null {
@@ -616,7 +653,11 @@ function corDaEntrada(entrada: EntradaPaleta | undefined): string | null {
  * quantização de `montarModelo` manda as faces. Deduplicado e determinístico
  * (ordem de declaração da paleta).
  */
-function coresDaPaleta(paleta: Paleta3D, corContorno: string | null): PaletaSnap | null {
+function coresDaPaleta(
+  paleta: Paleta3D,
+  corContorno: string | null,
+  emissivas: Set<number> | null
+): PaletaSnap | null {
   const r: number[] = [];
   const g: number[] = [];
   const b: number[] = [];
@@ -650,11 +691,24 @@ function coresDaPaleta(paleta: Paleta3D, corContorno: string | null): PaletaSnap
   if (corContorno !== null) contorno = juntar(corContorno);
   if (r.length === 0) return null;
 
+  // Os dois índices auxiliares saem do MESMO empacotamento de `juntar` e do
+  // mesmo que `coresEmissivas` produz, então o casamento é por igualdade exata,
+  // sem tolerância. Custo: uma passada em ~10 a 40 cores, uma vez por forja.
+  const emissiva = new Uint8Array(r.length);
+  const indicePorRgb = new Map<number, number>();
+  for (let i = 0; i < r.length; i++) {
+    const chave = (r[i] << 16) | (g[i] << 8) | b[i];
+    indicePorRgb.set(chave, i);
+    if (emissivas !== null && emissivas.has(chave)) emissiva[i] = 1;
+  }
+
   return {
     r: Uint8Array.from(r),
     g: Uint8Array.from(g),
     b: Uint8Array.from(b),
-    contorno: contorno
+    contorno: contorno,
+    emissiva: emissiva,
+    indicePorRgb: indicePorRgb
   };
 }
 
@@ -677,6 +731,101 @@ function maisProximo(pal: PaletaSnap, r: number, g: number, b: number): number {
 }
 
 /**
+ * §2.1 — a tabela de decisão do contorno LOCAL: para cada degrau da paleta, qual
+ * degrau pintar na borda. Calculada UMA vez por forja; o passe de pixels vira uma
+ * indexação, então os 72 quadros custam o mesmo que no modo `'fixo'`.
+ *
+ * POR QUE UMA TABELA E NÃO UMA CONTA POR PIXEL: a decisão depende só da cor do
+ * pixel, e depois do passe 1 só existem `n` cores possíveis (~10 a 40). O custo
+ * vira O(n²) uma vez, contra O(pixels de borda) de buscas.
+ *
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A ESCADA, e por que cada degrau existe. Predicado comum:
+ *
+ *     aceita(j) ⟺ j ≥ 0 ∧ j ≠ k ∧ ¬emissiva[j] ∧ lumSnap(j) < lumSnap(k)
+ *
+ * O teste é de LUMINÂNCIA, não de identidade. Identidade (`j !== k`) só pegaria
+ * a colisão total e deixaria passar uma matiz vizinha de luminância igual ou
+ * maior — que na tela lê como borda clara, não como contorno.
+ *
+ *   0. `emissiva[k]` → −1. Pixel de olho na silhueta não pode ser escurecido:
+ *      `extrairEmissivo` roda depois, sobre o atlas pronto, e o brilho se
+ *      perderia em silêncio. (O modo `'fixo'` tem esse defeito hoje e continua
+ *      tendo — corrigi-lo lá mudaria a aparência de personagens já aprovados na
+ *      bancada. Aqui é comportamento NOVO, então nasce certo.)
+ *   1. `maisProximo(Q)` com `Q = k·F`. É o que dá o ponto ao modo: a borda fica
+ *      na FAMÍLIA da cor local, em vez de um preto único para tudo.
+ *   2. Se o candidato não serve → a cor de contorno declarada. `maisProximo` não
+ *      sabe o que é "mais escuro": ele minimiza distância, e o mais próximo de
+ *      `k·F` pode ser o próprio `k` (com F alto isso acontece na maioria das
+ *      cores de uma paleta esparsa).
+ *   3. Se ainda não serve → o degrau mais próximo de `Q` ENTRE os aceitáveis.
+ *      Perto, não mínimo global: manter a matiz é o ponto do modo, e a cor mais
+ *      escura da paleta costuma ser de outra família. `<` estrito, a mesma regra
+ *      de desempate de `maisProximo`.
+ *   4. Nada aceitável → −1, NÃO ESCREVE. A cor local já está no piso da paleta;
+ *      ela já lê como contorno contra o fundo. Este degrau é o que impede o HALO
+ *      CLARO: a tentação é cair na "cor mais escura com índice diferente", mas
+ *      quando `k` já é a mais escura, a segunda mais escura é mais CLARA, e o
+ *      modo pintaria uma auréola em volta das regiões escuras — exatamente onde
+ *      deveria pintar contorno. Inventar cor tampouco serve: furaria o G5.
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * Devolve também quantos degraus caíram no fallback (2 ou 3) e quantos não
+ * escrevem (0 ou 4) — números que a estatística da forja expõe, porque acima de
+ * F ≈ 0,7 o modo degenera para o fixo e é melhor isso ser visível.
+ */
+function tabelaBordaLocal(pal: PaletaSnap, fator: number): { tabela: Int32Array; fallback: number; mudos: number } {
+  const n = pal.r.length;
+  const tabela = new Int32Array(n);
+  const lum = new Float64Array(n);
+  for (let i = 0; i < n; i++) lum[i] = lumSnap(pal.r[i], pal.g[i], pal.b[i]);
+
+  const aceita = (j: number, k: number): boolean =>
+    j >= 0 && j !== k && pal.emissiva[j] === 0 && lum[j] < lum[k];
+
+  let fallback = 0;
+  let mudos = 0;
+
+  for (let k = 0; k < n; k++) {
+    if (pal.emissiva[k] === 1) {
+      tabela[k] = -1;
+      mudos++;
+      continue;
+    }
+    const qr = pal.r[k] * fator;
+    const qg = pal.g[k] * fator;
+    const qb = pal.b[k] * fator;
+
+    let alvo = maisProximo(pal, qr, qg, qb);
+    if (!aceita(alvo, k)) {
+      alvo = pal.contorno;
+      if (!aceita(alvo, k)) {
+        // Varredura pelo mais próximo de Q entre os aceitáveis.
+        alvo = -1;
+        let melhor = Infinity;
+        for (let j = 0; j < n; j++) {
+          if (!aceita(j, k)) continue;
+          const dr = qr - pal.r[j];
+          const dg = qg - pal.g[j];
+          const db = qb - pal.b[j];
+          const d = PESO_R * dr * dr + PESO_G * dg * dg + PESO_B * db * db;
+          if (d < melhor) {
+            melhor = d;
+            alvo = j;
+          }
+        }
+      }
+      if (alvo >= 0) fallback++;
+      else mudos++;
+    }
+    tabela[k] = alvo;
+  }
+
+  return { tabela: tabela, fallback: fallback, mudos: mudos };
+}
+
+/**
  * Snap + contorno, in place, sobre o buffer de ARTE.
  *
  * `memo` é o cache de "cor borrada → degrau da paleta" compartilhado pelos 72
@@ -693,7 +842,8 @@ function snaparBuffer(
   altura: number,
   pal: PaletaSnap,
   memo: Map<number, number>,
-  sujo: Retangulo
+  sujo: Retangulo,
+  bordaLocal: Int32Array | null
 ): void {
   if (typeof ctx.getImageData !== 'function' || typeof ctx.putImageData !== 'function') return;
   const rx = Math.max(0, Math.min(largura, sujo.x0));
@@ -735,8 +885,19 @@ function snaparBuffer(
   // O critério é o ALPHA, que este passe não altera — então dá para reescrever a
   // cor no mesmo varrimento sem contaminar a decisão do pixel seguinte. Fora do
   // recorte conta como transparente: como o recorte é a caixa do desenho MAIS a
-  // folga do contorno (ver `retanguloSujo`), o que está fora dele é vazio de
-  // qualquer modo, e a silhueta encostada na borda ainda fecha.
+  // folga do contorno (montado em `forjar`, com `FOLGA_SUJO`), o que está fora
+  // dele é vazio de qualquer modo, e a silhueta encostada na borda ainda fecha.
+  //
+  // A independência da ordem de varredura vale nos DOIS modos, e no `'local'`
+  // por um fio: a cor da borda sai da cor do PRÓPRIO pixel, nunca do vizinho. Se
+  // um dia passar a depender do vizinho (média, dithering), este laço deixa de
+  // poder escrever in place.
+  // A guarda continua sendo SÓ `pal.contorno >= 0`, e isso é deliberado:
+  // `corContorno: null` quer dizer "sem contorno de silhueta", e `modoContorno`
+  // decide apenas COMO a borda escolhe a cor — não SE ela existe. Deixar o modo
+  // `'local'` rodar com o contorno desligado (uma guarda `|| bordaLocal !== null`,
+  // que parece inofensiva) faz a silhueta ser repintada mesmo com `null`: medido,
+  // 2304 dos 2592 pixels de borda. Seria `null` deixando de desligar.
   if (pal.contorno >= 0) {
     const cr = pal.r[pal.contorno];
     const cg = pal.g[pal.contorno];
@@ -757,6 +918,18 @@ function snaparBuffer(
           d[i - passo + 3] === 0 ||
           d[i + passo + 3] === 0;
         if (!borda) continue;
+        if (bordaLocal !== null) {
+          // O passe 1 deixou todo pixel opaco exatamente numa cor declarada, então
+          // o `get` sempre acha; o `undefined` é cinto de segurança.
+          const k = pal.indicePorRgb.get((d[i] << 16) | (d[i + 1] << 8) | d[i + 2]);
+          if (k === undefined) continue;
+          const alvo = bordaLocal[k];
+          if (alvo < 0) continue;
+          d[i] = pal.r[alvo];
+          d[i + 1] = pal.g[alvo];
+          d[i + 2] = pal.b[alvo];
+          continue;
+        }
         d[i] = cr;
         d[i + 1] = cg;
         d[i + 2] = cb;
@@ -789,6 +962,32 @@ export interface OpcoesForja {
   ganhoSombra?: number;
   /** Cor do contorno de silhueta (I6). `null` desliga. */
   corContorno?: string | null;
+  /**
+   * §2.1 — como o contorno de SILHUETA escolhe a cor. Não confundir com o
+   * contorno INTERNO (aresta de peça contra peça), que é do `model3d` e continua
+   * sempre em `corContorno`.
+   *
+   *   `'fixo'`  (padrão) — a borda inteira sai em `corContorno`. Byte a byte o
+   *             comportamento de sempre.
+   *   `'local'` — cada pixel de borda sai numa versão mais escura da PRÓPRIA cor
+   *             dele, escolhida dentro da paleta declarada. Dá profundidade em
+   *             superfícies grandes sem afogar a silhueta num traço único.
+   *
+   * Para o que vale a pena: terreno em `'local'`, personagem em `'fixo'`. O
+   * personagem precisa saltar do cenário, e é o traço duro que faz isso.
+   *
+   * `'local'` NUNCA inventa cor (o alvo é sempre um degrau declarado, G5) e nunca
+   * escurece um pixel emissivo. Onde a cor local já é o piso da paleta, a borda
+   * simplesmente não é repintada — ela já lê como contorno contra o fundo.
+   */
+  modoContorno?: ModoContorno;
+  /**
+   * §2.1 — fator de escurecimento do modo `'local'`. Padrão `0.5`; faixa útil
+   * ~0,35 a 0,65. Acima de ~0,7 o alvo mais próximo passa a ser a própria cor na
+   * maioria dos degraus, a escada cai no fallback e o modo degenera para o
+   * `'fixo'` — por isso `estatisticasBordaLocal()` expõe a contagem.
+   */
+  fatorContorno?: number;
   /** Largura do contorno em px de arte. */
   larguraContorno?: number;
   /** `false` desliga a quantização — só para preview de iluminação contínua. */
@@ -872,6 +1071,18 @@ export interface AtlasPersonagem {
   /* ---- diagnóstico (painel de debug) ---- */
   /** Tempo de forja em ms, uma casa decimal. Alvo < 40ms (§7). */
   msForja: number;
+  /**
+   * §2.1, modo `'local'` — quantos degraus da paleta não puderam usar o vizinho
+   * mais próximo e caíram no fallback da escada. Zero no modo `'fixo'`.
+   *
+   * Serve para enxergar a degeneração: conforme `fatorContorno` sobe, mais cores
+   * têm a si mesmas como alvo mais próximo, e acima de ~0,7 o modo vira o `'fixo'`
+   * sem avisar. Um número no painel de debug é mais barato que descobrir isso na
+   * bancada.
+   */
+  bordaLocalFallback: number;
+  /** §2.1 — degraus que não pintam borda: emissivos, ou já no piso da paleta. */
+  bordaLocalMudos: number;
   totalQuadros: number;
   colunas: number;
   linhas: number;
@@ -1019,6 +1230,14 @@ export function forjarAtlas(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     '|' +
     chaveEstavel(opts.corContorno) +
     '|' +
+    // Sem estes dois na chave, duas forjas do MESMO rig diferindo só no modo
+    // colidiriam e a segunda receberia o atlas da primeira: sem erro de tipo,
+    // sem exceção, e nenhum teste de unidade pegaria. Todo campo novo de
+    // `OpcoesForja` que mude pixel entra aqui, no mesmo commit que o cria.
+    chaveEstavel(opts.modoContorno) +
+    '|' +
+    chaveEstavel(opts.fatorContorno) +
+    '|' +
     chaveEstavel(opts.larguraContorno) +
     '|' +
     chaveEstavel(opts.quantizar) +
@@ -1110,6 +1329,8 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     ancoraY: ancoraArteY * pixel,
     quadro: fazerQuadro(larguraFrame, alturaFrame),
     msForja: 0,
+    bordaLocalFallback: 0,
+    bordaLocalMudos: 0,
     totalQuadros: TOTAL_QUADROS,
     colunas: COLUNAS,
     linhas: DIRECOES,
@@ -1142,8 +1363,24 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
     opts.corContorno === undefined
       ? corDaEntrada(opts.paleta['contorno'])
       : opts.corContorno;
-  const paletaSnap = coresDaPaleta(opts.paleta, corContorno);
+  // `coresEmissivas` é pura de canvas e só lê `opts` — chamada UMA vez, servindo
+  // tanto à tabela de borda local quanto ao `extrairEmissivo` do fim da forja.
+  const emissivas = coresEmissivas(opts);
+  const paletaSnap = coresDaPaleta(opts.paleta, corContorno, emissivas);
   const memoSnap = new Map<number, number>();
+
+  // A tabela sai FORA do laço dos 72 quadros: ela depende só da paleta.
+  // `paletaSnap.contorno >= 0` na condição, e não só o modo: com `corContorno:
+  // null` não há contorno de silhueta nenhum, então montar a tabela seria
+  // trabalho jogado fora — e, pior, `bordaLocalFallback` reportaria números de
+  // uma tabela que ninguém consulta.
+  let bordaLocal: Int32Array | null = null;
+  if (opts.modoContorno === 'local' && paletaSnap && paletaSnap.contorno >= 0) {
+    const t = tabelaBordaLocal(paletaSnap, positivo(opts.fatorContorno, FATOR_CONTORNO_LOCAL));
+    bordaLocal = t.tabela;
+    atlas.bordaLocalFallback = t.fallback;
+    atlas.bordaLocalMudos = t.mudos;
+  }
 
   ctxArte.imageSmoothingEnabled = false;
   // O upscale mora AQUI, e só aqui: é o `drawImage` de baixa→alta resolução com
@@ -1184,7 +1421,9 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
       });
       // §2.1 — snap para a paleta + contorno pela máscara, AINDA em px de arte.
       // Depois da ampliação seria tarde: o antialias já teria virado bloco.
-      if (paletaSnap) snaparBuffer(ctxArte, larguraArte, alturaArte, paletaSnap, memoSnap, sujo);
+      if (paletaSnap) {
+        snaparBuffer(ctxArte, larguraArte, alturaArte, paletaSnap, memoSnap, sujo, bordaLocal);
+      }
       ctxAtlas.drawImage(
         arte,
         0,
@@ -1202,7 +1441,7 @@ function forjar(modelo: No, opts: OpcoesForja): AtlasPersonagem {
   // §1.1 — a camada emissiva sai de UMA varredura do atlas pronto, não de 72
   // varreduras do buffer de arte: é a mesma informação por um custo de um
   // `getImageData` só. Depois desta linha nada mais lê pixel do atlas.
-  atlas.emissivo = extrairEmissivo(canvas, atlas.larguraFolha, atlas.alturaFolha, coresEmissivas(opts));
+  atlas.emissivo = extrairEmissivo(canvas, atlas.larguraFolha, atlas.alturaFolha, emissivas);
 
   atlas.disponivel = true;
   atlas.msForja = Math.round((agora() - t0) * 10) / 10;
@@ -1632,8 +1871,9 @@ function coresEmissivas(opts: OpcoesForja): Set<number> | null {
  * Por que sobre o ATLAS e não sobre cada buffer de arte: é uma varredura em vez
  * de 72, e o snap de paleta de §2.1 já garantiu que cada pixel tem exatamente
  * uma das cores declaradas — a comparação é de igualdade, não de proximidade.
- * (Com `quantizar: false` ou sem `getImageData` o snap não roda e a camada sai
- * vazia; o preview de iluminação contínua perde os olhos acesos e nada mais.)
+ * (Sem `getImageData` — jsdom sem a lib `canvas` — o snap não roda e a camada
+ * sai vazia. `quantizar: false` NÃO desliga o snap: `snaparBuffer` é chamada sob
+ * `if (paletaSnap)` e não consulta esse campo, que viaja só para o `model3d`.)
  *
  * Devolve `null` quando não há cor emissiva, quando o ambiente não expõe
  * `getImageData` (jsdom) ou quando nenhum pixel casou — e `null` custa zero no
