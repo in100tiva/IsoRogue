@@ -77,6 +77,15 @@ export const PALETA_NIVEL1 = {
   petala: '#f2f2ea',      // as flores brancas
   miolo: '#ffd94a',       // o miolo amarelo das flores
   frutoLaranja: '#ff9a2b', // EMISSIVA — a flor/fruto que acende no escuro
+  tijoloLuz: '#d99a63',   // fiada de tijolo batida pela luz
+  tijoloBase: '#bd7846',  // o tijolo
+  tijoloSombra: '#8c5230', // fiada na sombra
+  argamassa: '#6b4028',   // a junta entre tijolos
+  lajotaLuz: '#f2ece0',   // a lajota polida do caminho
+  lajotaBase: '#d9d2c4',  // face lateral da lajota
+  lajotaJunta: '#a89f8d', // as juntas em grade
+  turquesa: '#3fd0c0',    // as florzinhas azul-turquesa da referência
+  turquesaLuz: '#a8f5ec', // o miolo claro delas
   contorno: '#2a1b12'     // o outline escuro entre blocos da referência
 } as const;
 
@@ -98,6 +107,10 @@ export const RAMPAS_NIVEL1 = {
   petala: ['petala', 'areiaBase', 'terraMeio', 'terraSombra'],
   miolo: ['miolo', 'areiaBase', 'terraMeio', 'terraSombra'],
   laranja: ['frutoLaranja'],
+  tijolo: ['tijoloLuz', 'tijoloBase', 'tijoloSombra', 'argamassa'],
+  argamassa: ['argamassa', 'tijoloSombra', 'terraSombra', 'contorno'],
+  lajota: ['lajotaLuz', 'lajotaBase', 'lajotaJunta', 'terraSombra'],
+  turquesa: ['turquesaLuz', 'turquesa', 'gramaMeio', 'gramaSombra'],
   vazio: ['contorno', 'contorno', 'contorno', 'contorno']
 } as const satisfies Record<string, readonly CorNivel1[]>;
 
@@ -108,6 +121,9 @@ export const RAMPA_DA_COR_NIVEL1 = {
   aguaEspuma: 'espuma', aguaLuz: 'agua', aguaBase: 'agua', aguaFundo: 'agua',
   pedraLuz: 'pedra', pedraBase: 'pedra',
   petala: 'petala', miolo: 'miolo', frutoLaranja: 'laranja',
+  tijoloLuz: 'tijolo', tijoloBase: 'tijolo', tijoloSombra: 'tijolo', argamassa: 'argamassa',
+  lajotaLuz: 'lajota', lajotaBase: 'lajota', lajotaJunta: 'lajota',
+  turquesa: 'turquesa', turquesaLuz: 'turquesa',
   contorno: 'vazio'
 } as const satisfies Record<CorNivel1, keyof typeof RAMPAS_NIVEL1>;
 
@@ -170,6 +186,100 @@ function detalhe(cor: CorNivel1, dim: [number, number, number], centro: [number,
 }
 
 /**
+ * As LÂMINAS DE GRAMA que sobem da borda do bloco e QUEBRAM A SILHUETA.
+ *
+ * É o traço número um da referência, e o que separa "cubo verde" de "torrão de
+ * grama": o topo não termina numa aresta reta — dezenas de lâminas irregulares
+ * passam do plano da superfície. Aqui elas são caixas finas (0,6u, acima do
+ * piso de espessura) com ALTURA variada de 1 a 3u; a irregularidade vem da
+ * altura, nunca da finura, porque abaixo de 0,5u a peça não rasteriza.
+ *
+ * `lado` diz qual borda recebe: as duas voltadas para a câmera (sul e leste em
+ * espaço de rig, +Y e +X) ganham mais lâminas, porque são as únicas que a
+ * projeção mostra de corpo inteiro — gastar caixa nas de trás é pagar por
+ * pixel que o culling descarta.
+ *
+ * O padrão de alturas é FIXO e não aleatório: o render é proibido de sortear, e
+ * um padrão declarado é reproduzível em toda tile do mapa.
+ */
+function laminasDeGrama(topoZ: number): Caixa[] {
+  const meio = L / 2;
+  const alturas = [2.4, 1.4, 2.9, 1.8, 2.2, 1.2, 2.6, 1.6, 2.0];
+  const out: Caixa[] = [];
+  /* borda +Y (a que fica de frente para a câmera, embaixo na tela) */
+  for (let k = 0; k < 6; k++) {
+    const h = alturas[k % alturas.length];
+    const px = -meio + 1.2 + k * 2.1;
+    out.push(detalhe(k % 2 === 0 ? 'gramaLuz' : 'gramaBase', [0.6, 0.7, h], [px, meio - 0.4, topoZ + h / 2 - 0.3]));
+  }
+  /* borda +X (a da direita na tela) */
+  for (let k = 0; k < 6; k++) {
+    const h = alturas[(k + 3) % alturas.length];
+    const py = -meio + 1.5 + k * 2.1;
+    out.push(detalhe(k % 2 === 0 ? 'gramaBase' : 'gramaLuz', [0.7, 0.6, h], [meio - 0.4, py, topoZ + h / 2 - 0.3]));
+  }
+  /* algumas no miolo, mais baixas: tiram o ar de "cerca viva" das bordas */
+  out.push(detalhe('gramaMeio', [0.6, 0.6, 1.1], [-2.6, -1.4, topoZ + 0.25]));
+  out.push(detalhe('gramaLuz', [0.6, 0.6, 1.4], [2.2, -3.0, topoZ + 0.4]));
+  out.push(detalhe('gramaBase', [0.6, 0.6, 0.9], [0.4, 1.0, topoZ + 0.15]));
+  return out;
+}
+
+/**
+ * Os ESTRATOS e as RAÍZES da face de terra: faixas horizontais de tom diferente
+ * descendo pela lateral, e fiapos escuros que escorrem do topo.
+ *
+ * Sem isso a lateral é um campo chapado de 4 a 14u — que é exatamente o que a
+ * referência não tem e o nosso bloco tinha.
+ */
+function estratosDeTerra(topoZ: number, altura: number): Caixa[] {
+  const meio = L / 2;
+  const out: Caixa[] = [];
+  const faixas = [0.28, 0.55, 0.78];
+  for (let k = 0; k < faixas.length; k++) {
+    const z = topoZ - altura * faixas[k];
+    const cor: CorNivel1 = k === 1 ? 'terraLuz' : 'terraMeio';
+    out.push(detalhe(cor, [L, L, 0.6], [0, 0, z]));
+  }
+  /* raízes: três fiapos curtos descendo da borda de cima, nas duas faces
+   * visíveis (mais que isso vira listra) */
+  out.push(detalhe('terraSombra', [0.6, 0.7, 1.8], [-3.2, meio - 0.3, topoZ - 1.4]));
+  out.push(detalhe('terraSombra', [0.6, 0.7, 1.2], [1.8, meio - 0.3, topoZ - 1.1]));
+  out.push(detalhe('terraSombra', [0.7, 0.6, 1.6], [meio - 0.3, -0.8, topoZ - 1.3]));
+  return out;
+}
+
+/**
+ * As FIADAS DE TIJOLO das duas faces visíveis: retângulos em relevo, deslocados
+ * meio tijolo entre fiadas, com a junta escura aparecendo entre eles.
+ *
+ * Relevo POR FORA da face (caixa é opaca — tijolo "dentro" do bloco não
+ * existiria na imagem), e três tijolos por fiada: a conta de 0,5u de piso de
+ * espessura não deixa caber seis sem que metade pisque entre direções.
+ */
+function fiadasDeTijolo(topoZ: number, altura: number): Caixa[] {
+  const meio = L / 2;
+  const out: Caixa[] = [];
+  const nFiadas = Math.max(2, Math.round(altura / 3.2));
+  for (let f = 0; f < nFiadas; f++) {
+    const z = topoZ - 1.4 - f * 3.0;
+    if (z < topoZ - altura + 0.8) break;
+    const desloca = f % 2 === 0 ? 0 : 2.1;
+    const cor: CorNivel1 = f % 2 === 0 ? 'tijoloBase' : 'tijoloLuz';
+    for (let k = 0; k < 3; k++) {
+      const px = -meio + 2.2 + k * 4.2 + desloca;
+      if (px > meio - 1.0) continue;
+      out.push(detalhe(cor, [3.4, 0.7, 2.0], [px, meio - 0.35, z]));
+      const py = -meio + 2.2 + k * 4.2 + desloca;
+      if (py <= meio - 1.0) {
+        out.push(detalhe(cor, [0.7, 3.4, 2.0], [meio - 0.35, py, z]));
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * O corpo de um bloco: laje de topo com a cor do material e o volume abaixo
  * dela com a cor das laterais. É o esqueleto compartilhado pelos quatro pisos
  * e pela parede.
@@ -210,19 +320,18 @@ function comoRig(caixas: Caixa[]): No {
  */
 export const MODELO_PISO_GRAMA: No = comoRig([
   ...corpoDeBloco('gramaBase', 'terraBase', 'terraSombra', 0, P.alturaPiso),
-  /* tufos nas quatro bordas do topo, alternando comprimento para o padrão não
-   * ficar mecânico (a referência tem essa irregularidade) */
-  detalhe('gramaLuz', [L - 2.0, 1.0, P.detalheTopo], [0, -L / 2 + 0.5, 0.2]),
-  detalhe('gramaLuz', [L - 4.5, 1.0, P.detalheTopo], [1.2, L / 2 - 0.5, 0.2]),
-  detalhe('gramaLuz', [1.0, L - 3.0, P.detalheTopo], [-L / 2 + 0.5, 0.8, 0.2]),
-  detalhe('gramaLuz', [1.0, L - 5.5, P.detalheTopo], [L / 2 - 0.5, -1.0, 0.2]),
-  /* uma mecha no meio, para o topo não ser um campo chapado */
-  detalhe('gramaMeio', [2.4, 1.6, P.detalheTopo], [-1.8, 2.2, 0.15])
+  ...estratosDeTerra(0, P.alturaPiso),
+  /* manchas de tom no topo, para o verde não ser um campo chapado */
+  detalhe('gramaMeio', [3.0, 2.2, P.detalheTopo], [-2.0, 2.4, 0.15]),
+  detalhe('gramaLuz', [2.4, 1.8, P.detalheTopo], [2.6, -1.6, 0.15]),
+  /* e as LÂMINAS: o traço nº 1 da referência, que quebra a silhueta */
+  ...laminasDeGrama(0)
 ]);
 
 /** TERRA — topo batido com pedriscos. */
 export const MODELO_PISO_TERRA: No = comoRig([
   ...corpoDeBloco('terraLuz', 'terraBase', 'terraSombra', 0, P.alturaPiso),
+  ...estratosDeTerra(0, P.alturaPiso),
   detalhe('terraBase', [2.6, 1.8, P.detalheTopo], [-2.4, -1.6, 0.15]),
   detalhe('terraBase', [1.8, 2.2, P.detalheTopo], [2.8, 1.4, 0.15]),
   detalhe('terraMeio', [1.4, 1.4, P.detalheTopo], [0.6, -3.2, 0.15])
@@ -231,6 +340,7 @@ export const MODELO_PISO_TERRA: No = comoRig([
 /** AREIA — topo claro com as marcas onduladas da referência. */
 export const MODELO_PISO_AREIA: No = comoRig([
   ...corpoDeBloco('areiaLuz', 'areiaSombra', 'terraSombra', 0, P.alturaPiso),
+  ...estratosDeTerra(0, P.alturaPiso),
   detalhe('areiaBase', [4.4, 1.0, P.detalheTopo], [-1.0, -2.0, 0.15]),
   detalhe('areiaBase', [3.2, 1.0, P.detalheTopo], [1.6, 1.2, 0.15]),
   detalhe('areiaBase', [1.0, 2.6, P.detalheTopo], [-3.4, 1.8, 0.15])
@@ -262,12 +372,58 @@ export const MODELO_PISO_AGUA: No = comoRig([
  */
 export const MODELO_PAREDE_TERRA: No = comoRig([
   ...corpoDeBloco('gramaBase', 'terraBase', 'terraSombra', P.alturaParede, P.alturaParede),
-  /* duas faixas de sedimento nas laterais, para dar camada */
-  detalhe('terraMeio', [L, L, 0.9], [0, 0, P.alturaParede - 5.6]),
-  detalhe('terraLuz', [L, L, 0.7], [0, 0, P.alturaParede - 9.4]),
-  /* tufos de grama transbordando a quina do topo, como nos pisos */
-  detalhe('gramaLuz', [L - 2.4, 1.0, P.detalheTopo], [0, -L / 2 + 0.5, P.alturaParede + 0.2]),
-  detalhe('gramaLuz', [1.0, L - 3.6, P.detalheTopo], [-L / 2 + 0.5, 0.6, P.alturaParede + 0.2])
+  ...estratosDeTerra(P.alturaParede, P.alturaParede),
+  /* as lâminas transbordam a quina do topo, como nos pisos: é o que faz o
+   * barranco ler como terreno e não como caixote de terra */
+  ...laminasDeGrama(P.alturaParede)
+]);
+
+/**
+ * PAREDE DE TIJOLO — a alvenaria da referência: fiadas deslocadas meio tijolo,
+ * junta escura, e grama transbordando o topo (o bloco mais bonito da imagem que
+ * o dono mandou).
+ *
+ * Fica pronta em `paredeAlternativa` do tileset: o renderer ainda desenha só a
+ * de terra, e o dia em que quiser alternar parede por sala é uma linha lá — o
+ * rig já existe e já está revisado.
+ */
+export const MODELO_PAREDE_TIJOLO: No = comoRig([
+  ...corpoDeBloco('gramaBase', 'tijoloBase', 'argamassa', P.alturaParede, P.alturaParede),
+  ...fiadasDeTijolo(P.alturaParede, P.alturaParede),
+  ...laminasDeGrama(P.alturaParede)
+]);
+
+/** PISO DE TIJOLO — a alvenaria rasa, sem grama: o pátio da referência. */
+export const MODELO_PISO_TIJOLO: No = comoRig([
+  ...corpoDeBloco('tijoloLuz', 'tijoloBase', 'argamassa', 0, P.alturaPiso),
+  ...fiadasDeTijolo(0, P.alturaPiso),
+  /* juntas no topo: duas linhas cruzadas de argamassa */
+  detalhe('argamassa', [L - 1.0, 0.6, P.detalheTopo], [0, -1.2, 0.15]),
+  detalhe('argamassa', [0.6, L - 1.0, P.detalheTopo], [1.4, 0, 0.15])
+]);
+
+/** PISO DE TIJOLO COM GRAMA — a alvenaria que a mata está retomando. */
+export const MODELO_PISO_TIJOLO_GRAMA: No = comoRig([
+  ...corpoDeBloco('gramaBase', 'tijoloBase', 'argamassa', 0, P.alturaPiso),
+  ...fiadasDeTijolo(0, P.alturaPiso),
+  /* o tijolo aparecendo por baixo da grama, num canto */
+  detalhe('tijoloLuz', [4.2, 3.0, P.detalheTopo], [2.4, 2.6, 0.16]),
+  ...laminasDeGrama(0)
+]);
+
+/**
+ * LAJOTA — o caminho de pedra polida que corta a grama na referência: claro,
+ * liso, com as juntas em grade. É o piso que diz "alguém construiu aqui".
+ */
+export const MODELO_PISO_LAJOTA: No = comoRig([
+  ...corpoDeBloco('lajotaLuz', 'lajotaBase', 'lajotaJunta', 0, P.alturaPiso),
+  /* a grade de juntas: duas linhas em cada eixo, formando nove lajotas */
+  detalhe('lajotaJunta', [L, 0.6, P.detalheTopo], [0, -L / 6, 0.15]),
+  detalhe('lajotaJunta', [L, 0.6, P.detalheTopo], [0, L / 6, 0.15]),
+  detalhe('lajotaJunta', [0.6, L, P.detalheTopo], [-L / 6, 0, 0.15]),
+  detalhe('lajotaJunta', [0.6, L, P.detalheTopo], [L / 6, 0, 0.15]),
+  /* uma lajota mais gasta, para a grade não ficar perfeita demais */
+  detalhe('lajotaBase', [3.0, 3.0, P.detalheTopo], [-3.0, 3.0, 0.16])
 ]);
 
 /* ------------------------------------------------------------------ *
@@ -321,6 +477,20 @@ export const MODELO_FLOR_LARANJA: No = comoRig([
   detalhe('frutoLaranja', [1.2, 1.2, 1.0], [-0.9, 0.4, 1.9]),
   detalhe('gramaMeio', [0.5, 0.5, 1.1], [1.0, -0.6, 0.55]),
   detalhe('frutoLaranja', [1.0, 1.0, 0.9], [1.0, -0.6, 1.6])
+]);
+
+/**
+ * FLORZINHAS TURQUESA — as pequenas flores ciano espalhadas pela grama da
+ * referência. Não são emissivas (só a laranja é): elas são cor, não luz.
+ */
+export const MODELO_FLORES_TURQUESA: No = comoRig([
+  detalhe('gramaMeio', [0.5, 0.5, 1.0], [-1.2, 0.5, 0.5]),
+  detalhe('turquesa', [1.1, 1.1, 0.7], [-1.2, 0.5, 1.4]),
+  detalhe('turquesaLuz', [0.5, 0.5, 0.5], [-1.2, 0.25, 1.5]),
+  detalhe('gramaMeio', [0.5, 0.5, 1.3], [0.6, -0.7, 0.65]),
+  detalhe('turquesa', [1.0, 1.0, 0.7], [0.6, -0.7, 1.7]),
+  detalhe('turquesaLuz', [0.5, 0.5, 0.5], [0.6, -0.95, 1.8]),
+  detalhe('turquesa', [0.9, 0.9, 0.6], [1.8, 1.0, 0.9])
 ]);
 
 /** Mobília e terreno não articulam: repouso vazio é legítimo. */

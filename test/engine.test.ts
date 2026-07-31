@@ -42,6 +42,7 @@ import {
   ehMaterial,
   gerarMissoes,
   itemPrincipal,
+  makeContext,
   makeItem,
   nomeDaMissao,
   pesosSpawn,
@@ -155,6 +156,20 @@ function ehCaminhavel(map: GameMap, x: number, y: number): boolean {
   return WALK.has(map.tiles[y * map.w + x]);
 }
 
+/** Poça (fase do penhasco): piso com o bitmap `map.agua` marcado. */
+function ehAgua(map: GameMap, x: number, y: number): boolean {
+  if (x < 0 || y < 0 || x >= map.w || y >= map.h) return false;
+  const a = map.agua;
+  return !!a && a[y * map.w + x] !== 0;
+}
+
+/* Caminhável para efeito de PASSO (o "transitável"): o tile cru caminhável e
+ * sem poça. O VAZIO já sai de graça — não está no conjunto WALK. É o oráculo
+ * independente que T8 e T16 usam onde o engine usa `isWalkable`. */
+function ehTransitavel(map: GameMap, x: number, y: number): boolean {
+  return ehCaminhavel(map, x, y) && !ehAgua(map, x, y);
+}
+
 function listaCaminhaveis(map: GameMap): Point[] {
   const out: Point[] = [];
   for (let y = 0; y < map.h; y++) {
@@ -165,8 +180,12 @@ function listaCaminhaveis(map: GameMap): Point[] {
   return out;
 }
 
-/** BFS independente (4-vizinhança) — não confia no cálculo do próprio módulo. */
-function alcancaveis(map: GameMap): { total: number; vistos: Uint8Array; inicioInvalido: boolean } {
+/** BFS independente (4-vizinhança) — não confia no cálculo do próprio módulo.
+ *  Com o bitmap `agua` informado, mede a caminhabilidade EFETIVA (T16). */
+function alcancaveis(
+  map: GameMap,
+  agua?: Uint8Array | null
+): { total: number; vistos: Uint8Array; inicioInvalido: boolean } {
   const w = map.w;
   const h = map.h;
   const vistos = new Uint8Array(w * h);
@@ -174,7 +193,8 @@ function alcancaveis(map: GameMap): { total: number; vistos: Uint8Array; inicioI
   let ini = 0;
   let fim = 0;
   const s = map.start;
-  if (!s || !WALK.has(map.tiles[s.y * w + s.x])) {
+  const passa = (i: number): boolean => WALK.has(map.tiles[i]) && !(agua && agua[i]);
+  if (!s || !passa(s.y * w + s.x)) {
     return { total: 0, vistos: vistos, inicioInvalido: true };
   }
   vistos[s.y * w + s.x] = 1;
@@ -191,7 +211,7 @@ function alcancaveis(map: GameMap): { total: number; vistos: Uint8Array; inicioI
       if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
       const ni = ny * w + nx;
       if (vistos[ni]) continue;
-      if (!WALK.has(map.tiles[ni])) continue;
+      if (!passa(ni)) continue;
       vistos[ni] = 1;
       total++;
       fila[fim++] = ni;
@@ -580,28 +600,30 @@ describe('T8 — Dijkstra: origem 0, alcance total, degrau máximo 1, descida at
       let inalcancavel: { x: number; y: number; v: number } | null = null;
       for (let y = 0; y < h && inalcancavel === null; y++) {
         for (let x = 0; x < w; x++) {
-          if (!WALK.has(map.tiles[y * w + x])) continue;
+          /* O oráculo é o TRANSITÁVEL (fase do penhasco): a poça é piso cru
+           * mas barra o passo, então fica INF no campo como a parede. */
+          if (!ehTransitavel(map, x, y)) continue;
           if (dmap[y * w + x] >= DIJKSTRA_INF) {
             inalcancavel = { x: x, y: y, v: dmap[y * w + x] };
             break;
           }
         }
       }
-      expect(inalcancavel, onde + ': tile caminhável com valor infinito').toBe(null);
+      expect(inalcancavel, onde + ': tile transitável com valor infinito').toBe(null);
 
       /* degrau máximo 1 entre vizinhos LEGALMENTE conectados (sem corte de canto) */
       let degrau: string | null = null;
       for (let y = 0; y < h && degrau === null; y++) {
         for (let x = 0; x < w && degrau === null; x++) {
-          if (!WALK.has(map.tiles[y * w + x])) continue;
+          if (!ehTransitavel(map, x, y)) continue;
           const va = dmap[y * w + x];
           if (va >= DIJKSTRA_INF) continue;
           for (const d of DIRS8) {
             const nx = x + d[0];
             const ny = y + d[1];
-            if (!ehCaminhavel(map, nx, ny)) continue;
+            if (!ehTransitavel(map, nx, ny)) continue;
             const diagonal = d[0] !== 0 && d[1] !== 0;
-            if (diagonal && (!ehCaminhavel(map, x + d[0], y) || !ehCaminhavel(map, x, y + d[1]))) {
+            if (diagonal && (!ehTransitavel(map, x + d[0], y) || !ehTransitavel(map, x, y + d[1]))) {
               continue; // corte de canto bloqueado: par ignorado, conforme §5
             }
             const vb = dmap[ny * w + nx];
@@ -615,10 +637,11 @@ describe('T8 — Dijkstra: origem 0, alcance total, degrau máximo 1, descida at
       }
       expect(degrau, onde + ': vizinhos com diferença maior que 1 no Dijkstra').toBe(null);
 
-      /* descida por bestStep chega ao jogador */
-      const livres = listaCaminhaveis(map);
+      /* descida por bestStep chega ao jogador — origem e bloqueio medidos no
+       * transitável, como o campo mede */
+      const livres = listaCaminhaveis(map).filter((pt) => !ehAgua(map, pt.x, pt.y));
       const rng = rngLocal(fnv1a('T8#' + semente));
-      const bloqueado = (x: number, y: number): boolean => !ehCaminhavel(map, x, y);
+      const bloqueado = (x: number, y: number): boolean => !ehTransitavel(map, x, y);
       for (let t = 0; t < 5; t++) {
         const o = livres[rng.int(0, livres.length - 1)];
         let cx = o.x;
@@ -650,7 +673,9 @@ describe('T8 — Dijkstra: origem 0, alcance total, degrau máximo 1, descida at
       expect(fmap.length, onde + ': fleeMap devolveu array de tamanho errado').toBe(w * h);
       let ruim: number | null = null;
       for (let k = 0; k < dmap.length && ruim === null; k++) {
-        if (dmap[k] < DIJKSTRA_INF && WALK.has(map.tiles[k]) && !(fmap[k] < DIJKSTRA_INF)) {
+        const kx = k % w;
+        const ky = (k - kx) / w;
+        if (dmap[k] < DIJKSTRA_INF && ehTransitavel(map, kx, ky) && !(fmap[k] < DIJKSTRA_INF)) {
           ruim = k;
         }
       }
@@ -1438,10 +1463,11 @@ describe('T12 — despojos: drop no abate, bolsa e determinismo do loot', () => 
     const game = createState('T12-SNAP', 1);
     const inicial = String(snapshot(game));
 
-    /* A etiqueta subiu para v5 na fase 3 (as caçadas). O que este teste guarda
-     * são as garantias que a fase 1 introduziu e que NÃO podem se perder na
-     * troca de versão — o formato do bloco de itens, da bolsa e do rngLoot. */
-    expect(inicial.indexOf('v5|'), 'T12.6: o snapshot não é v5').toBe(0);
+    /* A etiqueta subiu para v6 na fase do penhasco (água e vazio). O que este
+     * teste guarda são as garantias que a fase 1 introduziu e que NÃO podem
+     * se perder na troca de versão — o formato do bloco de itens, da bolsa e
+     * do rngLoot. */
+    expect(inicial.indexOf('v6|'), 'T12.6: o snapshot não é v6').toBe(0);
     expect(inicial.indexOf('|B[]|') >= 0, 'T12.6: bolsa vazia devia sair como B[]').toBe(true);
     expect(
       /\|I\[\d+:potion:\d+:\d+(\|\d+:potion:\d+:\d+)*\]\|/.test(inicial),
@@ -2014,12 +2040,12 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
     expect(parseCommand('descend'), 'T13.10: descend').toEqual({ kind: 'descend' });
   });
 
-  it('o snapshot v5 traz moedas, refino e os dois pontos de parada', () => {
+  it('o snapshot v6 traz moedas, refino e os dois pontos de parada', () => {
     const semente = sementeComParadas();
     const game = createState(semente, 1);
     const inicial = String(snapshot(game));
 
-    expect(inicial.indexOf('v5|'), 'T13.11: o snapshot não é v5').toBe(0);
+    expect(inicial.indexOf('v6|'), 'T13.11: o snapshot não é v6').toBe(0);
     expect(inicial.indexOf(',mo0,arm0|') >= 0,
       'T13.11: moedas e refino não aparecem no bloco do jogador — ' + inicial).toBe(true);
     expect(
@@ -2030,9 +2056,10 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       inicial.indexOf('|banc=' + (game.bancada ? game.bancada.x + ',' + game.bancada.y : '-') + '|') >= 0,
       'T13.11: a bancada não aparece — ' + inicial
     ).toBe(true);
-    /* Os dois pontos vêm ANTES do checksum de tiles, que fecha o snapshot — e
-     * a decoração da estação (`alq=`, do T14) entra entre eles e o checksum. */
-    expect(/\|merc=[^|]+\|banc=[^|]+\|alq=[^|]+\|map=[0-9a-f]+$/.test(inicial),
+    /* Os dois pontos vêm ANTES dos checksums do relevo, que fecham o snapshot
+     * — a decoração da estação (`alq=`, do T14) e o bitmap de água (`agua=`,
+     * do T16) entram entre eles e o checksum de tiles. */
+    expect(/\|merc=[^|]+\|banc=[^|]+\|alq=[^|]+\|agua=[0-9a-f]+\|map=[0-9a-f]+$/.test(inicial),
       'T13.11: merc/banc fora do lugar no formato — ' + inicial).toBe(true);
 
     /* O snapshot ACOMPANHA a economia: mudou moeda ou refino, mudou o resumo. */
@@ -2048,7 +2075,7 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
     game.mercador = null;
     game.bancada = null;
     game.alquimiaExtras = [];
-    expect(String(snapshot(game)).indexOf('|merc=-|banc=-|alq=-|map=') >= 0,
+    expect(String(snapshot(game)).indexOf('|merc=-|banc=-|alq=-|agua=') >= 0,
       'T13.11: ponto ausente devia sair como "-" — ' + String(snapshot(game))).toBe(true);
   }, LENTO);
 
@@ -2435,7 +2462,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       .toBe(JSON.stringify(game.bancada));
   }, LENTO);
 
-  it('o snapshot v5 traz a estação inteira em alq=, logo depois de banc=', () => {
+  it('o snapshot v6 traz a estação inteira em alq=, logo depois de banc=', () => {
     let game: Game | null = null;
     for (let i = 0; i < 32 && !game; i++) {
       const candidata = createState('T14-SNAP-' + pad(i, 4), 1);
@@ -2447,14 +2474,15 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
     if (!game) return;
 
     const inicial = String(snapshot(game));
-    expect(inicial.indexOf('v5|'), 'T14.8: o snapshot não é v5').toBe(0);
+    expect(inicial.indexOf('v6|'), 'T14.8: o snapshot não é v6').toBe(0);
 
     const esperado = game.alquimiaExtras.map((p) => p.x + ',' + p.y).join(';');
     expect(inicial.indexOf('|alq=' + esperado + '|') >= 0,
       'T14.8: a estação não aparece em alq= — ' + inicial).toBe(true);
-    /* `;` separa os pontos porque `|` já separa os campos do snapshot. */
-    expect(/\|alq=\d+,\d+;\d+,\d+\|map=[0-9a-f]+$/.test(inicial),
-      'T14.8: alq= fora do lugar (tem de vir entre banc= e map=) — ' + inicial).toBe(true);
+    /* `;` separa os pontos porque `|` já separa os campos do snapshot. Entre
+     * alq= e map= entra agua= (o bitmap das poças, do T16). */
+    expect(/\|alq=\d+,\d+;\d+,\d+\|agua=[0-9a-f]+\|map=[0-9a-f]+$/.test(inicial),
+      'T14.8: alq= fora do lugar (tem de vir entre banc= e agua=) — ' + inicial).toBe(true);
 
     /* Mudou a estação, mudou o resumo: é território reservado, e dois andares
      * com a estante de lados diferentes NÃO são o mesmo andar. */
@@ -2462,7 +2490,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
     const menor = String(snapshot(game));
     expect(menor, 'T14.8: tirar um extra não mudou o snapshot').not.toBe(inicial);
     game.alquimiaExtras = [];
-    expect(String(snapshot(game)).indexOf('|alq=-|map=') >= 0,
+    expect(String(snapshot(game)).indexOf('|alq=-|agua=') >= 0,
       'T14.8: estação sem decoração devia sair como "-" — ' + String(snapshot(game))).toBe(true);
   }, LENTO);
 });
@@ -2490,7 +2518,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
  *   · as caçadas atravessam a descida e o save, com progresso, completa e
  *     entregue intactos; save antigo sem o campo degrada para lista vazia
  *     (T15.6);
- *   · o `snapshot()` v5 grava a receita inteira de cada missão, na ordem de
+ *   · o `snapshot()` v6 grava a receita inteira de cada missão, na ordem de
  *     geração (T15.7);
  *   · 'entregar' vai e volta pelo protocolo textual, e a entrega não toca o
  *     stream de despojos (T15.8).
@@ -2908,11 +2936,11 @@ describe('T15 — missões: geração por andar, abate, entrega e travessia', ()
     }
   }, LENTO);
 
-  it('o snapshot v5 grava a receita inteira de cada caçada, na ordem de geração', () => {
+  it('o snapshot v6 grava a receita inteira de cada caçada, na ordem de geração', () => {
     const game = createState('T15-SNAP', 1);
     const inicial = String(snapshot(game));
 
-    expect(inicial.indexOf('v5|'), 'T15.7: o snapshot não é v5').toBe(0);
+    expect(inicial.indexOf('v6|'), 'T15.7: o snapshot não é v6').toBe(0);
     /* O bloco fica entre a bolsa e as estatísticas: "o que eu tenho", "o que
      * me pediram", "o que eu fiz". */
     expect(/\|B\[[^\]]*\]\|M\[/.test(inicial),
@@ -2976,5 +3004,535 @@ describe('T15 — missões: geração por andar, abate, entrega e travessia', ()
     const lootAntes = game.rngLoot.s >>> 0;
     expect(aplicar(game, 'entregar'), 'T15.8: a entrega pronta não foi aceita').toBe(true);
     expect(game.rngLoot.s >>> 0, 'T15.8: a entrega mexeu no stream de despojos').toBe(lootAntes);
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T16 — penhasco e poças: vazio e água barram o passo (decisão do dono)
+ *
+ * POR QUE ESTE BLOCO EXISTE: a fase do penhasco criou os dois primeiros
+ * obstáculos de TERRENO do jogo. Eles não são parede (o visual é outro) e
+ * não são regra nova de movimento (o bloqueio é o da parede) — são a
+ * terceira e a quarta coisa que `isWalkable` recusa, e é essa unicidade que
+ * os testes abaixo protegem: um ponto de leitura, quatro efeitos (jogador,
+ * Dijkstra, IA, restore).
+ *
+ * O que cada teste protege, em uma frase:
+ *   · o contrato de tabela: Tile.Void = 4 (viaja no checksum), o bitmap
+ *     `map.agua` tem w*h, e o snapshot é v6 com `agua=` antes de `map=`
+ *     (T16.0);
+ *   · o vazio só existe FORA do construído: nunca em sala, nunca encostado
+ *     em piso, nunca no anel externo — e todo andar TEM penhasco (T16.1);
+ *   · as poças são regiões 4-conexas de 2..5 tiles, dentro de uma sala só,
+ *     longe do início e da escada, em ~metade das salas (T16.2);
+ *   · nada fica isolado pela água: do início se alcança a escada e TODO
+ *     tile transitável (T16.3);
+ *   · o jogador é barrado por água e por vazio sem consumir turno, com uma
+ *     mensagem por encontro (T16.4);
+ *   · os inimigos são barrados: água e vazio estão no `occupied`, fora do
+ *     campo de Dijkstra e fora do passo do gradiente (T16.5);
+ *   · save/restore preserva água e vazio byte a byte (o mapa é regerado),
+ *     e posição salva sobre a poça ou o precipício DEGRADA em vez de
+ *     recusar a run (T16.6).
+ * ================================================================== */
+
+/** Componentes 4-conexos do bitmap de água — oráculo independente do teste. */
+function componentesDeAgua(map: GameMap): number[][] {
+  const w = map.w;
+  const n = w * map.h;
+  const rotulo = new Int32Array(n);
+  rotulo.fill(-1);
+  const fila = new Int32Array(n);
+  const out: number[][] = [];
+  const D4 = [[1, 0], [0, 1], [-1, 0], [0, -1]];
+  for (let i = 0; i < n; i++) {
+    if (rotulo[i] !== -1 || !map.agua[i]) continue;
+    let ini = 0;
+    let fim = 0;
+    const comp: number[] = [];
+    rotulo[i] = out.length;
+    fila[fim++] = i;
+    while (ini < fim) {
+      const cur = fila[ini++];
+      comp.push(cur);
+      const cx = cur % w;
+      const cy = (cur - cx) / w;
+      for (const d of D4) {
+        const nx = cx + d[0];
+        const ny = cy + d[1];
+        if (nx < 0 || ny < 0 || nx >= w || ny >= map.h) continue;
+        const ni = ny * w + nx;
+        if (rotulo[ni] !== -1 || !map.agua[ni]) continue;
+        rotulo[ni] = out.length;
+        fila[fim++] = ni;
+      }
+    }
+    out.push(comp);
+  }
+  return out;
+}
+
+/** O tile está dentro do retângulo de alguma sala? Oráculo independente. */
+function dentroDeSala(map: GameMap, x: number, y: number): boolean {
+  for (const r of map.rooms) {
+    if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return true;
+  }
+  return false;
+}
+
+function contarAgua(map: GameMap): number {
+  let n = 0;
+  for (let i = 0; i < map.agua.length; i++) {
+    if (map.agua[i]) n++;
+  }
+  return n;
+}
+
+/** Primeira poça com um vizinho ORTOGONAL transitável e livre de gente. */
+function pocaComVizinho(game: Game): { poca: Point; vizinho: Point; dx: number; dy: number } | null {
+  const map = game.map;
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if (!ehAgua(map, x, y)) continue;
+      for (const d of DIRS8) {
+        if (d[0] !== 0 && d[1] !== 0) continue; // ortogonais: a diagonal tem corte de canto
+        const nx = x + d[0];
+        const ny = y + d[1];
+        if (!ehTransitavel(map, nx, ny)) continue;
+        if (game.enemies.some((e) => e.hp > 0 && e.x === nx && e.y === ny)) continue;
+        if (game.items.some((it) => it.x === nx && it.y === ny)) continue;
+        return { poca: { x: x, y: y }, vizinho: { x: nx, y: ny }, dx: -d[0], dy: -d[1] };
+      }
+    }
+  }
+  return null;
+}
+
+describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
+  it('o contrato de tabela: Tile.Void = 4, o bitmap agua com w*h, snapshot v6 com agua=', () => {
+    /* O valor 4 viaja no checksum `map=` de todo save e golden: é contrato
+     * congelado, não detalhe de enum. */
+    expect(CONFIG.TILE.VOID, 'T16.0: Tile.Void não é 4').toBe(4);
+
+    const game = createState('T16-CONTRATO', 1);
+    const map = game.map;
+    expect(map.agua instanceof Uint8Array, 'T16.0: map.agua não é Uint8Array').toBe(true);
+    expect(map.agua.length, 'T16.0: map.agua sem w*h').toBe(map.w * map.h);
+    /* Água é piso: o tile sob o bitmap é SEMPRE Floor — nunca parede, porta
+     * ou escada —, e o checksum do bitmap fecha o snapshot, antes do map=. */
+    let errado: number | null = null;
+    for (let i = 0; i < map.agua.length; i++) {
+      if (map.agua[i] && map.tiles[i] !== CONFIG.TILE.FLOOR) { errado = i; break; }
+    }
+    expect(errado, 'T16.0: poça sobre tile que não é piso').toBe(null);
+
+    const texto = String(snapshot(game));
+    expect(texto.indexOf('v6|'), 'T16.0: o snapshot não é v6').toBe(0);
+    expect(/\|agua=[0-9a-f]+\|map=[0-9a-f]+$/.test(texto),
+      'T16.0: agua= fora do lugar (tem de fechar o relevo, antes de map=) — ' + texto).toBe(true);
+
+    /* Mudou a poça, mudou o resumo: o bitmap é parte do estado comparado. */
+    const antes = String(snapshot(game));
+    game.map.agua[game.map.start.y * map.w + game.map.start.x] = 1;
+    expect(String(snapshot(game)), 'T16.0: mexer no bitmap não mudou o snapshot').not.toBe(antes);
+    game.map.agua[game.map.start.y * map.w + game.map.start.x] = 0;
+  }, LENTO);
+
+  it('o vazio fica fora do construído: nunca em sala, nunca encostado em piso, moldura intacta', () => {
+    let andares = 0;
+    let andaresSemVazio = 0;
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T16-VAZIO-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const onde = ondeEsta('T16.1', { semente, depth });
+        andares++;
+
+        /* Determinismo do relevo: mesma seed, mesmos tiles e mesmo bitmap. */
+        const b = generate(semente, depth);
+        expect(Array.from(b.tiles), onde + ': tiles divergem entre gerações')
+          .toEqual(Array.from(map.tiles));
+        expect(Array.from(b.agua), onde + ': bitmap de água diverge entre gerações')
+          .toEqual(Array.from(map.agua));
+
+        /* A moldura continua parede, como sempre foi: o vazio mora ENTRE ela
+         * e o construído. */
+        for (let x = 0; x < map.w; x++) {
+          expect(map.tiles[x], onde + ': borda norte não é parede em x=' + x)
+            .toBe(CONFIG.TILE.WALL);
+          expect(map.tiles[(map.h - 1) * map.w + x], onde + ': borda sul não é parede em x=' + x)
+            .toBe(CONFIG.TILE.WALL);
+        }
+        for (let y = 0; y < map.h; y++) {
+          expect(map.tiles[y * map.w], onde + ': borda oeste não é parede em y=' + y)
+            .toBe(CONFIG.TILE.WALL);
+          expect(map.tiles[y * map.w + map.w - 1], onde + ': borda leste não é parede em y=' + y)
+            .toBe(CONFIG.TILE.WALL);
+        }
+
+        let vazios = 0;
+        for (let y = 0; y < map.h; y++) {
+          for (let x = 0; x < map.w; x++) {
+            if (map.tiles[y * map.w + x] !== CONFIG.TILE.VOID) continue;
+            vazios++;
+            expect(dentroDeSala(map, x, y), onde + ': vazio DENTRO de sala em (' + x + ',' + y + ')')
+              .toBe(false);
+            expect(x === 0 || y === 0 || x === map.w - 1 || y === map.h - 1,
+              onde + ': vazio no anel externo em (' + x + ',' + y + ')').toBe(false);
+            /* O precipício nunca encosta no construído: entre o vazio e o
+             * piso há sempre a parede de divisa — a borda da cachoeira. */
+            for (const d of DIRS8) {
+              const nx = x + d[0];
+              const ny = y + d[1];
+              expect(ehCaminhavel(map, nx, ny),
+                onde + ': vazio encostado em piso — (' + x + ',' + y + ') toca (' + nx + ',' + ny + ')')
+                .toBe(false);
+            }
+          }
+        }
+        if (vazios === 0) andaresSemVazio++;
+      }
+    }
+    expect(andares, 'T16.1: a varredura não rodou os 72 andares').toBe(72);
+    /* Contraprova: o penhasco EXISTE em todo andar. Sem esta linha, um
+     * mapgen que nunca produzisse vazio passaria verde nas regras acima. */
+    expect(andaresSemVazio, 'T16.1: há andar sem penhasco nenhum — o vazio sumiu?')
+      .toBe(0);
+  }, LENTO);
+
+  it('as poças são regiões 4-conexas de 2 a 5 tiles, dentro de uma sala só', () => {
+    let salasTotal = 0;
+    let salasComPoca = 0;
+    let componentesTotal = 0;
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T16-POCA-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const onde = ondeEsta('T16.2', { semente, depth });
+
+        for (const r of map.rooms) {
+          salasTotal++;
+          let tem = false;
+          for (let y = r.y; y < r.y + r.h && !tem; y++) {
+            for (let x = r.x; x < r.x + r.w && !tem; x++) {
+              if (map.agua[y * map.w + x]) tem = true;
+            }
+          }
+          if (tem) salasComPoca++;
+        }
+
+        const comps = componentesDeAgua(map);
+        componentesTotal += comps.length;
+        for (const comp of comps) {
+          expect(comp.length >= 2 && comp.length <= 5,
+            onde + ': região de água com ' + comp.length + ' tiles — fora de 2..5').toBe(true);
+          /* Uma sala só: `roomAt` dá o MESMO id para todos os tiles da
+           * região — poça não atravessa parede nem vão. */
+          let salaId: number | null = null;
+          for (const idx0 of comp) {
+            const x = idx0 % map.w;
+            const y = (idx0 - x) / map.w;
+            const sala = roomAt(map, x, y);
+            expect(sala, onde + ': poça fora de sala em (' + x + ',' + y + ')').not.toBe(null);
+            if (salaId === null && sala) salaId = sala.id;
+            if (sala) {
+              expect(sala.id, onde + ': poça espalhada por duas salas').toBe(salaId);
+            }
+            expect(map.tiles[idx0], onde + ': poça sobre tile que não é piso puro')
+              .toBe(CONFIG.TILE.FLOOR);
+            expect(x === map.start.x && y === map.start.y,
+              onde + ': poça em cima do início').toBe(false);
+            expect(x === map.stairs.x && y === map.stairs.y,
+              onde + ': poça em cima da escada').toBe(false);
+          }
+          /* Conexidade explícita: de CADA tile da região, uma BFS 4-dir
+           * sobre o bitmap alcança exatamente os tiles dela — nem menos
+           * (região partida), nem mais (duas regiões coladas). */
+          const vistos = new Set<number>([comp[0]]);
+          const fila = [comp[0]];
+          while (fila.length) {
+            const cur = fila.pop() as number;
+            const cx = cur % map.w;
+            const cy = (cur - cx) / map.w;
+            for (const d of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+              const nx = cx + d[0];
+              const ny = cy + d[1];
+              if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
+              const ni = ny * map.w + nx;
+              if (vistos.has(ni) || !map.agua[ni]) continue;
+              vistos.add(ni);
+              fila.push(ni);
+            }
+          }
+          expect(vistos.size, onde + ': BFS de uma poça alcançou fora da região dela')
+            .toBe(comp.length);
+          for (const idx0 of comp) {
+            expect(vistos.has(idx0), onde + ': região de água NÃO é conexa').toBe(true);
+          }
+        }
+      }
+    }
+    /* Frequência: a régua é chance(0.6) por sala com a garantia de
+     * conectividade travando as salas de gargalo — medida em ~55% nesta
+     * amostra. A faixa protege a intenção (poça é comum) sem amarrar o
+     * ponto exato, e as duas pontas existem de propósito: se a amostra só
+     * tiver salas COM poça (ou só sem), o sorteio morreu e o teste passaria
+     * verde sem exercitar nada. */
+    const fracao = salasComPoca / Math.max(1, salasTotal);
+    expect(fracao >= 0.45 && fracao <= 0.70,
+      'T16.2: ' + salasComPoca + '/' + salasTotal + ' salas com poça (' +
+        (fracao * 100).toFixed(1) + '%) — longe dos ~60% da régua').toBe(true);
+    expect(componentesTotal, 'T16.2: nenhuma poça na amostra inteira').toBeGreaterThan(0);
+    expect(salasComPoca < salasTotal, 'T16.2: TODA sala tem poça — o chance(0.6) morreu?')
+      .toBe(true);
+  }, LENTO);
+
+  it('nada fica isolado pela água: do início se alcança a escada e todo tile transitável', () => {
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T16-CONECT-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const onde = ondeEsta('T16.3', { semente, depth });
+
+        /* BFS independente sobre a caminhabilidade EFETIVA (piso seco, porta
+         * e escada): todo tile transitável é alcançável — nenhuma sala
+         * desconectada pela água —, e a escada está entre eles. */
+        const r = alcancaveis(map, map.agua);
+        const transitaveis = contarCaminhaveis(map) - contarAgua(map);
+        expect(r.inicioInvalido, onde + ': o início ficou sem piso seco').toBe(false);
+        expect(r.total, onde + ': a água isolou tiles do mapa').toBe(transitaveis);
+        expect(r.vistos[map.stairs.y * map.w + map.stairs.x],
+          onde + ': start e escada ficaram sem caminho').toBe(1);
+        /* E o mapa registra a prova: conectividade efetiva 1, medida sobre
+         * os tiles transitáveis. */
+        expect(map.connectivity, onde + ': map.connectivity efetiva !== 1').toBe(1);
+      }
+    }
+  }, LENTO);
+
+  it('o jogador é barrado por água e por vazio, sem turno, com uma mensagem por encontro', () => {
+    let provouAgua = false;
+    let provouVazio = false;
+    for (let i = 0; i < 24 && !(provouAgua && provouVazio); i++) {
+      const game = createState('T16-BLOQ-' + pad(i, 4), 1);
+      game.player.maxHp = 999;
+      game.player.hp = 999;
+      const map = game.map;
+
+      if (!provouAgua) {
+        const caso = pocaComVizinho(game);
+        if (caso) {
+          provouAgua = true;
+          game.player.x = caso.vizinho.x;
+          game.player.y = caso.vizinho.y;
+          const marcaLog = game.log.length;
+          const turno = game.turn;
+
+          const aceito = aplicar(game, 'move:' + caso.dx + ',' + caso.dy);
+          expect(aceito, 'T16.4: o passo para a poça consumiu turno').toBe(false);
+          expect(game.turn, 'T16.4: o turno avançou na recusa da poça').toBe(turno);
+          expect(game.player.x === caso.vizinho.x && game.player.y === caso.vizinho.y,
+            'T16.4: o jogador entrou na água').toBe(true);
+          const frases = game.log.slice(marcaLog)
+            .filter((l) => l.text === 'A água barra o caminho.');
+          expect(frases.length, 'T16.4: a poça não se apresentou no registro').toBe(1);
+
+          /* Uma vez por encontro: martelar a mesma direção não repete a
+           * frase — o registro é o lugar que o jogador lê o combate. */
+          aplicar(game, 'move:' + caso.dx + ',' + caso.dy);
+          const repetidas = game.log.slice(marcaLog)
+            .filter((l) => l.text === 'A água barra o caminho.');
+          expect(repetidas.length, 'T16.4: a mensagem da poça repetiu no mesmo encontro').toBe(1);
+        }
+      }
+
+      if (!provouVazio) {
+        /* Parede de divisa com vazio ao lado: o jogador é PLANTADO nela de
+         * propósito. `mover` não valida o tile de origem (o contrato valida
+         * o destino), então plantar aqui exercita exatamente a recusa nova
+         * sem depender de um caminho impossível — entre o construído e o
+         * precipício há sempre parede, por construção do T16.1. */
+        let achou: { x: number; y: number; dx: number; dy: number } | null = null;
+        for (let y = 0; y < map.h && !achou; y++) {
+          for (let x = 0; x < map.w && !achou; x++) {
+            if (map.tiles[y * map.w + x] !== CONFIG.TILE.WALL) continue;
+            for (const d of DIRS8) {
+              if (d[0] !== 0 && d[1] !== 0) continue;
+              const nx = x + d[0];
+              const ny = y + d[1];
+              if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
+              if (map.tiles[ny * map.w + nx] === CONFIG.TILE.VOID) {
+                achou = { x: x, y: y, dx: d[0], dy: d[1] };
+                break;
+              }
+            }
+          }
+        }
+        if (achou) {
+          provouVazio = true;
+          game.player.x = achou.x;
+          game.player.y = achou.y;
+          const marcaLog = game.log.length;
+          const turno = game.turn;
+
+          const aceito = aplicar(game, 'move:' + achou.dx + ',' + achou.dy);
+          expect(aceito, 'T16.4: o passo para o vazio consumiu turno').toBe(false);
+          expect(game.turn, 'T16.4: o turno avançou na recusa do vazio').toBe(turno);
+          expect(game.player.x === achou.x && game.player.y === achou.y,
+            'T16.4: o jogador entrou no abismo').toBe(true);
+          const frases = game.log.slice(marcaLog)
+            .filter((l) => l.text === 'Um abismo sem fundo.');
+          expect(frases.length, 'T16.4: o abismo não se apresentou no registro').toBe(1);
+        }
+      }
+    }
+    /* Contraprova: a amostra tem de exercitar os DOIS terrenos — senão o
+     * teste passa verde sem ter provado nada. */
+    expect(provouAgua, 'T16.4: nenhuma poça alcançável na amostra').toBe(true);
+    expect(provouVazio, 'T16.4: nenhum vazio com divisa na amostra').toBe(true);
+  }, LENTO);
+
+  it('os inimigos são barrados: poça e vazio fora do campo, do occupied e do passo', () => {
+    let provouContorno = false;
+    for (let i = 0; i < 24; i++) {
+      const game = createState('T16-IA-' + pad(i, 4), 1);
+      const map = game.map;
+      const onde = ondeEsta('T16.5', { semente: 'T16-IA-' + pad(i, 4), depth: 1 });
+
+      /* A trava explícita: os dois tiles estão no `occupied` do turno, como
+       * as paradas — o Dijkstra continua blocked: null. */
+      const ctx = makeContext(game);
+      let aguaIdx = -1;
+      let vazioIdx = -1;
+      for (let k = 0; k < map.tiles.length; k++) {
+        if (aguaIdx < 0 && map.agua[k]) aguaIdx = k;
+        if (vazioIdx < 0 && map.tiles[k] === CONFIG.TILE.VOID) vazioIdx = k;
+      }
+      expect(vazioIdx >= 0, onde + ': andar sem vazio — o penhasco sumiu?').toBe(true);
+      expect(ctx.occupied.has(vazioIdx), onde + ': vazio fora do occupied dos inimigos').toBe(true);
+
+      /* O campo de Dijkstra (blocked: null, como manda a arquitetura) já os
+       * exclui: INF na poça e no precipício, como na parede. */
+      const dmap = computeDijkstra(map, [{ x: game.player.x, y: game.player.y, v: 0 }], { blocked: null });
+      expect(dmap[vazioIdx] >= DIJKSTRA_INF, onde + ': vazio com valor finito no Dijkstra')
+        .toBe(true);
+      if (aguaIdx >= 0) {
+        expect(ctx.occupied.has(aguaIdx), onde + ': poça fora do occupied dos inimigos').toBe(true);
+        expect(dmap[aguaIdx] >= DIJKSTRA_INF, onde + ': poça com valor finito no Dijkstra')
+          .toBe(true);
+      }
+
+      /* O passo do gradiente: um Perseguidor de um lado da poça, o herói do
+       * outro — o caminho mais curto cruza a água, e ele tem de CONTORNAR.
+       * O padrão procurado é "transitável, poça, transitável" em linha
+       * reta, com os dois lados livres de gente. */
+      if (!provouContorno && aguaIdx >= 0) {
+        let palco: { ex: number; ey: number; px: number; py: number } | null = null;
+        for (let y = 0; y < map.h && !palco; y++) {
+          for (let x = 0; x < map.w && !palco; x++) {
+            if (!ehAgua(map, x, y)) continue;
+            for (const d of [[1, 0], [0, 1]]) {
+              const ax = x - d[0];
+              const ay = y - d[1];
+              const bx = x + d[0];
+              const by = y + d[1];
+              if (!ehTransitavel(map, ax, ay) || !ehTransitavel(map, bx, by)) continue;
+              if (game.enemies.some((e) => e.hp > 0 &&
+                ((e.x === ax && e.y === ay) || (e.x === bx && e.y === by)))) continue;
+              if (game.items.some((it) =>
+                (it.x === ax && it.y === ay) || (it.x === bx && it.y === by))) continue;
+              palco = { ex: ax, ey: ay, px: bx, py: by };
+            }
+          }
+        }
+        if (palco) {
+          provouContorno = true;
+          game.player.maxHp = 9999;
+          game.player.hp = 9999;
+          game.player.x = palco.px;
+          game.player.y = palco.py;
+          const ent: Enemy = {
+            id: 9600, kind: 'chaser', x: palco.ex, y: palco.ey,
+            hp: 30, maxHp: 30, atk: 1, range: 1,
+            state: 'hunt', plan: '', lastDmg: 0, bump: 0
+          };
+          game.enemies.push(ent);
+          /* `wait` consome o turno: endTurn recomputa o dmap do herói NA
+           * POSIÇÃO NOVA e processa os inimigos — o Perseguidor desce o
+           * gradiente a cada rodada. */
+          for (let t = 0; t < 8; t++) {
+            game.player.hp = game.player.maxHp;
+            aplicar(game, 'wait');
+            expect(ehAgua(map, ent.x, ent.y),
+              onde + ': o Perseguidor pisou na poça em (' + ent.x + ',' + ent.y + ')')
+              .toBe(false);
+            expect(map.tiles[ent.y * map.w + ent.x] === CONFIG.TILE.VOID,
+              onde + ': o Perseguidor pisou no vazio').toBe(false);
+          }
+        }
+      }
+    }
+    /* Contraprova: o contorno tem de ter sido exercitado de verdade. */
+    expect(provouContorno, 'T16.5: nenhuma poça com dois lados livres na amostra').toBe(true);
+  }, LENTO);
+
+  it('save/restore preserva água e vazio byte a byte; posição sobre eles degrada', () => {
+    const armazem = armazemDeMemoria();
+    let game: Game | null = null;
+    for (let i = 0; i < 24 && !game; i++) {
+      const candidata = createState('T16-SAVE-' + pad(i, 4), 1);
+      if (contarAgua(candidata.map) > 0) game = candidata;
+    }
+    expect(game, 'T16.6: nenhuma das 24 sementes tem poça').not.toBe(null);
+    if (!game) return;
+    const map = game.map;
+
+    expect(escreverSave(game, armazem), 'T16.6: o save não foi gravado').toBe(true);
+    const lido = lerSave(armazem);
+    expect(lido, 'T16.6: o save não foi lido de volta').not.toBe(null);
+    const voltou = restore(lido);
+    expect(voltou, 'T16.6: restore recusou um save válido').not.toBe(null);
+    if (!voltou) return;
+
+    /* O mapa é REGERADO pela seed+depth — a prova de que água e vazio
+     * atravessam o save é byte a byte, e o resumo inteiro junto. */
+    expect(Array.from(voltou.map.tiles), 'T16.6: os tiles (com o vazio) não sobreviveram')
+      .toEqual(Array.from(map.tiles));
+    expect(Array.from(voltou.map.agua), 'T16.6: o bitmap de água não sobreviveu')
+      .toEqual(Array.from(map.agua));
+    expect(String(snapshot(voltou)), 'T16.6: o snapshot da retomada divergiu')
+      .toBe(String(snapshot(game)));
+
+    /* DEGRADAÇÃO de save antigo/adulterado: posições que eram piso antes da
+     * fase e agora são poça ou precipício não derrubam a run — o jogador
+     * volta para o início e o inquilino impossível é descartado. */
+    let pocaIdx = -1;
+    let vazioIdx = -1;
+    for (let k = 0; k < map.tiles.length; k++) {
+      if (pocaIdx < 0 && map.agua[k]) pocaIdx = k;
+      if (vazioIdx < 0 && map.tiles[k] === CONFIG.TILE.VOID) vazioIdx = k;
+    }
+    expect(pocaIdx >= 0 && vazioIdx >= 0, 'T16.6: o mapa da amostra não tem os dois terrenos')
+      .toBe(true);
+    const bruto = JSON.parse(String(armazem.getItem(CONFIG.STORAGE_KEY))) as Record<string, unknown>;
+    const sp = bruto.player as Record<string, unknown>;
+    sp.x = pocaIdx % map.w;
+    sp.y = (pocaIdx - (pocaIdx % map.w)) / map.w;
+    (bruto.enemies as Array<Record<string, unknown>>).push({
+      id: 9701, kind: 'chaser', x: vazioIdx % map.w, y: (vazioIdx - (vazioIdx % map.w)) / map.w,
+      hp: 5, maxHp: 5, atk: 1, range: 1, state: 'idle', plan: ''
+    });
+
+    const degradado = restore(bruto);
+    expect(degradado, 'T16.6: restore recusou o save adulterado em vez de degradar').not.toBe(null);
+    if (degradado) {
+      expect(ehAgua(degradado.map, degradado.player.x, degradado.player.y),
+        'T16.6: o jogador retomou EM CIMA da poça').toBe(false);
+      expect(ehTransitavel(degradado.map, degradado.player.x, degradado.player.y),
+        'T16.6: o jogador degradado não está em tile transitável').toBe(true);
+      const inquilino = degradado.enemies.find((e) => e.id === 9701);
+      expect(inquilino, 'T16.6: o inimigo plantado no vazio sobreviveu ao restore')
+        .toBe(undefined);
+    }
   }, LENTO);
 });
