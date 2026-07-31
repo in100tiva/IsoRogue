@@ -73,3 +73,32 @@ Oracle regenerado deliberadamente — a água mudou; o formato não (continua v6
 ---
 
 Vizinhos: [[tilesets-por-nivel]] · [[projecao-isometrica]] · [[geracao-de-masmorra-bsp]]
+
+
+## Adendo — a cachoeira, remodelada duas vezes
+
+A primeira versão eram **raias verticais retas**: retângulos planos descendo, sem espuma na
+beirada e sem nada na base. O dono reprovou. A segunda tentou consertar com corpo, coroa e
+bacia — e ficou pior: na tela viraram **três tubos de vidro pendurados no vazio**, porque a
+base arredondada é a assinatura de um tubo, não de uma queda.
+
+Os três erros eram de conceito, não de acabamento, e valem a nota:
+
+1. **Comprimento** — a queda descia três losangos, muito além da face de onde ela sai. Água
+   que cai num abismo some no escuro depois de um vão curto; o que se vê é o trecho **colado
+   na parede**. Hoje a lâmina tem a altura do bloco (`wh`) mais um respingo.
+2. **Forma** — base arredondada lê como tubo. Trocada por **respingo**: duas lascas
+   horizontais que se abrem, que é como pixel art desenha água batendo.
+3. **Inclinação** — a face lateral do bloco isométrico é um **paralelogramo**. A lâmina
+   agora acompanha essa inclinação (meio pixel de x por pixel de y, a razão 2:1 do losango);
+   reta, ela cruzava a parede em diagonal e denunciava que era um retângulo pregado por cima.
+
+Duas armadilhas de processo ficaram registradas junto:
+
+- **A captura headless não achava a cachoeira** e me fez perseguir um fantasma por várias
+  rodadas: a semente que eu fotografava não tinha poça na borda visível. Quem provou que ela
+  funcionava foi uma **foto do dono no navegador real**. Lição: quando a sonda não vê, duvide
+  da sonda antes de duvidar do código — e peça a foto de quem tem tela.
+- **`ctx.arc` faltando na fake de contexto** dos testes escondia uma exceção que só aparecia
+  no caminho de canvas real. Contexto de mentira precisa implementar tudo que o código chama,
+  ou ele mente.

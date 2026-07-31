@@ -2037,11 +2037,29 @@ export class IsoRenderer {
         i = y * w + x;
         t = tiles[i];
         if (t === this.T_WALL) continue;
-        // O VAZIO não desenha nada: é a beira do penhasco, e o que fica embaixo
-        // é o fundo escuro do canvas — nenhum piso, parede ou adereço. A
-        // cachoeira que escorre para dentro dele é desenhada pela parede/piso
-        // da borda, nunca por ele.
-        if (t === this.T_VOID) continue;
+        // O VAZIO VIROU MAR (decisão do dono, 31/07): em vez de abismo preto
+        // com cachoeira escorrendo — que nunca leu bem —, o que cerca a ilha é
+        // ÁGUA. A barreira é a mesma (o engine já recusa o passo no vazio), a
+        // leitura é infinitamente melhor, e o rig já existia. O tile é
+        // desenhado como água e segue adiante: sem adereço, sem escada, sem
+        // sombra de parede — é mar aberto.
+        /* O MAR vem ANTES da regra de descoberta, e de propósito: o oceano que
+         * cerca a ilha é CONTEXTO, não segredo. R29 esconde o que o jogador
+         * ainda não explorou — mas ninguém "descobre" que existe mar em volta;
+         * ele se vê do primeiro passo, como se vê o horizonte. Escondê-lo
+         * devolveria o abismo preto que o dono acabou de reprovar. */
+        if (t === this.T_VOID) {
+          seen = vis.has(i);
+          sx = hw * (2 * x - s) + ox;
+          dx = x - p.x;
+          dy = y - p.y;
+          d2 = dx * dx + dy * dy;
+          /* Mar distante escurece com a distância como tudo o mais, mas nunca
+           * some: o piso mínimo mantém a silhueta da ilha legível. */
+          lvl = d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0;
+          this.drawFloor(ctx, sx, sy, hw, hh, z, 0, 0, seen, lvl, true);
+          continue;
+        }
         seen = vis.has(i);
         known = seen || (expl ? expl[i] !== 0 : false);
         if (!known) continue; // nunca visto: nada é desenhado (R29)
@@ -2066,7 +2084,6 @@ export class IsoRenderer {
            * CACHOEIRA escorrendo pela borda. Efeito de render puro — nada no
            * Game, e nada de `Math.random`: a fase sai de um hash de (x, y). */
           this.desenharBrilhoDaAgua(ctx, x, y, sx, sy, hw, hh, z, seen, lvl);
-          this.desenharCachoeira(ctx, game, x, y, sx, sy, hw, hh, z, seen);
         } else if (t !== this.T_STAIRS && t !== this.T_DOOR) {
           /* O adereço do tileset, no fim do passe de PISOS: depois do bloco (ele
            * fica em cima do chão) e da sombra da parede (que é decalque de
@@ -2621,57 +2638,6 @@ export class IsoRenderer {
    * Determinismo: a variação de fase vem de um hash de (x, y) — nada de
    * `Math.random`, que é proibido no render e o lint pega.
    */
-  private desenharCachoeira(
-    ctx: CanvasRenderingContext2D, game: Game, x: number, y: number,
-    sx: number, sy: number, hw: number, hh: number, z: number, seen: boolean
-  ): void {
-    if (!seen || this.T_VOID < 0) return;
-    const map = game.map;
-    const w = map.w;
-    const tiles = map.tiles;
-    /* Só as bordas que a projeção MOSTRA: sul (y+1) e leste (x+1). As outras
-     * duas ficam atrás do próprio bloco e o fluxo nunca apareceria. */
-    const paraSul = y + 1 < map.h && tiles[(y + 1) * w + x] === this.T_VOID;
-    const paraLeste = x + 1 < w && tiles[y * w + x + 1] === this.T_VOID;
-    if (!paraSul && !paraLeste) return;
-
-    /* As cores vêm do TILESET, não das LUTs do renderer: a água do andar 2
-     * pode ser lava, e o fluxo tem de acompanhar o terreno. */
-    const paleta = this.tileset.paleta;
-    const claro = paleta.aguaBase ?? '#2b8fd8';
-    const espuma = paleta.aguaEspuma ?? '#e8f7ff';
-    /* Fase do fluxo: hash do tile + o relógio, para as quedas não marcharem
-     * todas juntas como um metrônomo. */
-    let h = ((x * 374761393) ^ (y * 668265263) ^ 0x9e3779b9) >>> 0;
-    h = (h * 1664525 + 1013904223) >>> 0;
-    const fase = (this.t * 1.6 + (h / 4294967296)) % 1;
-    const queda = (hh * 3.2) * z;
-    /* A queda nasce na LÂMINA D'ÁGUA, não no plano do chão seco: desde que a
-     * poça afundou para valer (6 px no nível 1), começar em `sy + hh` fazia o
-     * fluxo brotar no ar, acima da superfície de onde ele deveria transbordar. */
-    const topo = sy + hh + this.tileset.aguaAfundaPx * z;
-
-    const desenhar = (px: number): void => {
-      const largura = Math.max(1, hw * 0.34);
-      ctx.save();
-      ctx.globalAlpha = ctx.globalAlpha * 0.9;
-      ctx.fillStyle = claro;
-      ctx.fillRect(px - largura / 2, topo, largura, queda);
-      /* Três lâminas de espuma descendo, defasadas: é o que dá movimento sem
-       * animar textura nenhuma. */
-      ctx.fillStyle = espuma;
-      for (let k = 0; k < 3; k++) {
-        const t = (fase + k / 3) % 1;
-        const yy = topo + t * queda;
-        ctx.fillRect(px - largura / 2 + 1, yy, Math.max(1, largura - 2), Math.max(1, 2 * z));
-      }
-      ctx.restore();
-    };
-
-    if (paraSul) desenhar(sx - hw * 0.42);
-    if (paraLeste) desenhar(sx + hw * 0.42);
-  }
-
   /**
    * O BRILHO QUE ANDA NA POÇA — o reflexo que atravessa a lâmina devagar.
    *
