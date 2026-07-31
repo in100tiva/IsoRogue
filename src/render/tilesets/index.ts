@@ -153,9 +153,13 @@ export const TILESET_NIVEL1: Tileset = {
   rampaDaCor: RAMPA_DA_COR_NIVEL1,
   emissivas: CORES_EMISSIVAS_NIVEL1,
   repouso: POSE_PARADA_NIVEL1,
-  /* A ordem É a distribuição: o bucket de decor indexa esta lista, então
-   * grama aparece em 5 dos 8 buckets, terra em 2 e areia em 1 — a proporção
-   * da referência, onde o verde domina e a areia é a exceção. */
+  /* A ordem É a distribuição: o bucket de decor indexa esta lista. Contando os
+   * oito slots: grama pura em 2 (0 e 3), terra em 2 (2 e 6), lajota, areia,
+   * tijolo-com-grama e tijolo em 1 cada. Ou seja, VERDE em 3 dos 8 se o tijolo
+   * com grama contar, e a areia é a exceção com 1 — a proporção da referência.
+   * (Esta contagem dizia "grama em 5 dos 8", o que nunca bateu com a lista
+   * abaixo; o número saiu daqui para a bancada de terreno antes de alguém
+   * conferir. Se mexer na lista, refaça a conta na mão.) */
   piso: [
     MODELO_PISO_GRAMA,
     MODELO_PISO_LAJOTA,

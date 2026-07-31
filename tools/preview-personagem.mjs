@@ -8,6 +8,7 @@
  *   npm run preview:personagem -- slime              → docs/ref/preview-slime.png
  *   npm run preview:personagem -- ogro               → docs/ref/preview-ogro.png
  *   npm run preview:personagem -- elenco             → docs/ref/preview-elenco.png
+ *   npm run preview:personagem -- terreno            → docs/ref/preview-terreno.png
  *   node tools/preview-personagem.mjs --personagem=goblin --sem-build
  *
  * Sem argumento nada muda em relação a antes desta fase: mesma página, mesmo
@@ -67,6 +68,14 @@ const ELENCO = [
   'src/render/characters/warrior.ts',
   'src/render/characters/ogre.ts'
 ];
+
+/**
+ * O tileset que a folha de TERRENO fotografa. O registro entra junto do arquivo
+ * do nível porque a bancada pega o material por `tilesetDoNivel` — sem
+ * `index.ts` ela não teria paleta nem rampas, e o erro sairia como stack trace
+ * do bundler em vez de uma linha legível.
+ */
+const TERRENO = ['src/render/tilesets/index.ts', 'src/render/tilesets/nivel1.ts'];
 
 /**
  * Os personagens que a bancada sabe fotografar. `chave` é o que se passa na
@@ -150,6 +159,39 @@ const PERSONAGENS = [
     somaForja: true,
     dicaFalta:
       'algum rig do elenco ainda não foi escrito — a folha do elenco precisa dos quatro.'
+  },
+  {
+    /*
+     * A folha do TERRENO — a única de AMBIENTE, e a única que é uma COMPARAÇÃO.
+     *
+     * Ela nasceu com `OpcoesForja.modoContorno`: o modo `'local'` tem um
+     * consumidor só, `forjaDoTileset` em src/render/IsoRenderer.ts, que o passa
+     * para o terreno. Ou seja, a mudança visual daquela rodada acontece no chão
+     * e nas paredes — e a bancada, até então, só sabia fotografar personagem.
+     * Uma mudança de aparência sem gate visual é uma mudança sem revisão, e é
+     * esse buraco que este alvo fecha.
+     *
+     * `fonte` é o arquivo do nível; o registro e o guerreiro entram em
+     * `exigeTambem` porque a folha precisa do material (via `tilesetDoNivel`) e
+     * põe o guerreiro na cena como régua de T5.
+     */
+    chave: 'terreno',
+    apelidos: ['tileset', 'chao'],
+    saida: join('docs', 'ref', 'preview-terreno.png'),
+    fonte: TERRENO[1],
+    exigeTambem: [TERRENO[0], 'src/render/characters/warrior.ts'],
+    referencia: 'as duas metades da própria folha (fixo × local)',
+    gates: 'T1..T5',
+    doc: 'docs/PERSONAGEM.md §10 · §2.1 de src/render/spriteForge.ts',
+    // Cada bloco é forjado DUAS vezes (um modo em cada metade), e o alvo de §7 é
+    // por atlas: medir a soma contra 40 ms acusaria um estouro que não existe.
+    somaForja: true,
+    rotulosSoma: {
+      forja: 'forja do terreno (todos os blocos, nos dois modos)',
+      nota: '(soma — o alvo de < 40 ms de §7 é POR ATLAS; o tempo de cada bloco está na folha)',
+      quadros: 'quadros forjados (72 por atlas)'
+    },
+    dicaFalta: 'o tileset do nível 1 não está no lugar — veja src/render/tilesets/.'
   }
 ];
 
@@ -496,9 +538,18 @@ function principal() {
       // aviso amarelo que ninguém pode consertar é um aviso que se aprende a
       // ignorar, inclusive quando ele passar a ser verdade.
       if (personagem.somaForja) {
+        // `rotulosSoma` existe porque a mensagem do elenco fala em "os 4 atlas",
+        // e a folha de terreno forja outra coisa (dois modos por bloco). Um
+        // rótulo herdado que conta atlas errado é a ferramenta mentindo baixinho.
+        const rot = personagem.rotulosSoma;
         console.log(
-          `  forja dos ${ELENCO.length} atlas: ${medida.forjaMs.toFixed(1)} ms ` +
-            cor.fraco('(soma — o alvo de < 40 ms de §7 é por atlas, ver as folhas individuais)')
+          `  ${rot ? rot.forja : `forja dos ${ELENCO.length} atlas`}: ` +
+            `${medida.forjaMs.toFixed(1)} ms ` +
+            cor.fraco(
+              rot
+                ? rot.nota
+                : '(soma — o alvo de < 40 ms de §7 é por atlas, ver as folhas individuais)'
+            )
         );
       } else {
         const dentro = medida.forjaMs <= 40;
@@ -509,9 +560,10 @@ function principal() {
       }
     }
     if (medida.quadros !== null) {
+      const rot = personagem.rotulosSoma;
       console.log(
         personagem.somaForja
-          ? `  quadros nos ${ELENCO.length} atlas: ${medida.quadros}`
+          ? `  ${rot ? rot.quadros : `quadros nos ${ELENCO.length} atlas`}: ${medida.quadros}`
           : `  quadros no atlas: ${medida.quadros}`
       );
     }

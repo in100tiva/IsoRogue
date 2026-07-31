@@ -7,11 +7,18 @@
  *   slime     → docs/BESTIARIO.md   §13, gates G1..G10
  *   ogro      → docs/BESTIARIO.md   §13, gates G1..G10
  *   elenco    → docs/BESTIARIO.md   §13, gates G9 e G10 (folha só do elenco)
+ *   terreno   → §2.1 de src/render/spriteForge.ts, gates T1..T5 (folha do TILESET)
  *
  * Esta página NÃO faz parte do jogo. Ela existe para que um humano possa abrir
  * a folha gerada ao lado da imagem de referência do personagem e responder por
  * escrito aos gates. É a única ferramenta de revisão desta fase: se ela mentir
  * ou esconder um quadro, a revisão fica cega.
+ *
+ * O alvo `terreno` é o único que NÃO é um retrato: ele é uma COMPARAÇÃO. Ver a
+ * seção 3.4, que explica por que a bancada precisou de um alvo de ambiente — em
+ * uma frase: a §10 só tinha alvos de personagem, e a mudança de `modoContorno`
+ * não mexe em personagem nenhum. Uma mudança visual que não passa por gate
+ * visual é uma mudança sem revisão.
  *
  * Qual personagem é renderizado vem do FRAGMENTO da URL (`#personagem=goblin`),
  * escrito por tools/preview-personagem.mjs. Sem fragmento a folha é a do
@@ -50,6 +57,39 @@ import { CONFIG, DIRS8 } from '../src/engine/core';
 import * as modForge from '../src/render/spriteForge';
 import * as modModel from '../src/render/model3d';
 import * as xpTexto from '../src/render/characters/xpTexto';
+/*
+ * O TERRENO entra por dois caminhos diferentes, e a diferença é de propósito
+ * (ver a seção 3.4):
+ *
+ *   · o MATERIAL (paleta, rampas, mapa cor→rampa, emissivas, repouso) vem do
+ *     REGISTRO de tilesets, pela mesma função que o `IsoRenderer` chama em
+ *     `sincronizarTileset` — `tilesetDoNivel(1)`. Assim a folha julga o que o
+ *     andar realmente hasteia, e não uma cópia das constantes;
+ *   · os BLOCOS vêm por nome de `nivel1.ts`. Um índice em `tileset.piso[k]`
+ *     seria API pública mais pura, mas a lista é posicional ("a ordem É a
+ *     distribuição", `./index.ts`): reordená-la trocaria em SILÊNCIO o bloco
+ *     que a folha rotula de "grama". Por nome, um rename derruba
+ *     `npm run typecheck:tools` — que é o jeito certo de esta folha quebrar.
+ *     E `papeisNoTileset` fecha o circuito: ela confere, no desenho, que cada
+ *     bloco escolhido ainda está pendurado no tileset do andar.
+ *
+ * `ModoContorno` é `import type`: some no build (o Vite só transpila), mas
+ * amarra os dois literais desta folha aos do forge — se `'fixo' | 'local'`
+ * mudar de nome, o typecheck acusa em vez de a folha forjar duas metades
+ * iguais e ninguém notar.
+ */
+import type { ModoContorno } from '../src/render/spriteForge';
+import type { Tileset } from '../src/render/tilesets';
+import { tilesetDoNivel } from '../src/render/tilesets';
+import {
+  MODELO_FLOR_LARANJA,
+  MODELO_PAREDE_SEBE,
+  MODELO_PISO_AGUA,
+  MODELO_PISO_AREIA,
+  MODELO_PISO_GRAMA,
+  MODELO_PISO_LAJOTA,
+  MODELO_PISO_TIJOLO
+} from '../src/render/tilesets/nivel1';
 
 /* ------------------------------------------------------------------ *
  * 1. Formas mínimas esperadas (contrato §7 e §4.1 do PERSONAGEM.md)
@@ -76,6 +116,18 @@ interface AtlasLike {
   readonly larguraArte?: number;
   readonly alturaArte?: number;
   readonly pixel?: number;
+  /**
+   * §2.1 do forge, modo `'local'` — quantos degraus da paleta caíram no FALLBACK
+   * da escada (não puderam usar o vizinho mais próximo) e quantos ficaram MUDOS
+   * (emissivos, ou já no piso da paleta: a borda simplesmente não é repintada).
+   *
+   * Opcionais como os demais diagnósticos, e pelo mesmo motivo: a bancada mostra
+   * o que existir. Ausentes, a folha de terreno diz "—" em vez de inventar zero
+   * — um zero aqui significaria "a escada nunca precisou de fallback", que é uma
+   * afirmação bem diferente de "este atlas não publica o número".
+   */
+  readonly bordaLocalFallback?: number;
+  readonly bordaLocalMudos?: number;
 }
 
 /** Atlas com pixels de verdade: só depois desta checagem dá para desenhar. */
@@ -186,8 +238,10 @@ interface Ficha {
   /**
    * `personagem` = a folha de um bicho só (o caso de sempre).
    * `elenco` = a folha que só tem a tira dos quatro juntos — G9 e G10.
+   * `terreno` = a folha do TILESET, que não tem personagem nenhum: ela compara
+   * o mesmo bloco forjado nos dois `modoContorno` (§2.1 do forge). Ver 3.4.
    */
-  readonly modo: 'personagem' | 'elenco';
+  readonly modo: 'personagem' | 'elenco' | 'terreno';
   /** Sufixo do caminho do módulo dentro de src/render/characters/. Vazio no elenco. */
   readonly modulo: string;
   /** Onde mora o contrato deste personagem. */
@@ -496,12 +550,89 @@ const FICHA_ELENCO: Ficha = {
   emissivaPorContrato: false
 };
 
+/**
+ * A folha do TERRENO — a única de AMBIENTE, e a única que é uma comparação.
+ *
+ * Por que ela existe: `OpcoesForja.modoContorno` ganhou o modo `'local'` e o
+ * único consumidor dele é `forjaDoTileset` (src/render/IsoRenderer.ts:966-990),
+ * que passa `'local'` para o terreno. Ou seja: a mudança visual da rodada
+ * inteira acontece no CHÃO e nas PAREDES, e a bancada da §10 só tinha alvos de
+ * personagem — guerreiro, goblin, slime, ogro, elenco. A única coisa que mudou
+ * de aparência era a única que nenhum gate olhava.
+ *
+ * Os gates T1..T5 abaixo são de terreno, no espírito de G1..G6: perguntas que se
+ * respondem OLHANDO a folha, não lendo o código. Cada um aponta para o painel
+ * que o responde, porque gate sem lugar onde olhar é gate que não se responde.
+ */
+const FICHA_TERRENO: Ficha = {
+  chave: 'terreno',
+  apelidos: ['tileset', 'chao', 'chão'],
+  titulo: 'ISOROGUE — bancada do terreno (nível 1, fixo × local)',
+  modo: 'terreno',
+  modulo: '',
+  doc: 'docs/PERSONAGEM.md §10 · §2.1 de src/render/spriteForge.ts',
+  docGate: '§2.1 do spriteForge, no espírito da §10 do PERSONAGEM.md',
+  referencia: 'as duas metades desta folha (fixo × local)',
+  nomes: {
+    modelo: [],
+    paleta: [],
+    rampas: [],
+    rampaDaCor: [],
+    repouso: [],
+    emissivas: [],
+    listaEmissivas: [],
+    arcoGolpe: []
+  },
+  gates: [
+    [
+      'T1',
+      'A silhueta de CADA bloco continua FECHADA? No painel de 4×, percorra a borda: ' +
+        'no modo local ela muda de cor ao longo do contorno (é o ponto do modo), mas não ' +
+        'pode ter FURO — nenhum pixel de fundo pode encostar no miolo claro do bloco'
+    ],
+    [
+      'T2',
+      'O piso deixou de parecer uma GRADE? Compare os retalhos 3×3: no fixo, o mesmo traço ' +
+        '#2a1b12 cerca cada tile e o chão lê como tabuleiro. No local, os tiles ainda se ' +
+        'separam um do outro — ou viraram uma mancha só? As duas reprovações são reais, e ' +
+        'esta pergunta pega as duas'
+    ],
+    [
+      'T3',
+      'Algum bloco ganhou HALO CLARO na borda? Olhe a POÇA e o TIJOLO: são as rampas que ' +
+        'terminam em `contorno` (`agua` e `argamassa`, marcadas no painel das rampas), e ali ' +
+        'a escada de §2.1 sai MUDA e não repinta nada. Uma auréola mais CLARA que o miolo, ' +
+        'em volta das regiões escuras, é a assinatura da escada errada'
+    ],
+    [
+      'T4',
+      'A FLOR LARANJA continua acesa até a borda? Ela é a única emissiva do andar e é o ' +
+        'degrau 0 da escada (pixel emissivo nunca escurece). No fixo o traço come as pétalas; ' +
+        'no local o laranja tem de chegar inteiro à silhueta'
+    ],
+    [
+      'T5',
+      'O terreno RECUOU em relação ao personagem? Na cena, o guerreiro é forjado sempre em ' +
+        'fixo (é assim no jogo). À direita ele tem de saltar MAIS do fundo do que à esquerda. ' +
+        'Se ele empatar com o cenário, o modo novo tirou o terreno do lugar de terreno'
+    ]
+  ],
+  compararCom: null,
+  tiraDeLuz: false,
+  tiraDeElenco: false,
+  alturaU: 0,
+  prefixosDeArma: [],
+  corNaTira: '#7ec850',
+  emissivaPorContrato: false
+};
+
 const FICHAS: readonly Ficha[] = [
   FICHA_GUERREIRO,
   FICHA_GOBLIN,
   FICHA_SLIME,
   FICHA_OGRO,
-  FICHA_ELENCO
+  FICHA_ELENCO,
+  FICHA_TERRENO
 ];
 
 /**
@@ -1940,6 +2071,494 @@ function detalheOlhos(
 }
 
 /* ------------------------------------------------------------------ *
+ * 3.4 O TERRENO — `modoContorno` 'fixo' × 'local', lado a lado
+ *
+ * ═══ POR QUE ESTA SEÇÃO EXISTE ═══
+ *
+ * `OpcoesForja` ganhou `modoContorno`. No `'local'`, cada pixel de borda de
+ * silhueta sai numa versão mais escura da PRÓPRIA cor dele, em vez da cor de
+ * contorno única. O único consumidor é `forjaDoTileset` (IsoRenderer.ts:966-990),
+ * que passa `'local'` — logo a mudança de aparência é do TERRENO, e de nada
+ * mais. A bancada, até aqui, só sabia fotografar personagem: a única coisa que
+ * mudou era a única que nenhum gate olhava.
+ *
+ * ═══ POR QUE A FOLHA É UMA COMPARAÇÃO, E NÃO UM RETRATO ═══
+ *
+ * Um retrato do terreno responderia "o terreno está bonito?", que não é a
+ * pergunta desta rodada. A pergunta é "o modo novo melhorou?", e ela só tem
+ * resposta com o MESMO bloco forjado duas vezes, com a mesma paleta, as mesmas
+ * rampas e a mesma pose, diferindo em UM campo. Por isso toda faixa aqui é um
+ * par: à esquerda `'fixo'`, à direita `'local'`, com rótulo em cada metade.
+ *
+ * ═══ A ESCADA, QUE É O QUE OS BLOCOS ESCOLHIDOS EXERCITAM ═══
+ *
+ * `tabelaBordaLocal` (spriteForge.ts:778) resolve, uma vez por PALETA, a cor de
+ * borda de cada degrau, descendo uma escada de quatro degraus (o comentário dela
+ * está em spriteForge.ts:742-772). Os dois extremos são os que se veem na
+ * imagem:
+ *
+ *   · degrau 0 — pixel EMISSIVO nunca escurece (a flor laranja do andar);
+ *   · degrau 4 — cor que já é o piso da paleta NÃO é repintada. É onde um HALO
+ *     CLARO apareceria se a escada caísse na "cor mais escura com índice
+ *     diferente", porque a segunda mais escura é mais CLARA que a primeira.
+ *
+ * No nível 1 o piso da paleta é `contorno` (#2a1b12), e três rampas terminam
+ * nele: `agua` (nivel1.ts:132), `argamassa` (nivel1.ts:139) e `vazio`
+ * (nivel1.ts:149, que é a rampa da própria cor `contorno` — nivel1.ts:166). Por
+ * isso a lista de blocos abaixo inclui água e tijolo: eles são o caso em que o
+ * modo escolhe NÃO pintar, e é ali que o defeito apareceria.
+ * ------------------------------------------------------------------ */
+
+/** O andar que esta folha julga. É o único com tileset próprio hoje. */
+const NIVEL_TERRENO = 1;
+
+/**
+ * A linha do atlas em que TODO bloco de terreno é lido — a mesma constante que
+ * o `IsoRenderer` chama de `DIR_TERRENO` (= `DIR_ITEM` = 2, IsoRenderer.ts:644 e
+ * :1000). Não é convenção: `giroParaFrente(0, 1)` é giro ZERO, então nesta linha
+ * o bloco sai projetado exatamente como `nivel1.ts` o calibrou (5·S = CONFIG.TW).
+ * Qualquer outra giraria o quadrado do tile por dentro do losango.
+ *
+ * O valor coincide com `DIR_ANIMACAO`, e é coincidência: são duas escolhas
+ * diferentes pelo mesmo número, e juntá-las esconderia isso de quem mexer numa
+ * delas.
+ */
+const DIR_TERRENO = 2;
+
+/*
+ * As duas metades da folha, sempre nesta ordem: à ESQUERDA o `'fixo'` (o que o
+ * jogo desenhava antes), à DIREITA o `'local'` (o que ele desenha agora). A
+ * ordem é a leitura do gate — invertê-la em um painel só faria o revisor
+ * responder ao contrário sem perceber.
+ */
+const COR_FIXO = '#7d8899';
+const COR_LOCAL = '#e0a43c';
+
+/** Um bloco na folha, com o motivo de ele estar nela escrito ao lado. */
+interface BlocoTerreno {
+  readonly rotulo: string;
+  readonly modelo: RigLike;
+  /** O que ESTE bloco exercita da escada. Vai impresso na folha, não só aqui. */
+  readonly porque: string;
+  /** Entra no retalho 3×3? Falso para o que não é bloco de tile (a flor). */
+  readonly retalho: boolean;
+}
+
+/**
+ * Os sete blocos da folha. A escolha não é "os mais bonitos": é a cobertura da
+ * escada de §2.1 mais os dois casos de silhueta que o terreno tem (o piso raso,
+ * que se repete, e a parede alta, que precisa continuar lendo como obstáculo).
+ */
+const BLOCOS_TERRENO: readonly BlocoTerreno[] = [
+  {
+    rotulo: 'piso de grama',
+    modelo: MODELO_PISO_GRAMA,
+    retalho: true,
+    porque:
+      'o piso mais comum do andar — 2 dos 8 buckets de decor usam este rig, e 3 têm verde ' +
+      'contando o tijolo-com-grama (a lista `piso` de ' +
+      'tilesets/index.ts:159-168), então é o retalho que o jogador mais vê e é nele que a ' +
+      'pergunta da GRADE se decide. Também é o pior caso de silhueta fina: as 12 lâminas de ' +
+      '`laminasDeGrama` (nivel1.ts:278) têm 0,6u de espessura, e numa peça dessas quase todo ' +
+      'pixel é pixel de borda — se o modo local abrir furo em algum lugar, abre aqui.'
+  },
+  {
+    rotulo: 'piso de lajota',
+    modelo: MODELO_PISO_LAJOTA,
+    retalho: true,
+    porque:
+      'a contraprova da grade: este bloco DESENHA uma grade de propósito no topo (as quatro ' +
+      'juntas de nivel1.ts:526-529). No fixo, o contorno de silhueta repete essa grade na ' +
+      'borda do tile e as duas se confundem. A pergunta que ele responde é se, depois do ' +
+      'local, ainda dá para distinguir junta de lajota de junta ENTRE tiles.'
+  },
+  {
+    rotulo: 'piso de areia',
+    modelo: MODELO_PISO_AREIA,
+    retalho: true,
+    porque:
+      'o material mais CLARO do andar (`areiaLuz #f0d9a0`) e o caso mais folgado do degrau 1: ' +
+      'k × 0,5 cai longe de qualquer degrau declarado, então é aqui que a borda tem mais chance ' +
+      'de sair de outra família — a rampa `areia` já termina emprestando `terraSombra`, que é ' +
+      'de terra (nivel1.ts:131). Se o modo local for lavar a borda de algum bloco, é deste.'
+  },
+  {
+    rotulo: 'poça de água',
+    modelo: MODELO_PISO_AGUA,
+    retalho: true,
+    porque:
+      'a rampa `agua` termina em `contorno` (nivel1.ts:132): a face que quantizar para o ' +
+      'último degrau chega à borda JÁ na cor mais escura da paleta, e a escada sai muda ' +
+      '(degrau 4, contado em `bordaLocalMudos`). É exatamente o caso que o comentário de ' +
+      '`tabelaBordaLocal` diz existir para impedir o halo claro (spriteForge.ts:766-771). ' +
+      'De quebra, o bloco põe `aguaEspuma #e8f7ff`, a cor mais clara do andar, a um pixel ' +
+      'do azul mais escuro — o contraste máximo do tileset numa peça só.'
+  },
+  {
+    rotulo: 'piso de tijolo',
+    modelo: MODELO_PISO_TIJOLO,
+    retalho: true,
+    porque:
+      'encadeia DUAS rampas até o piso da paleta: `tijolo` termina em `argamassa` e ' +
+      '`argamassa` termina em `contorno` (nivel1.ts:138-139). As juntas do topo são peças de ' +
+      '0,6u na cor `argamassa` (nivel1.ts:506-507), então o mesmo bloco mostra, lado a lado, ' +
+      'borda que a escada REPINTA (o tijolo) e borda que ela deixa quieta (o que quantizou ' +
+      'para argamassa e para contorno).'
+  },
+  {
+    rotulo: 'parede de sebe',
+    modelo: MODELO_PAREDE_SEBE,
+    retalho: true,
+    porque:
+      'a parede que o renderer desenha HOJE (`TILESET_NIVEL1.parede`) e o único bloco ALTO ' +
+      'da folha: 14,4u de silhueta contra o gramado. As rampas dela são as mais escuras do ' +
+      'andar (`friaSombra #1a2b2e`, `mataSombra #1b3b2e` — nivel1.ts:104 e :116), ou seja, é ' +
+      'onde o degrau 1 tem MENOS folga para achar um tom mais escuro na própria família: se ' +
+      'algum degrau desta paleta fosse cair no fallback da escada, cairia aqui, e o ' +
+      '`bordaLocalFallback` publicado acima diz se caiu. O comentário da paleta ' +
+      '(nivel1.ts:98-100) diz que parede e piso não podem competir em brilho, senão o jogador ' +
+      'perde a leitura de onde dá para andar — um contorno que suma é competir.'
+  },
+  {
+    rotulo: 'flor laranja (adereço)',
+    modelo: MODELO_FLOR_LARANJA,
+    retalho: false,
+    porque:
+      'o único adereço EMISSIVO do andar (`CORES_EMISSIVAS_NIVEL1`, nivel1.ts:170) e o ' +
+      'degrau 0 da escada: pixel emissivo na silhueta não pode ser escurecido, então a tabela ' +
+      'devolve −1 para ele e ele entra em `bordaLocalMudos` (spriteForge.ts:751-755). No fixo ' +
+      'o traço come as pétalas — o comentário do forge assume esse defeito para não mudar ' +
+      'personagem já aprovado. Aqui é comportamento novo, então nasce certo, e é a diferença ' +
+      'mais fácil de julgar da folha inteira.'
+  }
+];
+
+/**
+ * A CENA: um retalho de andar montado à mão, 5 × 5 tiles.
+ *
+ * Linha = `gy`, coluna = `gx`, como no `map` do engine. As paredes ficam só na
+ * fileira 0 e na coluna 0 — que na projeção são as bordas de TRÁS —, porque
+ * parede à frente do herói é assunto do sistema de transparência do canto
+ * frontal, e essa discussão não é a desta folha.
+ *
+ * A água ocupa DOIS tiles vizinhos de propósito: poça é região conexa, e um tile
+ * de água solto lê como erro de tileset (é o argumento do comentário de decisão
+ * 3 em IsoRenderer.ts:931-944).
+ */
+const CENA_TERRENO: readonly string[] = [
+  '#####',
+  '#ggfg',
+  '#lHgg',
+  '#twwa',
+  '#aagg'
+];
+
+/** O caractere da cena que carrega o GUERREIRO em cima do piso. */
+const CH_HEROI = 'H';
+/** O caractere que carrega a flor laranja em cima do piso. */
+const CH_FLOR = 'f';
+
+const BLOCOS_DA_CENA: Readonly<Record<string, RigLike | undefined>> = {
+  '#': MODELO_PAREDE_SEBE,
+  g: MODELO_PISO_GRAMA,
+  l: MODELO_PISO_LAJOTA,
+  t: MODELO_PISO_TIJOLO,
+  a: MODELO_PISO_AREIA,
+  w: MODELO_PISO_AGUA,
+  f: MODELO_PISO_GRAMA,
+  H: MODELO_PISO_GRAMA
+};
+
+/**
+ * Uma forja de terreno, com os números que ela publica.
+ *
+ * Sem campo `modo`: o modo já é a identidade do slot que guarda a forja
+ * (`b.fixo` / `b.local`), e guardá-lo de novo aqui criaria duas fontes da
+ * verdade que podem discordar em silêncio — exatamente o tipo de coisa que a
+ * folha existe para não deixar acontecer.
+ */
+interface ForjaTerreno {
+  readonly atlas: AtlasPronto;
+  readonly ms: number;
+  /** §2.1 — `null` quando o atlas não publica o campo (não é o mesmo que zero). */
+  readonly fallback: number | null;
+  readonly mudos: number | null;
+}
+
+/**
+ * As opções de forja do terreno — as MESMAS cinco de `forjaDoTileset`
+ * (IsoRenderer.ts:973-987), mais o modo. O renderer não escolhe cor de terreno,
+ * e esta folha também não: tudo vem do objeto de tileset.
+ */
+function opcoesDoTerreno(tileset: Tileset, modo: ModoContorno): Registro {
+  return {
+    paleta: tileset.paleta,
+    rampas: tileset.rampas,
+    rampaDaCor: tileset.rampaDaCor,
+    repouso: tileset.repouso,
+    emissivas: tileset.emissivas,
+    modoContorno: modo
+  };
+}
+
+/**
+ * Um forjador por modo, memoizado por rig.
+ *
+ * A memoização é de conveniência (o `forjarAtlas` já memoiza por modelo +
+ * opções, e o modo entra na chave dele — spriteForge.ts:1237): ela existe para
+ * que a cena e as faixas de bloco compartilhem o MESMO objeto de atlas, e com
+ * ele o mesmo `msForja` medido de verdade na primeira vez.
+ */
+function forjadorDeTerreno(tileset: Tileset, modo: ModoContorno): (m: RigLike) => ForjaTerreno {
+  const forjar = resolverForja(modForge as unknown as Registro, opcoesDoTerreno(tileset, modo));
+  const memo = new Map<RigLike, ForjaTerreno>();
+  return (modelo: RigLike): ForjaTerreno => {
+    const pronto = memo.get(modelo);
+    if (pronto) return pronto;
+    const t0 = performance.now();
+    const bruto = forjar(modelo);
+    const medido = performance.now() - t0;
+    const forja: ForjaTerreno = {
+      atlas: exigirPixels(bruto),
+      ms: bruto.msForja ?? medido,
+      fallback: typeof bruto.bordaLocalFallback === 'number' ? bruto.bordaLocalFallback : null,
+      mudos: typeof bruto.bordaLocalMudos === 'number' ? bruto.bordaLocalMudos : null
+    };
+    memo.set(modelo, forja);
+    return forja;
+  };
+}
+
+/**
+ * Quantos pixels do atlas mudaram entre as duas forjas. `null` quando não deu
+ * para medir (sem `getImageData`) ou quando os atlas têm tamanhos diferentes.
+ *
+ * Não é curiosidade: é o ANTÍDOTO contra a folha mentir. `resolverForja` desce
+ * uma escada de tentativas e, se `forjarAtlas(rig, opts)` falhar por qualquer
+ * motivo, ela repete com só a paleta — o que DERRUBARIA `modoContorno` em
+ * silêncio e produziria duas metades idênticas com rótulos diferentes. Um zero
+ * aqui denuncia isso na cara do revisor, em vez de deixá-lo julgar "o modo novo
+ * não mudou nada" sobre um par que nunca foi forjado de dois jeitos.
+ */
+function pixelsDiferentes(a: AtlasPronto, b: AtlasPronto): number | null {
+  const w = a.canvas.width;
+  const h = a.canvas.height;
+  if (b.canvas.width !== w || b.canvas.height !== h || w <= 0 || h <= 0) return null;
+  const ta = novaTela(w, h);
+  const tb = novaTela(w, h);
+  ta.ctx.drawImage(a.canvas, 0, 0);
+  tb.ctx.drawImage(b.canvas, 0, 0);
+  let da: ImageData;
+  let db: ImageData;
+  try {
+    da = ta.ctx.getImageData(0, 0, w, h);
+    db = tb.ctx.getImageData(0, 0, w, h);
+  } catch {
+    return null;
+  }
+  const x = da.data;
+  const y = db.data;
+  let n = 0;
+  for (let i = 0; i < x.length; i += 4) {
+    if (x[i] !== y[i] || x[i + 1] !== y[i + 1] || x[i + 2] !== y[i + 2] || x[i + 3] !== y[i + 3]) n++;
+  }
+  return n;
+}
+
+/**
+ * Onde este rig está pendurado no tileset do andar — `piso[0]`, `parede`, `água`…
+ *
+ * Serve de prova de que a folha está julgando o terreno que o jogo DESENHA, e
+ * não uma peça de reposição: `nivel1.ts` exporta rigs revisados que o andar não
+ * usa (o barranco de terra, por exemplo — nivel1.ts:478, aposentado quando a
+ * muralha viva entrou). Lista vazia é achado, e a folha o publica em vermelho.
+ */
+function papeisNoTileset(t: Tileset, modelo: RigLike): string[] {
+  const saida: string[] = [];
+  if (t.parede === modelo) saida.push('parede');
+  if (t.agua === modelo) saida.push('água');
+  for (let k = 0; k < t.piso.length; k++) if (t.piso[k] === modelo) saida.push(`piso[${k}]`);
+  for (let k = 0; k < t.aderecos.length; k++) if (t.aderecos[k] === modelo) saida.push(`adereço[${k}]`);
+  for (let k = 0; k < t.paredesVariantes.length; k++) {
+    if (t.paredesVariantes[k] === modelo) saida.push(`variante[${k}]`);
+  }
+  if (t.paredeAlternativa === modelo) saida.push('parede alternativa');
+  return saida;
+}
+
+/**
+ * Dois canvases lado a lado, um rótulo sob cada um e uma divisória entre eles.
+ *
+ * A divisória não é enfeite: dois retalhos do mesmo bloco encostados leem como
+ * um retalho só, e o revisor compararia a metade esquerda com ela mesma.
+ */
+function parDeModos(
+  a: HTMLCanvasElement,
+  b: HTMLCanvasElement,
+  rotA: string,
+  rotB: string
+): HTMLCanvasElement {
+  const gap = 16;
+  const rodape = 16;
+  const w = a.width + b.width + gap;
+  const h = Math.max(a.height, b.height) + rodape;
+  const { cv, ctx } = novaTela(w, h);
+  ctx.fillStyle = '#0d1014';
+  ctx.fillRect(0, 0, w, h);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(a, 0, 0);
+  ctx.drawImage(b, a.width + gap, 0);
+  ctx.strokeStyle = 'rgba(201,211,222,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(Math.round(a.width + gap / 2) + 0.5, 0);
+  ctx.lineTo(Math.round(a.width + gap / 2) + 0.5, h - rodape);
+  ctx.stroke();
+  textoCentrado(ctx, rotA, a.width / 2, h - 4, COR_FIXO, 11);
+  textoCentrado(ctx, rotB, a.width + gap + b.width / 2, h - 4, COR_LOCAL, 11);
+  return cv;
+}
+
+/**
+ * Um retalho de `lado × lado` tiles do MESMO bloco, montado com a matemática do
+ * renderer: a âncora do sprite no CENTRO do losango (`colarTerreno`,
+ * IsoRenderer.ts:2766-2779) e a ordem do pintor por antidiagonal.
+ *
+ * É este painel que responde T2. A grade só existe quando os blocos estão
+ * ENCOSTADOS: um bloco sozinho com contorno duro é bonito, e nove deles em fila
+ * é um tabuleiro — foi o argumento que levou o terreno ao modo `'local'`
+ * (IsoRenderer.ts:979-985), e é o argumento que esta folha põe à prova.
+ */
+function retalhoDeTiles(atlas: AtlasPronto, lado: number, zoom: number): HTMLCanvasElement {
+  const tw = CONFIG.TW * zoom;
+  const th = CONFIG.TH * zoom;
+  const acima = atlas.ancoraY * zoom;
+  const abaixo = Math.max(atlas.alturaFrame - atlas.ancoraY, 0) * zoom;
+  const w = Math.max(lado * tw, atlas.larguraFrame * zoom);
+  const h = acima + (lado - 1) * th + abaixo;
+  const ox = w / 2;
+  const { cv, ctx } = novaTela(w, h);
+  ctx.fillStyle = '#0d1014';
+  ctx.fillRect(0, 0, w, h);
+  const q = atlas.quadro(DIR_TERRENO, 'parado', 0);
+  for (let d = 0; d <= 2 * (lado - 1); d++) {
+    for (let gx = 0; gx < lado; gx++) {
+      const gy = d - gx;
+      if (gy < 0 || gy >= lado) continue;
+      colarQuadro(
+        ctx,
+        atlas,
+        atlas.canvas,
+        q.sx,
+        q.sy,
+        ox + (gx - gy) * (tw / 2),
+        acima + (gx + gy) * (th / 2),
+        zoom
+      );
+    }
+  }
+  return cv;
+}
+
+/** Uma peça já posicionada da cena, na ordem em que o pintor a desenha. */
+interface PecaDaCena {
+  readonly gx: number;
+  readonly gy: number;
+  readonly atlas: AtlasPronto;
+  readonly dir: number;
+}
+
+/**
+ * As peças da cena, JÁ na ordem do pintor: antidiagonal por antidiagonal
+ * (`gx + gy` crescente) e, dentro do tile, o piso antes do que está em cima
+ * dele. É como `draw` do IsoRenderer percorre o mapa; fora dessa ordem, o bloco
+ * de trás cobriria o da frente.
+ */
+function pecasDaCena(
+  linhas: readonly string[],
+  atlasDe: (m: RigLike) => AtlasPronto,
+  heroi: AtlasPronto | null
+): PecaDaCena[] {
+  const saida: PecaDaCena[] = [];
+  const n = linhas.length;
+  for (let d = 0; d <= 2 * (n - 1); d++) {
+    for (let gy = 0; gy < n; gy++) {
+      const gx = d - gy;
+      const linha = linhas[gy];
+      if (gx < 0 || linha === undefined || gx >= linha.length) continue;
+      const ch = linha.charAt(gx);
+      const modelo = BLOCOS_DA_CENA[ch];
+      if (!modelo) continue;
+      saida.push({ gx: gx, gy: gy, atlas: atlasDe(modelo), dir: DIR_TERRENO });
+      if (ch === CH_FLOR) {
+        saida.push({ gx: gx, gy: gy, atlas: atlasDe(MODELO_FLOR_LARANJA), dir: DIR_TERRENO });
+      }
+      // O herói entra em `DIR_ANIMACAO` — a pose da referência, a mesma das
+      // outras folhas. Ele é o único desta cena que não é terreno, e por isso o
+      // único cuja direção não é a linha travada do tileset.
+      if (ch === CH_HEROI && heroi) {
+        saida.push({ gx: gx, gy: gy, atlas: heroi, dir: DIR_ANIMACAO });
+      }
+    }
+  }
+  return saida;
+}
+
+/**
+ * A CENA: o retalho de andar desenhado do jeito que o jogo desenha.
+ *
+ * A caixa sai MEDIDA das peças, e não calculada de `lado × TW`: a parede sobe
+ * 14,4u acima do losango e as lâminas de grama transbordam a quina, então uma
+ * caixa "certa no papel" cortaria o topo da muralha. Medir é barato e não erra.
+ */
+function cenaDoAndar(
+  linhas: readonly string[],
+  atlasDe: (m: RigLike) => AtlasPronto,
+  heroi: AtlasPronto | null,
+  zoom: number
+): HTMLCanvasElement {
+  const pecas = pecasDaCena(linhas, atlasDe, heroi);
+  const tw = CONFIG.TW * zoom;
+  const th = CONFIG.TH * zoom;
+  const margem = 10;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of pecas) {
+    const x0 = (p.gx - p.gy) * (tw / 2) - p.atlas.ancoraX * zoom;
+    const y0 = (p.gx + p.gy) * (th / 2) - p.atlas.ancoraY * zoom;
+    if (x0 < minX) minX = x0;
+    if (y0 < minY) minY = y0;
+    if (x0 + p.atlas.larguraFrame * zoom > maxX) maxX = x0 + p.atlas.larguraFrame * zoom;
+    if (y0 + p.atlas.alturaFrame * zoom > maxY) maxY = y0 + p.atlas.alturaFrame * zoom;
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return novaTela(1, 1).cv;
+
+  const w = Math.ceil(maxX - minX) + margem * 2;
+  const h = Math.ceil(maxY - minY) + margem * 2;
+  const { cv, ctx } = novaTela(w, h);
+  ctx.fillStyle = '#0d1014';
+  ctx.fillRect(0, 0, w, h);
+  const ox = margem - minX;
+  const oy = margem - minY;
+  for (const p of pecas) {
+    const q = p.atlas.quadro(p.dir, 'parado', 0);
+    colarQuadro(
+      ctx,
+      p.atlas,
+      p.atlas.canvas,
+      q.sx,
+      q.sy,
+      ox + (p.gx - p.gy) * (tw / 2),
+      oy + (p.gx + p.gy) * (th / 2),
+      zoom
+    );
+  }
+  return cv;
+}
+
+/* ------------------------------------------------------------------ *
  * 4. Montagem do DOM
  * ------------------------------------------------------------------ */
 
@@ -2787,6 +3406,429 @@ function montarElenco(
   return elenco.length * 8 * ESTADOS.reduce((s, e) => s + e.quadros, 0);
 }
 
+/**
+ * Lista de texto sem classe nova no CSS (o mesmo espírito de `pilhaDeCanvas`):
+ * `tools/preview.html` é compartilhado por todas as folhas, e uma regra nova lá
+ * é uma regra que todas herdam. Aqui bastam três propriedades inline.
+ */
+function listaSimples(itens: ReadonlyArray<readonly [string, string]>): HTMLElement {
+  const ul = el('ul');
+  ul.style.margin = '0';
+  ul.style.padding = '0 0 0 18px';
+  ul.style.maxWidth = '1000px';
+  for (const [chave, texto] of itens) {
+    const li = el('li');
+    li.style.fontSize = '11px';
+    li.style.lineHeight = '1.55';
+    li.style.padding = '2px 0';
+    li.append(el('b', undefined, `${chave} — `), document.createTextNode(texto));
+    ul.append(li);
+  }
+  return ul;
+}
+
+/** Tudo que a folha de terreno precisa, já forjado nos dois modos. */
+interface BlocoForjado {
+  readonly bloco: BlocoTerreno;
+  readonly fixo: ForjaTerreno;
+  readonly local: ForjaTerreno;
+  /** Onde este rig está pendurado no tileset. Vazio = peça de reposição. */
+  readonly papeis: readonly string[];
+  /** Pixels do atlas que mudaram entre os dois modos. `null` = não medível. */
+  readonly delta: number | null;
+  readonly pixels: number;
+}
+
+interface TerrenoPreparado {
+  readonly tileset: Tileset;
+  readonly blocos: readonly BlocoForjado[];
+  readonly atlasFixo: (m: RigLike) => AtlasPronto;
+  readonly atlasLocal: (m: RigLike) => AtlasPronto;
+  readonly msFixo: number;
+  readonly msLocal: number;
+}
+
+/**
+ * Forja os blocos da folha nos DOIS modos.
+ *
+ * Roda antes de qualquer desenho porque o capturador precisa do tempo de forja
+ * publicado no `<body>` (ver `marcar`), e porque a cena e as faixas têm de
+ * compartilhar exatamente os mesmos atlas — dois objetos diferentes do mesmo rig
+ * seriam dois `msForja` diferentes na mesma folha.
+ */
+function prepararTerreno(): TerrenoPreparado {
+  const tileset = tilesetDoNivel(NIVEL_TERRENO);
+  const fixo = forjadorDeTerreno(tileset, 'fixo');
+  const local = forjadorDeTerreno(tileset, 'local');
+  const blocos: BlocoForjado[] = [];
+  let msFixo = 0;
+  let msLocal = 0;
+  for (const b of BLOCOS_TERRENO) {
+    const f = fixo(b.modelo);
+    const l = local(b.modelo);
+    msFixo += f.ms;
+    msLocal += l.ms;
+    blocos.push({
+      bloco: b,
+      fixo: f,
+      local: l,
+      papeis: papeisNoTileset(tileset, b.modelo),
+      delta: pixelsDiferentes(f.atlas, l.atlas),
+      pixels: f.atlas.canvas.width * f.atlas.canvas.height
+    });
+  }
+  return {
+    tileset: tileset,
+    blocos: blocos,
+    // A cena só pede rigs que já estão em `BLOCOS_TERRENO`, então estes dois
+    // sempre batem no memo e não acrescentam forja nenhuma à soma acima.
+    atlasFixo: (m: RigLike): AtlasPronto => fixo(m).atlas,
+    atlasLocal: (m: RigLike): AtlasPronto => local(m).atlas,
+    msFixo: msFixo,
+    msLocal: msLocal
+  };
+}
+
+/**
+ * Um número que DEVERIA ser o mesmo em todos os blocos, com o aviso pronto para
+ * quando não for.
+ *
+ * `bordaLocalFallback` e `bordaLocalMudos` são propriedades da PALETA, não do
+ * bloco: `tabelaBordaLocal` roda uma vez por forja sobre a paleta inteira
+ * (spriteForge.ts:1372-1383). Como os sete blocos usam a mesma paleta do andar,
+ * os sete têm de publicar o mesmo par. Divergência aqui é achado — significa que
+ * algum bloco foi forjado com outro material — e por isso a folha confere em vez
+ * de imprimir o primeiro que encontrar.
+ */
+function valorUnico(valores: ReadonlyArray<number | null>): string {
+  const vistos: number[] = [];
+  let faltou = false;
+  for (const v of valores) {
+    if (v === null) faltou = true;
+    else if (vistos.indexOf(v) < 0) vistos.push(v);
+  }
+  if (vistos.length === 0) return '—';
+  const base = vistos.length === 1 ? String(vistos[0]) : `${vistos.join(' / ')} (DIVERGEM!)`;
+  return faltou ? `${base} (+ atlas sem o campo)` : base;
+}
+
+/**
+ * As rampas do andar, cada uma com seus degraus em amostra de cor.
+ *
+ * É o painel que torna T3 respondível sem ler código: ele marca as rampas que
+ * TERMINAM em `contorno`. Toda face que quantizar para o último degrau de uma
+ * delas chega à borda já na cor mais escura declarada, e a escada de §2.1 não
+ * repinta nada (degrau 4) — é exatamente onde um halo claro apareceria se ela
+ * estivesse errada. Nada aqui reimplementa a escada: são os dados declarados em
+ * `nivel1.ts`, lidos pelo contrato de `Tileset`.
+ */
+function painelDeRampas(t: Tileset): HTMLElement {
+  const caixa = el('div');
+  caixa.style.display = 'grid';
+  caixa.style.gap = '2px';
+  const emissivas = new Set<string>(t.emissivas);
+  for (const nome of Object.keys(t.rampas)) {
+    const passos = t.rampas[nome] ?? [];
+    const linha = el('div', 'amostra');
+    const rot = el('span', undefined, nome);
+    rot.style.minWidth = '86px';
+    rot.style.color = '#c9d3de';
+    linha.append(rot);
+    for (const passo of passos) {
+      const sw = el('i');
+      sw.style.background = t.paleta[passo] ?? '#000000';
+      linha.append(sw);
+    }
+    const seq = el('span', undefined, passos.join(' → '));
+    seq.style.minWidth = '330px';
+    linha.append(seq);
+
+    const ultimo = passos.length > 0 ? passos[passos.length - 1] : '';
+    const soEmissiva = passos.length > 0 && passos.every((p) => emissivas.has(p));
+    const nota = el('b');
+    if (soEmissiva) {
+      nota.textContent = 'EMISSIVA — degrau 0 da escada: a borda nunca escurece (entra em `mudos`)';
+      nota.style.color = COR_LOCAL;
+    } else if (ultimo === 'contorno') {
+      nota.textContent =
+        'termina em `contorno`, o piso da paleta — aqui a escada sai MUDA (degrau 4) e a ' +
+        'borda NÃO é repintada: é onde um halo claro apareceria';
+      nota.style.color = '#d9534f';
+    } else {
+      nota.textContent = '';
+    }
+    linha.append(nota);
+    caixa.append(linha);
+  }
+  return caixa;
+}
+
+/** Cartão de um par fixo × local, com o papel do bloco e os tempos das duas forjas. */
+function cartaoDeBloco(b: BlocoForjado, canvas: HTMLCanvasElement): HTMLElement {
+  const papel = b.papeis.length > 0 ? b.papeis.join(', ') : 'FORA DO TILESET DO ANDAR';
+  const c = cartao(
+    canvas,
+    b.bloco.rotulo,
+    `${papel} · forja ${b.fixo.ms.toFixed(1)} / ${b.local.ms.toFixed(1)} ms · ` +
+      `${b.delta === null ? 'Δ —' : `Δ ${b.delta} px`}`
+  );
+  if (b.papeis.length === 0 || b.delta === 0) {
+    const aviso = el(
+      'div',
+      'detalhe',
+      b.papeis.length === 0
+        ? 'este rig não está pendurado no tileset: a folha está julgando peça de reposição'
+        : 'as duas forjas saíram IDÊNTICAS — a comparação desta linha não vale nada'
+    );
+    aviso.style.color = '#d9534f';
+    c.append(aviso);
+  }
+  return c;
+}
+
+/** Quebra uma fila de cartões em faixas de `porLinha`, para a folha não virar um rolo. */
+function faixasEmLinhas(cartoes: readonly HTMLElement[], porLinha: number): HTMLElement {
+  const pilha = el('div');
+  pilha.style.display = 'grid';
+  pilha.style.gap = '12px';
+  for (let i = 0; i < cartoes.length; i += porLinha) {
+    const f = el('div', 'faixa');
+    f.append(...cartoes.slice(i, i + porLinha));
+    pilha.append(f);
+  }
+  return pilha;
+}
+
+/**
+ * A FOLHA DO TERRENO — a comparação `'fixo'` × `'local'`, e nada além disso.
+ *
+ * Ela não tem 72 quadros, nem tira de luz, nem elenco: quem a abre está
+ * respondendo UMA pergunta ("o modo novo melhorou?"), e cada painel a mais que
+ * não sirva a ela é atenção roubada. Em todo par, a metade da ESQUERDA é o que o
+ * jogo desenhava antes e a da DIREITA é o que ele desenha agora.
+ */
+function montarTerreno(
+  raiz: HTMLElement,
+  ficha: Ficha,
+  pronto: TerrenoPreparado,
+  heroi: Preparado | null,
+  forjaMs: number
+): number {
+  const t = pronto.tileset;
+  const blocos = pronto.blocos;
+  const n = contador();
+  const quadrosPorAtlas = 8 * ESTADOS.reduce((s, e) => s + e.quadros, 0);
+
+  /* --- cabeçalho --- */
+  const cab = el('header', 'cabecalho');
+  const tit = el('div');
+  tit.append(
+    el('h1', 'titulo', ficha.titulo),
+    el(
+      'p',
+      'subtitulo',
+      `tileset "${t.nome}" (nível ${NIVEL_TERRENO}, via tilesetDoNivel — o mesmo caminho do ` +
+        `IsoRenderer) · ${blocos.length} blocos × 2 forjas · ${ficha.doc}`
+    )
+  );
+  const meds = el('div', 'medidas');
+  const deltaTotal = blocos.reduce((s, b) => s + (b.delta ?? 0), 0);
+  meds.append(
+    // Sem veredito de propósito: o alvo de < 40 ms de §7 (docs/PERSONAGEM.md:241)
+    // é POR ATLAS e na inicialização do jogo, e esta bancada roda em Chrome
+    // headless sem GPU — nela o próprio guerreiro passa dos 40 ms. O número é
+    // informação; pintá-lo de verde ou vermelho aqui seria julgar o ambiente.
+    medida('forja fixo (soma)', `${pronto.msFixo.toFixed(1)} ms`),
+    medida('forja local (soma)', `${pronto.msLocal.toFixed(1)} ms`),
+    medida('por bloco (local)', `${(pronto.msLocal / Math.max(1, blocos.length)).toFixed(1)} ms`),
+    medida('bordaLocalFallback', valorUnico(blocos.map((b) => b.local.fallback))),
+    medida('bordaLocalMudos', valorUnico(blocos.map((b) => b.local.mudos))),
+    medida('pixels alterados', String(deltaTotal)),
+    medida('cores da paleta', String(Object.keys(t.paleta).length))
+  );
+  if (heroi) meds.append(medida('forja guerreiro', `${heroi.ms.toFixed(1)} ms`));
+  cab.append(tit, meds);
+  raiz.append(cab);
+
+  /* --- 1. a cena: o julgamento principal --- */
+  const sCena = secao(
+    `${n()} · a cena do andar — o mesmo retalho nos dois modos (2×)`,
+    'piso, poça, muralha e adereço montados com a matemática do renderer (âncora no centro ' +
+      'do losango, ordem do pintor por antidiagonal) · o GUERREIRO é forjado sempre em ' +
+      '`fixo`, como no jogo: personagem precisa saltar do cenário, e é o traço duro que faz ' +
+      'isso (§2.1 do forge) · esta é a imagem de T2 e T5'
+  );
+  if (heroi === null) {
+    const aviso = el(
+      'p',
+      'sub',
+      'ATENÇÃO: o atlas do guerreiro não pôde ser forjado — a cena vai sem ele e T5 não é ' +
+        'julgável nesta folha. O erro apareceu no console da página.'
+    );
+    aviso.style.color = '#d9534f';
+    sCena.append(aviso);
+  }
+  const heroiAtlas = heroi ? heroi.atlas : null;
+  sCena.append(
+    parDeModos(
+      cenaDoAndar(CENA_TERRENO, pronto.atlasFixo, heroiAtlas, 2),
+      cenaDoAndar(CENA_TERRENO, pronto.atlasLocal, heroiAtlas, 2),
+      "terreno em modoContorno: 'fixo' (o de antes)",
+      "terreno em modoContorno: 'local' (o novo)"
+    )
+  );
+  raiz.append(sCena);
+
+  /* --- 2. bloco a bloco, ampliado --- */
+  const zBloco = 4;
+  const sBlocos = secao(
+    `${n()} · bloco a bloco, ampliado ${zBloco}× — fixo à esquerda, local à direita`,
+    'o losango é o tile 64×32 do jogo e a cruz âmbar é a âncora · é aqui que T1 se responde: ' +
+      'percorra a borda de cada bloco procurando FURO · o rótulo de cada cartão traz o papel ' +
+      'do rig no tileset, os dois tempos de forja e quantos pixels do atlas mudaram entre os modos'
+  );
+  sBlocos.append(
+    faixasEmLinhas(
+      blocos.map((b) =>
+        cartaoDeBloco(
+          b,
+          parDeModos(
+            celulaQuadro(b.fixo.atlas, DIR_TERRENO, 'parado', 0, zBloco),
+            celulaQuadro(b.local.atlas, DIR_TERRENO, 'parado', 0, zBloco),
+            'fixo',
+            'local'
+          )
+        )
+      ),
+      3
+    )
+  );
+  raiz.append(sBlocos);
+
+  /* --- 3. o retalho: a pergunta da grade --- */
+  const sRetalho = secao(
+    `${n()} · o retalho 3×3 do MESMO bloco (2×) — a pergunta da GRADE`,
+    'a grade só existe quando os blocos estão encostados: um bloco sozinho com contorno duro ' +
+      'é bonito, e nove deles em fila é um tabuleiro · foi o argumento que levou o terreno ao ' +
+      'modo local (IsoRenderer.ts:979-985), e este painel é o que o põe à prova · a reprovação ' +
+      'oposta também vale: se os nove virarem uma mancha só, o modo apagou a separação entre tiles'
+  );
+  const comRetalho = blocos.filter((b) => b.bloco.retalho);
+  sRetalho.append(
+    faixasEmLinhas(
+      comRetalho.map((b) =>
+        cartaoDeBloco(
+          b,
+          parDeModos(
+            retalhoDeTiles(b.fixo.atlas, 3, 2),
+            retalhoDeTiles(b.local.atlas, 3, 2),
+            'fixo',
+            'local'
+          )
+        )
+      ),
+      3
+    )
+  );
+  raiz.append(sRetalho);
+
+  const colsBaixo = el('div', 'colunas');
+
+  /* --- 4. por que estes blocos --- */
+  const sPorque = secao(
+    `${n()} · por que ESTES blocos`,
+    'a escolha não é "os mais bonitos": é a cobertura da escada de §2.1 (spriteForge.ts:742-772) ' +
+      'mais os dois casos de silhueta que o terreno tem — o piso raso, que se repete, e a ' +
+      'parede alta, que precisa continuar lendo como obstáculo'
+  );
+  sPorque.append(
+    listaSimples(
+      blocos.map((b) => [b.bloco.rotulo, b.bloco.porque] as readonly [string, string])
+    )
+  );
+  colsBaixo.append(sPorque);
+  raiz.append(colsBaixo);
+
+  /* --- 5. os números --- */
+  const sNumeros = secao(
+    `${n()} · os números das duas forjas`,
+    'Δ é quantos pixels do ATLAS INTEIRO (os 72 quadros) mudaram do fixo para o local — um ' +
+      'zero aqui denunciaria uma folha que forjou o mesmo atlas duas vezes e mentiu no rótulo · ' +
+      '`bordaLocalFallback` e `bordaLocalMudos` são campos de `AtlasPersonagem` e são ' +
+      'propriedades da PALETA, não do bloco: os ' +
+      `${blocos.length}` +
+      ' têm de publicar o mesmo par. `mudos` conta os degraus que a escada não repinta, e ' +
+      `pelo menos ${t.emissivas.length} dele(s) são as emissivas declaradas do andar ` +
+      `(${t.emissivas.length > 0 ? t.emissivas.join(', ') : 'nenhuma'}, degrau 0); o resto são ` +
+      'cores que já estão no piso da paleta (degrau 4) · o orçamento de forja é < 40 ms POR ' +
+      'ATLAS na inicialização (docs/PERSONAGEM.md:241), mas nesta bancada — Chrome headless, ' +
+      'sem GPU — o próprio guerreiro passa disso: o número está aqui como número, não como ' +
+      'veredito · e os ms desta lista saem do relógio DESTA passada, que o Chrome virtualiza ' +
+      'com --virtual-time-budget; o número que o capturador imprime no terminal vem da passada ' +
+      'de medição, sem relógio virtual, e por isso os dois não batem na casa das dezenas'
+  );
+  sNumeros.append(
+    listaSimples(
+      blocos.map((b) => {
+        const pct = b.delta === null ? '—' : `${((b.delta / Math.max(1, b.pixels)) * 100).toFixed(2)}%`;
+        return [
+          b.bloco.rotulo,
+          `fixo ${b.fixo.ms.toFixed(1)} ms · local ${b.local.ms.toFixed(1)} ms · ` +
+            `Δ ${b.delta === null ? '—' : b.delta} px de ${b.pixels} (${pct}) · ` +
+            `fallback ${b.local.fallback ?? '—'} · mudos ${b.local.mudos ?? '—'} · ` +
+            `atlas ${b.fixo.atlas.canvas.width}×${b.fixo.atlas.canvas.height}, quadro ` +
+            `${b.fixo.atlas.larguraFrame}×${b.fixo.atlas.alturaFrame}`
+        ] as readonly [string, string];
+      })
+    )
+  );
+  raiz.append(sNumeros);
+
+  /* --- 6. as rampas --- */
+  const sRampas = secao(
+    `${n()} · as rampas do andar — onde a escada fica MUDA`,
+    `${Object.keys(t.rampas).length} rampas, e toda cor da paleta está em alguma delas ` +
+      '(`RAMPA_DA_COR_NIVEL1` mapeia as ' +
+      `${Object.keys(t.paleta).length}` +
+      ') · o quantizador escolhe o degrau pelo fator de luz da FACE, então uma face virada ' +
+      'para o lado pode cair no último degrau — e é o último degrau que decide se a borda ' +
+      'daquele pixel será repintada'
+  );
+  sRampas.append(painelDeRampas(t));
+  raiz.append(sRampas);
+
+  /* --- 7. os gates --- */
+  const sGates = secao(
+    `${n()} · gates da revisão de terreno (${ficha.docGate})`,
+    'responda por escrito, um a um — os cinco são de OLHO, e cada um diz em que painel se olha'
+  );
+  const lista = el('ul', 'gates');
+  lista.style.maxWidth = '900px';
+  for (const [id, texto] of ficha.gates) {
+    const li = el('li');
+    li.append(el('b', undefined, `${id} `), document.createTextNode(texto));
+    lista.append(li);
+  }
+  sGates.append(lista);
+  raiz.append(sGates);
+
+  raiz.append(
+    el(
+      'div',
+      'rodape',
+      'Gerado por tools/preview-personagem.mjs -- terreno · nenhum recurso externo · ' +
+        `forja publicada ao capturador = ${forjaMs.toFixed(1)} ms, a SOMA das ` +
+        `${blocos.length * 2} forjas de terreno desta folha, medida na passada SEM relógio ` +
+        'virtual (o guerreiro entra como régua de T5 e é medido em separado) · ' +
+        'reprovou em algum gate: corrige e roda de novo.'
+    )
+  );
+
+  // O "quadro" desta folha é o total forjado: dois atlas por bloco, mais o do
+  // guerreiro quando ele entrou na cena.
+  return (blocos.length * 2 + (heroi ? 1 : 0)) * quadrosPorAtlas;
+}
+
 function painelErro(raiz: HTMLElement, ficha: Ficha, e: unknown): void {
   const p = el('div', 'erro');
   p.append(
@@ -2907,6 +3949,21 @@ function principal(): void {
       for (const p of cache.values()) if (p) soma += p.ms;
       const forjaMs = forjaInformada() ?? soma;
       const quadros = montarElenco(raiz, ficha, cache, forjaMs);
+      marcar(ficha.chave, forjaMs, quadros);
+      return;
+    }
+
+    if (ficha.modo === 'terreno') {
+      // O guerreiro é APOIO aqui, no mesmo canal em que ele é apoio de G7: se
+      // faltar, a cena vai sem ele e a folha diz que T5 ficou sem imagem, em vez
+      // de a folha inteira virar painel de erro por causa da régua.
+      const cache = prepararApoio([CHAVE_REGUA]);
+      const pronto = prepararTerreno();
+      // A soma publicada é só a do TERRENO. O guerreiro tem tempo próprio no
+      // cabeçalho: misturá-lo aqui inflaria o número que o capturador imprime
+      // com uma forja que não é a que esta folha está julgando.
+      const forjaMs = forjaInformada() ?? pronto.msFixo + pronto.msLocal;
+      const quadros = montarTerreno(raiz, ficha, pronto, cache.get(CHAVE_REGUA) ?? null, forjaMs);
       marcar(ficha.chave, forjaMs, quadros);
       return;
     }
