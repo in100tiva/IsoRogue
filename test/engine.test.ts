@@ -70,7 +70,8 @@ import type {
   Item,
   MaterialKind,
   Missao,
-  Point
+  Point,
+  Population
 } from '../src/engine/types';
 
 /* O autosave não pode vazar de um teste para o outro (nem existir em Node). */
@@ -2241,23 +2242,50 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       }
     }
 
-    /* O número que importa: a instalação NUNCA falta. Não é sorte — o anel
-     * 2..4 do início cai inteiro dentro do raio seguro (SAFE_RADIUS = 6), onde
-     * inimigo e item não nascem, e a sala do início é uma sala de verdade
-     * (`map.start` é o centro de `rooms[0]`). O dia em que faltar é mudança de
-     * MAPA que merece decisão, não um teste que afrouxa o número. */
+    /* O mercador NUNCA falta. Não é sorte — o anel 2..4 do início cai inteiro
+     * dentro do raio seguro (SAFE_RADIUS = 6), onde inimigo e item não nascem,
+     * e a sala do início é uma sala de verdade (`map.start` é o centro de
+     * `rooms[0]`). O dia em que faltar é mudança de MAPA que merece decisão,
+     * não um teste que afrouxa o número. */
     expect(andares, 'T14.1: a varredura não rodou os 600 andares').toBe(600);
     expect(semMercador, 'T14.1: andar sem mercador').toBe(0);
-    expect(semCaldeirao, 'T14.1: andar sem caldeirão').toBe(0);
+
+    /* ------------------------------------------------------------------
+     * O CALDEIRÃO, DESDE A FASE DA PASSAGEM (T20), PODE FALTAR — e o número
+     * saiu de 0 para 2 em 600 andares (0,33%) por decisão, não por regressão.
+     *
+     * Os dois casos são o mesmo cômodo: sala inicial em CRUZ de braço estreito,
+     * onde os únicos tiles do anel 2..4 são as pontas dos braços. A ponta sem
+     * saída não tranca nada e vira mercador; as outras são a boca do braço que
+     * liga o cômodo ao resto do andar, e plantar móvel ali sela metade da
+     * masmorra. Não há terceira opção: nesses dois andares o cômodo comporta UM
+     * sólido, e ele vai para o mercador.
+     *
+     * O teto de 1% é o que continua pegando a regressão de verdade (o filtro
+     * ficar paranoico e a estação sumir em massa). A prova de que CADA omissão
+     * foi forçada — e não uma desistência preguiçosa — não é um número e sim um
+     * teste: T20.6 refaz a conta tile a tile, por força bruta, em cada andar sem
+     * instalação completa.
+     * ------------------------------------------------------------------ */
+    expect(semCaldeirao / andares,
+      'T14.1: o caldeirão sumiu em ' + semCaldeirao + ' de ' + andares + ' andares — ' +
+      'acima do 1% que a colocação sob filtro de passagem justifica')
+      .toBeLessThan(0.01);
 
     /* A estação COMPLETA (três peças) é o caso normal, não o excepcional:
-     * medido 579 de 600 (96,5%) — os que faltam são cômodos em cruz de braço
-     * estreito, onde a decoração não cabe sem sair da sala. O piso de 90% pega
-     * a regressão de verdade (a estação parar de montar) sem transformar um
+     * medido 535 de 600 (89,17%) neste conjunto e 89,33% numa varredura de 3000
+     * andares. O número caiu dos 96,5% de antes da passagem, e a diferença tem
+     * nome: eram estações de três peças que TRANCAVAM o andar — a decoração era
+     * o maior ofensor isolado do bug (culpada sozinha em 525 dos 1041 andares
+     * partidos). Estante que sela corredor não é estação completa, é partida
+     * perdida com mobília bonita.
+     *
+     * O piso de 85% guarda a mesma margem que o de 90% guardava sobre os 96,5%:
+     * pega a regressão de verdade (a estação parar de montar) sem transformar um
      * ajuste de gerador em build vermelho. */
     expect(estacaoCompleta / andares,
       'T14.1: a estação parou de montar as três peças — ' + estacaoCompleta + '/' + andares)
-      .toBeGreaterThan(0.9);
+      .toBeGreaterThan(0.85);
   }, LENTO);
 
   it('a estação tem até três tiles: caldeirão de interação e dois extras colados nele', () => {
@@ -3906,6 +3934,24 @@ describe('T17 — a enseada: canais de água no lugar da parede', () => {
      * `seco` é a contagem de tiles caminháveis a seco do andar, e é a métrica
      * que pega o erro mais silencioso de todos: um canal que comesse piso
      * derrubaria o número sem mexer, necessariamente, em nenhuma posição.
+     *
+     *
+     * ------------------------------------------------------------------
+     * TRÊS LINHAS DE `par` FORAM REGRAVADAS NA FASE DA PASSAGEM (T20), e o que
+     * elas mostram é o desenho do conserto funcionando.
+     *
+     * O filtro de pontos de articulação recusa tile que trancaria o andar, mas
+     * recusa DEPOIS do `shuffle`, jamais antes — o consumo de u32 do stream de
+     * população fica byte a byte o mesmo (o porquê está em `escolherParada`).
+     * O efeito visível aqui é exatamente esse: `seco`, `e` e `it` não mudaram
+     * uma vírgula (é a afirmação inteira de T17.5, e ela segue de pé), o
+     * MERCADOR não se moveu em nenhum dos seis andares, e só a ESTAÇÃO andou —
+     * nos três casos em que o tile antigo, medido, selava passagem:
+     *   · 0001 d=2: alq 11,8;10,9 → 10,7;11,8 (só a decoração trocou de lado);
+     *   · 0002 d=1: banc 6,6 → 3,2;
+     *   · 0003 d=1: banc 6,7 → 4,11.
+     * Se um dia `e` ou `it` mudarem aqui, aí sim é stream vazando.
+     * ------------------------------------------------------------------
      */
     const CONGELADO = [
       { seed: 'T17-STREAMS-0001', depth: 1, seco: 813,
@@ -3916,11 +3962,11 @@ describe('T17 — a enseada: canais de água no lugar da parede', () => {
         e: 'linker@8,15 linker@7,15 linker@21,11 linker@27,6 linker@41,17 linker@9,27 ' +
           'linker@14,36 linker@24,34',
         it: 'potion@4,17 potion@18,12 potion@38,11 potion@3,26 potion@22,41',
-        par: 'merc@4,5 banc@10,8 alq@11,8;10,9' },
+        par: 'merc@4,5 banc@10,8 alq@10,7;11,8' },
       { seed: 'T17-STREAMS-0002', depth: 1, seco: 802,
         e: 'chaser@2,36 linker@12,42 linker@20,11 linker@33,8 linker@27,21 linker@41,20',
         it: 'potion@11,40 potion@26,7 potion@32,8 potion@40,21',
-        par: 'merc@2,4 banc@6,6 alq@6,5;5,6' },
+        par: 'merc@2,4 banc@3,2 alq@2,2;4,2' },
       { seed: 'T17-STREAMS-0002', depth: 2, seco: 880,
         e: 'linker@5,12 linker@19,14 chaser@28,9 linker@29,14 chaser@8,24 linker@4,38 ' +
           'linker@27,25 linker@24,39',
@@ -3929,7 +3975,7 @@ describe('T17 — a enseada: canais de água no lugar da parede', () => {
       { seed: 'T17-STREAMS-0003', depth: 1, seco: 777,
         e: 'linker@12,11 linker@11,8 linker@22,9 linker@3,20 linker@41,2 linker@17,38',
         it: 'potion@11,12 potion@8,21 potion@38,3 potion@11,36',
-        par: 'merc@3,10 banc@6,7 alq@6,6;6,8' },
+        par: 'merc@3,10 banc@4,11 alq@4,10;4,12' },
       { seed: 'T17-STREAMS-0003', depth: 2, seco: 811,
         e: 'chaser@8,17 chaser@25,12 linker@24,18 linker@32,21 linker@42,18 linker@24,36 ' +
           'linker@41,31 linker@33,41',
@@ -4735,6 +4781,499 @@ describe('T19 — cone de FOV: ' + T19.sementes + ' sementes × ' + T19.origens 
           .toEqual([]);
         expect(res.tested, onde + ': a sonda não testou nenhum par').toBeGreaterThan(0);
         expect(res.ok, onde + ': campo ok inconsistente com broken').toBe(res.broken.length === 0);
+      }
+    }
+  }, LENTO);
+});
+/* ================================================================== *
+ * T20 — o povoamento não tranca a passagem
+ *
+ * POR QUE ESTE BLOCO EXISTE: o dono mandou a captura de tela. O gerador pôs o
+ * MERCADOR no único tile de saída da sala inicial e o herói ficou preso —
+ * móvel e NPC são SÓLIDOS desde a fase 2.2 (`esbarrar` recusa o passo como uma
+ * parede), então não havia segundo caminho, não havia escada, não havia jogo.
+ *
+ * A ironia cabe numa frase: o BRIEF exige em R15 "BFS ao final garantindo 100%
+ * dos tiles caminháveis conectados" e em R16 "áreas isoladas são conectadas ou
+ * o mapa é regenerado" — e o gerador CUMPRE. Só que o portão vive dentro de
+ * `generate()`, e os sólidos permanentes nascem depois, em `populate()`, que
+ * nunca revalidou nada. O gerador entrega o mapa inteiro; o povoador o parte.
+ *
+ * O QUE CONTA COMO SÓLIDO AQUI, e por quê:
+ *   · mercador, caldeirão e os extras da estação — os três recusam o passo em
+ *     `esbarrar` (game.ts), para sempre, e por isso são PAREDE para efeito de
+ *     conectividade;
+ *   · água e vazio também barram, mas o portão de `generate` já os contempla
+ *     (a conectividade efetiva é remedida com o bitmap na mão), então não são
+ *     deste bloco;
+ *   · INIMIGO NÃO É OBSTÁCULO: `mover` consulta `enemyAt` ANTES de tudo e o
+ *     passo vira ATAQUE. Monstro custa turno e sangue, jamais caminho — medi-lo
+ *     como parede daria um vermelho falso.
+ *
+ * O que cada teste protege:
+ *   · 600 andares: com todo sólido bloqueado, TODO tile livre continua
+ *     alcançável a partir de `map.start` (T20.1);
+ *   · 750 andares até a profundidade 12: a ESCADA nunca fica presa — é o caso
+ *     exato da captura (T20.2);
+ *   · corredor sintético de UM tile: nenhuma peça nasce no gargalo, e quando
+ *     existe saída segura é ela que a instalação escolhe (T20.3);
+ *   · degradação: num cômodo onde TODO candidato é gargalo, a instalação é
+ *     OMITIDA em vez de trancar o andar (T20.4);
+ *   · mesma semente ⇒ mesma colocação, duas chamadas (T20.5);
+ *   · e o contrapeso, sem o qual todo o resto seria fácil de forjar: quando a
+ *     instalação falta, ela PRECISAVA faltar — nenhum tile do anel deixaria o
+ *     andar inteiro (T20.6).
+ * ================================================================== */
+
+/** As peças SÓLIDAS e PERMANENTES que `populate` planta num andar. */
+function solidosDoAndar(pop: Population): Point[] {
+  const out: Point[] = [];
+  if (pop.mercador) out.push(pop.mercador);
+  if (pop.bancada) out.push(pop.bancada);
+  for (const e of pop.alquimiaExtras) out.push(e);
+  return out;
+}
+
+function bloqueiosDoAndar(map: GameMap, pop: Population): Set<number> {
+  const set = new Set<number>();
+  for (const p of solidosDoAndar(pop)) set.add(p.y * map.w + p.x);
+  return set;
+}
+
+/**
+ * BFS independente com as MESMAS regras do passo do jogador (`mover`, em
+ * game.ts): oito direções e, na diagonal, o teste de canto.
+ *
+ * O detalhe que decide o teste inteiro: o teste de canto do engine consulta
+ * `isWalkable`, isto é, o TERRENO. Um móvel parado na quina NÃO fecha a
+ * diagonal — ele só ocupa o próprio tile. Replicar isso aqui é o que faz esta
+ * BFS medir a passagem que o jogador realmente tem, e não uma mais apertada.
+ */
+function alcancaveisPeloPasso(
+  map: GameMap,
+  bloqueados: Set<number>
+): { vistos: Uint8Array; total: number } {
+  const w = map.w;
+  const h = map.h;
+  const vistos = new Uint8Array(w * h);
+  const fila = new Int32Array(w * h);
+  let ini = 0;
+  let fim = 0;
+  const livre = (x: number, y: number): boolean =>
+    ehTransitavel(map, x, y) && !bloqueados.has(y * w + x);
+
+  const s = map.start;
+  if (!s || !livre(s.x, s.y)) return { vistos: vistos, total: 0 };
+  const si = s.y * w + s.x;
+  vistos[si] = 1;
+  fila[fim++] = si;
+  let total = 1;
+  while (ini < fim) {
+    const i = fila[ini++];
+    const x = i % w;
+    const y = (i - x) / w;
+    for (const d of DIRS8) {
+      const nx = x + d[0];
+      const ny = y + d[1];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = ny * w + nx;
+      if (vistos[ni]) continue;
+      if (!livre(nx, ny)) continue;
+      if (d[0] !== 0 && d[1] !== 0) {
+        if (!ehTransitavel(map, x + d[0], y)) continue;
+        if (!ehTransitavel(map, x, y + d[1])) continue;
+      }
+      vistos[ni] = 1;
+      total++;
+      fila[fim++] = ni;
+    }
+  }
+  return { vistos: vistos, total: total };
+}
+
+/** Tiles LIVRES do andar: transitáveis e sem sólido permanente em cima. */
+function livresDoAndar(map: GameMap, bloqueados: Set<number>): number {
+  let n = 0;
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      if (!ehTransitavel(map, x, y)) continue;
+      if (bloqueados.has(y * map.w + x)) continue;
+      n++;
+    }
+  }
+  return n;
+}
+
+/** Um andar medido: quanto do mapa sobrou para o herói depois dos sólidos. */
+interface Veredito {
+  livres: number;
+  alcancados: number;
+  escadaPresa: boolean;
+  solidos: Point[];
+}
+
+function medirAndar(map: GameMap, pop: Population): Veredito {
+  const bloq = bloqueiosDoAndar(map, pop);
+  const r = alcancaveisPeloPasso(map, bloq);
+  const escada = map.stairs;
+  return {
+    livres: livresDoAndar(map, bloq),
+    alcancados: r.total,
+    escadaPresa: !!escada && r.vistos[escada.y * map.w + escada.x] !== 1,
+    solidos: solidosDoAndar(pop)
+  };
+}
+
+function pontosEmTexto(pontos: Point[]): string {
+  return pontos.map((p) => '(' + p.x + ',' + p.y + ')').join(' ');
+}
+
+/* ------------------------------------------------------------------ *
+ * Mapas desenhados à mão — o cenário sintético dos gargalos
+ *
+ * Um mapa gerado é um argumento estatístico; um mapa DESENHADO é uma prova. O
+ * esboço em texto ('#' parede, '.' piso, '@' início, '>' escada) deixa o
+ * gargalo visível na própria fonte do teste: quem lê vê o corredor de um tile
+ * sem precisar rodar nada.
+ * ------------------------------------------------------------------ */
+
+function mapaDesenhado(
+  seed: string,
+  linhas: string[],
+  caixas: Array<[number, number, number, number]>
+): GameMap {
+  const h = linhas.length;
+  const w = linhas[0].length;
+  const tiles = new Uint8Array(w * h);
+  let start: Point = { x: 0, y: 0 };
+  let stairs: Point = { x: 0, y: 0 };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = linhas[y].charAt(x);
+      let t: number = CONFIG.TILE.WALL;
+      if (c === '.') t = CONFIG.TILE.FLOOR;
+      else if (c === '@') { t = CONFIG.TILE.FLOOR; start = { x: x, y: y }; }
+      else if (c === '>') { t = CONFIG.TILE.STAIRS; stairs = { x: x, y: y }; }
+      tiles[y * w + x] = t;
+    }
+  }
+  const rooms = caixas.map((c, i) => ({
+    id: i + 1,
+    x: c[0],
+    y: c[1],
+    w: c[2],
+    h: c[3],
+    cx: c[0] + (c[2] >> 1),
+    cy: c[1] + (c[3] >> 1),
+    area: c[2] * c[3],
+    shape: 'rect' as const
+  }));
+  let caminhaveis = 0;
+  for (let i = 0; i < tiles.length; i++) if (WALK.has(tiles[i])) caminhaveis++;
+  return {
+    seed: seed,
+    depth: 1,
+    w: w,
+    h: h,
+    tiles: tiles,
+    decor: new Uint8Array(w * h),
+    agua: new Uint8Array(w * h),
+    rooms: rooms,
+    start: start,
+    stairs: stairs,
+    connectivity: 1,
+    walkable: caminhaveis,
+    regenerations: 0,
+    repairs: 0,
+    notes: []
+  };
+}
+
+/*
+ * CENÁRIO DO ESTRANGULAMENTO — a captura de tela, reduzida ao osso.
+ *
+ * A sala do início é 3×3, pequena demais para oferecer um só tile no anel
+ * Chebyshev 2..4 do herói. `entradaDoInicio` então DEGRADA para o anel nu (sala
+ * ou não) — e a degradação piora tudo, porque o anel nu inclui o corredor. Os
+ * três únicos candidatos, (4,4), (5,4) e (6,4), são os três primeiros tiles de
+ * um corredor de largura UM: qualquer um deles trancado sela metade do andar e
+ * a escada junto.
+ */
+const CENARIO_GARGALO: string[] = [
+  '###############',
+  '###############',
+  '#########.....#',
+  '#...#####.....#',
+  '#.@........>..#',
+  '#...#####.....#',
+  '#########.....#',
+  '###############',
+  '###############'
+];
+const CAIXAS_GARGALO: Array<[number, number, number, number]> = [[1, 3, 3, 3], [9, 2, 5, 5]];
+
+/*
+ * CENÁRIO DA SAÍDA SEGURA — o mesmo corredor, mas com uma sala inicial 5×5.
+ *
+ * Agora o anel 2..4 tem 16 candidatos DENTRO da sala, e exatamente UM deles,
+ * (5,4), é a boca do corredor: removê-lo desliga o resto do andar. Os outros 15
+ * são borda de um retângulo aberto — tirar qualquer um deixa o cômodo inteiro.
+ * É a diferença entre "não há onde pôr" e "há onde pôr, e é preciso escolher".
+ */
+const CENARIO_SAIDA: string[] = [
+  '###############',
+  '###############',
+  '#.....###.....#',
+  '#.....###.....#',
+  '#..@.......>..#',
+  '#.....###.....#',
+  '#.....###.....#',
+  '###############',
+  '###############'
+];
+const CAIXAS_SAIDA: Array<[number, number, number, number]> = [[1, 2, 5, 5], [9, 2, 5, 5]];
+
+/** Os tiles do corredor de largura um, comuns aos dois cenários. */
+const CORREDOR_GARGALO: Point[] = [
+  { x: 4, y: 4 }, { x: 5, y: 4 }, { x: 6, y: 4 }, { x: 7, y: 4 }, { x: 8, y: 4 }
+];
+const CORREDOR_SAIDA: Point[] = [{ x: 6, y: 4 }, { x: 7, y: 4 }, { x: 8, y: 4 }];
+
+describe('T20 — o povoamento não tranca a passagem', () => {
+  it('600 andares: nenhum sólido do povoamento parte o mapa', () => {
+    const partidos: string[] = [];
+    let andares = 0;
+    let solidosPlantados = 0;
+
+    for (let i = 0; i < 200; i++) {
+      const semente = 'T20-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        andares++;
+        solidosPlantados += solidosDoAndar(pop).length;
+
+        const v = medirAndar(map, pop);
+        if (v.alcancados !== v.livres) {
+          partidos.push(
+            ondeEsta('T20.1', { semente, depth }) +
+            ' — início (' + map.start.x + ',' + map.start.y + '), sólidos [' +
+            pontosEmTexto(v.solidos) + '] deixaram ' + v.alcancados + ' de ' +
+            v.livres + ' tiles livres alcançáveis (' + (v.livres - v.alcancados) +
+            ' perdidos)' + (v.escadaPresa ? ' — E A ESCADA FICOU PRESA' : '')
+          );
+        }
+      }
+    }
+
+    expect(andares, 'T20.1: a varredura não rodou os 600 andares').toBe(600);
+    expect(solidosPlantados > 0,
+      'T20.1: nenhum sólido foi plantado — a prova seria vazia').toBe(true);
+
+    /* O invariante é DURO: um único andar partido é um jogo travado na mão de
+     * quem o sorteou. Não há piso percentual aqui, e não pode haver. */
+    expect(partidos.length,
+      'T20.1: ' + partidos.length + ' de ' + andares + ' andares ficaram PARTIDOS ' +
+      'pelos sólidos do povoamento — os primeiros:\n' + partidos.slice(0, 8).join('\n'))
+      .toBe(0);
+  }, LENTO);
+
+  it('750 andares até o nível 12: a escada nunca fica atrás de um sólido', () => {
+    const presas: string[] = [];
+    let andares = 0;
+
+    for (let i = 0; i < 150; i++) {
+      const semente = 'T20-ESCADA-' + pad(i, 4);
+      for (const depth of [1, 2, 5, 8, 12]) {
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        andares++;
+        const v = medirAndar(map, pop);
+        if (v.escadaPresa) {
+          presas.push(
+            ondeEsta('T20.2', { semente, depth }) +
+            ' — escada (' + map.stairs.x + ',' + map.stairs.y + ') inalcançável; ' +
+            'sólidos [' + pontosEmTexto(v.solidos) + ']; sobraram ' + v.alcancados +
+            ' de ' + v.livres + ' tiles'
+          );
+        }
+      }
+    }
+
+    expect(andares, 'T20.2: a varredura não rodou os 750 andares').toBe(750);
+    expect(presas.length,
+      'T20.2: ' + presas.length + ' de ' + andares + ' andares terminaram com a ESCADA ' +
+      'PRESA — o travamento completo da captura de tela:\n' + presas.slice(0, 8).join('\n'))
+      .toBe(0);
+  }, LENTO);
+
+  it('corredor de um tile: a instalação escolhe a saída segura, nunca o gargalo', () => {
+    const falhas: string[] = [];
+
+    for (let i = 0; i < 60; i++) {
+      const semente = 'T20-SAIDA-' + pad(i, 4);
+      const map = mapaDesenhado(semente, CENARIO_SAIDA, CAIXAS_SAIDA);
+      const pop = populate(map, 1, 1);
+      const onde = ondeEsta('T20.3', { semente });
+
+      /* A instalação CABE neste cômodo: 15 candidatos seguros contra 1 gargalo.
+       * Omitir aqui seria a degradação errada — o filtro tem de escolher, não
+       * desistir. */
+      expect(pop.mercador, onde + ': o mercador sumiu num cômodo com saída segura')
+        .not.toBe(null);
+      expect(pop.bancada, onde + ': o caldeirão sumiu num cômodo com saída segura')
+        .not.toBe(null);
+
+      const bloq = bloqueiosDoAndar(map, pop);
+      for (const c of CORREDOR_SAIDA) {
+        if (bloq.has(c.y * map.w + c.x)) {
+          falhas.push(onde + ': sólido plantado no corredor em (' + c.x + ',' + c.y + ')');
+        }
+      }
+      const boca = { x: 5, y: 4 };
+      if (bloq.has(boca.y * map.w + boca.x)) {
+        falhas.push(onde + ': sólido plantado na BOCA do corredor (5,4) — ' +
+          'sólidos [' + pontosEmTexto(solidosDoAndar(pop)) + ']');
+      }
+      const v = medirAndar(map, pop);
+      if (v.alcancados !== v.livres) {
+        falhas.push(onde + ': mapa partido — ' + v.alcancados + ' de ' + v.livres +
+          ' tiles livres; sólidos [' + pontosEmTexto(v.solidos) + ']');
+      }
+      if (v.escadaPresa) falhas.push(onde + ': escada presa');
+    }
+
+    expect(falhas.length,
+      'T20.3: ' + falhas.length + ' colocações trancaram o corredor de um tile:\n' +
+      falhas.slice(0, 8).join('\n')).toBe(0);
+  }, LENTO);
+
+  it('degradação: onde TODO candidato é gargalo, a instalação é omitida', () => {
+    for (let i = 0; i < 40; i++) {
+      const semente = 'T20-GARGALO-' + pad(i, 4);
+      const map = mapaDesenhado(semente, CENARIO_GARGALO, CAIXAS_GARGALO);
+      const pop = populate(map, 1, 1);
+      const onde = ondeEsta('T20.4', { semente });
+
+      /*
+       * A ORDEM DA DEGRADAÇÃO, escrita como asserção: decoração é a primeira a
+       * cair, o caldeirão vem depois, o mercador por último — e neste cômodo
+       * não sobra nenhum, porque os três únicos candidatos são os três
+       * primeiros tiles de um corredor de largura um. Andar sem mercador é
+       * conteúdo a menos; andar trancado é partida perdida.
+       */
+      expect(pop.mercador, onde + ': o mercador nasceu no corredor — o andar está trancado')
+        .toBe(null);
+      expect(pop.bancada, onde + ': o caldeirão nasceu no corredor').toBe(null);
+      expect(pop.alquimiaExtras, onde + ': sobrou decoração no corredor').toEqual([]);
+
+      const bloq = bloqueiosDoAndar(map, pop);
+      for (const c of CORREDOR_GARGALO) {
+        expect(bloq.has(c.y * map.w + c.x),
+          onde + ': sólido no corredor em (' + c.x + ',' + c.y + ')').toBe(false);
+      }
+
+      const v = medirAndar(map, pop);
+      expect(v.alcancados, onde + ': o mapa desenhado ficou partido — ' +
+        pontosEmTexto(v.solidos)).toBe(v.livres);
+      expect(v.escadaPresa, onde + ': a escada ficou presa no mapa desenhado').toBe(false);
+    }
+  }, LENTO);
+
+  it('toda omissão é FORÇADA: nos andares sem instalação, não havia onde pôr', () => {
+    /*
+     * O contrapeso de T14.1. Recusar tile é fácil; recusar DEMAIS é o modo de
+     * falhar deste conserto — um filtro paranoico esvaziaria a sala inicial e
+     * ninguém notaria, porque o mapa continuaria inteiro. Então aqui a pergunta
+     * se inverte: quando a instalação faltou, ela PRECISAVA faltar?
+     *
+     * A conta é por FORÇA BRUTA, de propósito: para cada tile do anel 2..4 que
+     * ainda estava livre, bloqueia-se ele junto dos sólidos já plantados e
+     * mede-se o andar. Se algum deles deixasse o mapa inteiro, o engine
+     * desistiu à toa e este teste reprova.
+     *
+     * A DECORAÇÃO fica de fora desta prova, e é honesto dizer por quê:
+     * `plantarExtras` varre `DIRS4` UMA vez, e um vizinho recusado no início da
+     * varredura pode voltar a caber depois que outro extra entrou (o extra que
+     * entrou pode ter sido, ele mesmo, o beco que o primeiro isolava). O teto
+     * de decoração é estatístico — o piso de 85% de T14.1 —, não um invariante
+     * por andar.
+     */
+    let andares = 0;
+    let omissoes = 0;
+    const desistencias: string[] = [];
+
+    for (let i = 0; i < 200; i++) {
+      const semente = 'T14-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        andares++;
+        const map = generate(semente, depth);
+        const pop = populate(map, depth, 1);
+        if (pop.mercador && pop.bancada) continue;
+        omissoes++;
+
+        const onde = ondeEsta('T20.6', { semente, depth });
+        const base = bloqueiosDoAndar(map, pop);
+        /* Os tiles que o engine tinha o direito de usar: caminháveis, no anel
+         * 2..4, fora do início e da escada, e livres. Inimigo e item nunca caem
+         * aqui (`roomCandidates` recusa tudo a Chebyshev ≤ SAFE_RADIUS = 6),
+         * mas a exclusão fica explícita para o dia em que o raio encolher. */
+        const tomados = new Set<number>();
+        for (const e of pop.enemies) tomados.add(e.y * map.w + e.x);
+        for (const it of pop.items) tomados.add(it.y * map.w + it.x);
+
+        for (let y = map.start.y - 4; y <= map.start.y + 4; y++) {
+          for (let x = map.start.x - 4; x <= map.start.x + 4; x++) {
+            const d = Math.max(Math.abs(x - map.start.x), Math.abs(y - map.start.y));
+            if (d < 2 || d > 4) continue;
+            if (!ehTransitavel(map, x, y)) continue;
+            const i2 = y * map.w + x;
+            if (base.has(i2) || tomados.has(i2)) continue;
+            if (x === map.stairs.x && y === map.stairs.y) continue;
+
+            const comEle = new Set<number>(base);
+            comEle.add(i2);
+            const r = alcancaveisPeloPasso(map, comEle);
+            if (r.total === livresDoAndar(map, comEle)) {
+              desistencias.push(onde + ': (' + x + ',' + y + ') deixaria o andar inteiro e ' +
+                'mesmo assim ficou sem uso — mercador=' +
+                (pop.mercador ? '(' + pop.mercador.x + ',' + pop.mercador.y + ')' : 'nenhum') +
+                ', caldeirão=' +
+                (pop.bancada ? '(' + pop.bancada.x + ',' + pop.bancada.y + ')' : 'nenhum'));
+            }
+          }
+        }
+      }
+    }
+
+    expect(andares, 'T20.6: a varredura não rodou os 600 andares').toBe(600);
+    /* Se nenhum andar omitir nada, esta prova é vazia — e o dia em que isso
+     * acontecer é o dia de rever T14.1, não de deixar o teste passar calado. */
+    expect(omissoes > 0,
+      'T20.6: nenhum andar ficou sem instalação nas 200 sementes de T14 — ' +
+      'a prova de "omissão forçada" não exercitou nada').toBe(true);
+    expect(desistencias.length,
+      'T20.6: o filtro recusou ' + desistencias.length + ' tiles que NÃO trancavam o andar ' +
+      '— está paranoico:\n' + desistencias.slice(0, 8).join('\n')).toBe(0);
+  }, LENTO);
+
+  it('determinismo: a mesma semente devolve a mesma colocação duas vezes', () => {
+    for (let i = 0; i < 40; i++) {
+      const semente = 'T20-DET-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const a = populate(map, depth, 1);
+        const b = populate(map, depth, 1);
+        const onde = ondeEsta('T20.5', { semente, depth });
+        expect(pontosEmTexto(solidosDoAndar(b)),
+          onde + ': o filtro de passagem introduziu deriva entre duas chamadas')
+          .toBe(pontosEmTexto(solidosDoAndar(a)));
+        expect(b.enemies.map((e) => e.kind + '@' + e.x + ',' + e.y),
+          onde + ': os inimigos mudaram entre duas chamadas')
+          .toEqual(a.enemies.map((e) => e.kind + '@' + e.x + ',' + e.y));
+        expect(b.items.map((it) => it.kind + '@' + it.x + ',' + it.y),
+          onde + ': os itens mudaram entre duas chamadas')
+          .toEqual(a.items.map((it) => it.kind + '@' + it.x + ',' + it.y));
       }
     }
   }, LENTO);
