@@ -22,6 +22,7 @@
     "preview:slime": "node tools/preview-personagem.mjs slime",
     "preview:ogro": "node tools/preview-personagem.mjs ogro",
     "preview:elenco": "node tools/preview-personagem.mjs elenco",
+    "preview:terreno": "node tools/preview-personagem.mjs terreno",
     "check": "npm run lint && npm run typecheck && npm run typecheck:tools && npm run test"
   },
   "keywords": [],
