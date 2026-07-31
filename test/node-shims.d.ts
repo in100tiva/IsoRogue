@@ -15,15 +15,31 @@
 declare module 'node:fs' {
   export function readFileSync(caminho: string | URL, codificacao: 'utf8'): string;
   export function existsSync(caminho: string | URL): boolean;
+  /**
+   * Só a forma com `withFileTypes: true`, que é a que T9 usa para varrer `src/`
+   * sem depender do utilitário Unix `find`. A sobrecarga sem opções devolveria
+   * `string[]` e convidaria a um `statSync` por entrada — mais chamadas e mais
+   * superfície de shim para o mesmo resultado.
+   */
+  export function readdirSync(
+    caminho: string,
+    opcoes: { withFileTypes: true }
+  ): readonly { name: string; isDirectory(): boolean }[];
 }
 
 declare module 'node:url' {
   export function fileURLToPath(url: string | URL): string;
 }
 
-/** Só o que o teste T9 precisa para repassar o ambiente ao build. */
+declare module 'node:path' {
+  export function join(...partes: readonly string[]): string;
+}
+
+/** Só o que o teste T9 precisa para repassar o ambiente e achar o Node. */
 declare const process: {
   env: Record<string, string | undefined>;
+  /** Caminho do executável do Node — usado para invocar o vite sem passar por `npx`. */
+  execPath: string;
 };
 
 declare module 'node:child_process' {

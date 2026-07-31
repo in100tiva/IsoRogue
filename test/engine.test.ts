@@ -17,7 +17,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
@@ -710,7 +711,21 @@ function garantirBuild(): string {
    * com avisos, `Date.now()` e `Math.random()` do profiler. O que o R56
    * promete é o entregável de produção; é ele que tem de ser varrido.
    */
-  execFileSync('npx', ['vite', 'build'], {
+  /*
+   * O binário do vite é chamado DIRETO de node_modules, sem passar por `npx`.
+   * `execFileSync('npx', …)` dava `spawnSync npx ENOENT` no Windows: `npx` lá é
+   * `npx.cmd`, um script de shell, e `execFile` não resolve extensão do PATHEXT
+   * como o shell resolve. As duas partes de T9 que dependem do bundle morriam
+   * assim — o teste que promete que `dist/index.html` é auto-contido nunca
+   * chegava a olhar o arquivo.
+   *
+   * Chamar `node node_modules/vite/bin/vite.js` é mais direto que consertar o
+   * `npx`: dispensa shell, dispensa PATHEXT, roda igual nos dois sistemas e usa
+   * exatamente o vite que o projeto instalou — não o que estiver no PATH.
+   */
+  const viteBin = fileURLToPath(new URL('../node_modules/vite/bin/vite.js', import.meta.url));
+  expect(existsSync(viteBin), 'T9: vite não está instalado em node_modules').toBe(true);
+  execFileSync(process.execPath, [viteBin, 'build'], {
     cwd: RAIZ,
     stdio: 'pipe',
     timeout: 180_000,
@@ -750,14 +765,29 @@ function ocorrencias(texto: string, token: string): Ocorrencia[] {
   return out;
 }
 
-/** Todo arquivo TypeScript/TSX de src/ — o código que É nosso. */
+/**
+ * Todo arquivo TypeScript/TSX de src/ — o código que É nosso.
+ *
+ * Varredura em JS puro, e não `execFileSync('find', …)`: o `find` é utilitário
+ * Unix e não existe no Windows, então T9 morria com `Command failed` ANTES de ler
+ * a primeira fonte — o teste que promete varrer `Math.random`, `eval` e URL
+ * externa não varria nada. Pior que um teste ausente, porque parecia existir.
+ *
+ * `readdirSync` com `withFileTypes` também dispensa o `statSync` por entrada.
+ * A ordenação final é o que mantém a mensagem de erro estável entre plataformas
+ * (a ordem de `readdirSync` é do sistema de arquivos, não garantida).
+ */
 function fontesDoProjeto(): string[] {
-  const saida = execFileSync(
-    'find',
-    ['src', '-type', 'f', '(', '-name', '*.ts', '-o', '-name', '*.tsx', ')'],
-    { cwd: RAIZ, encoding: 'utf8' }
-  );
-  return saida.split('\n').filter((l) => l.trim() !== '').sort();
+  const saida: string[] = [];
+  const descer = (dir: string): void => {
+    for (const ent of readdirSync(join(RAIZ, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${ent.name}`;
+      if (ent.isDirectory()) descer(rel);
+      else if (ent.name.endsWith('.ts') || ent.name.endsWith('.tsx')) saida.push(rel);
+    }
+  };
+  descer('src');
+  return saida.sort();
 }
 
 describe('T9 — sem construções proibidas', () => {
