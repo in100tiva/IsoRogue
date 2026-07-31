@@ -181,6 +181,58 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
+/*
+ * Ângulo de (dx, dy) como FRAÇÃO DE VOLTA em [0, 1), por aproximação polinomial.
+ *
+ * Portado de GoRogue (MIT, Copyright (c) 2023 Christopher Ridley), função
+ * `MathHelpers.ScaledAtan2Approx`. O próprio GoRogue credita a cadeia: a
+ * implementação vem de SquidLib (Apache-2.0), que por sua vez vem de uma resposta
+ * de njuffa no math.stackexchange. Adaptado aqui em dois pontos, declarados para
+ * o crédito continuar honesto: a guarda de zero é por tolerância (`|y| < 1e-10`)
+ * e não `y === 0`; e a convenção de saída é a do IsoRogue (abaixo), não a do
+ * GoRogue (que faz `angle -= 90` e multiplica por `DegreePctOfCircle`).
+ *
+ * POR QUE NÃO USAR `Math.atan2`. Não é velocidade — é DETERMINISMO. A ECMA-262
+ * permite que `Math.atan2` seja uma aproximação dependente de implementação, de
+ * modo que o último bit não é garantido igual entre V8, JSC e SpiderMonkey. Esta
+ * função usa somente `+ - * /`, que a IEEE-754 exige exatos, mais `Math.abs`
+ * (também exatamente especificado). Logo o resultado é reprodutível bit a bit em
+ * qualquer engine — que é o que R53 (mesma seed + mesmos comandos ⇒ mesmo
+ * resultado) precisa de qualquer coisa que entre na lógica.
+ *
+ * Note que isso é propriedade da IMPLEMENTAÇÃO, não algo que um teste local
+ * possa provar: rodando num engine só, `Math.atan2` também pareceria estável.
+ * O teste que acompanha compara FORMA com `Math.atan2`, e o comentário lá diz
+ * que ele é referência de forma, nunca oráculo bit a bit.
+ *
+ * CONVENÇÃO DO ISOROGUE (medida, não suposta): com `dy = y - oy` e o eixo Y da
+ * grade crescendo para BAIXO, a volta 0 aponta para LESTE e cresce na ordem de
+ * `DIRS8` — leste, sudeste, sul, sudoeste, oeste, noroeste, norte, nordeste.
+ * Ou seja `DIRS8[i]` ≈ `i / 8`. Os quatro cardinais saem EXATOS (0, 0.25, 0.5,
+ * 0.75, erro zero); o pior caso são as diagonais, com erro absoluto medido de
+ * 3.233747e-5 de volta (≈ 0.0116°), idêntico nas quatro.
+ */
+export function scaledAtan2Approx(y: number, x: number): number {
+  // Sem isto, (0,0) cairia na divisão 0/0 = NaN. `>= 0` no x mantém o zero
+  // à direita do eixo devolvendo 0 em vez de 0.5.
+  if ((y < 0 ? -y : y) < 1e-10 && x >= 0) return 0;
+  const ax = x < 0 ? -x : x;
+  const ay = y < 0 ? -y : y;
+  let r: number;
+  if (ax < ay) {
+    const a = ax / ay;
+    const s = a * a;
+    r = 0.25 - ((((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a + a) * 0.15915494309189535);
+  } else {
+    const a = ay / ax;
+    const s = a * a;
+    r = ((((-0.0464964749 * s + 0.15931422) * s - 0.327622764) * s * a + a) * 0.15915494309189535);
+  }
+  if (x < 0) r = 0.5 - r;
+  if (y < 0) r = 1 - r;
+  return r;
+}
+
 /* ------------------------------------------------------------------ *
  * 4. Sementes
  * ------------------------------------------------------------------ */

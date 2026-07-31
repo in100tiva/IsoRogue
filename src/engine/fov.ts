@@ -30,7 +30,7 @@
 // ---------------------------------------------------------------------------
 
 import type { GameMap, Point } from './types.ts';
-import { CONFIG } from './core.ts';
+import { CONFIG, scaledAtan2Approx } from './core.ts';
 
 /** Resultado da sonda de simetria (tecla V). */
 export interface SymmetryReport {
@@ -56,6 +56,14 @@ let cCard: number = NORTH;
 let cMaxDepth = 0;
 let cLim2 = 0; // (radius + 0.5)^2
 let cOut: Set<number> | null = null;
+// Cone (§ `computeFovCone`). `cConeOn = false` é o FOV completo de sempre.
+// ATENÇÃO: os três são escritos por `setContext` em TODA chamada, inclusive nas
+// sem cone. Este módulo não é reentrante — se um deles ficasse de fora do
+// caminho padrão, a próxima chamada a `computeFov` herdaria o cone da anterior,
+// que é o tipo de falha silenciosa que só aparece muito depois, no golden.
+let cConeOn = false;
+let cAng = 0;
+let cMeioSpan = 0;
 
 // Sets reutilizados internamente (a API pública sempre devolve um Set).
 const SCRATCH_VIS = new Set<number>();
@@ -103,7 +111,15 @@ function roundTiesDown(a: number, b: number): number {
   return Math.ceil((2 * a - b) / (2 * b));
 }
 
-function setContext(map: GameMap, ox: number, oy: number, radius: number | undefined, out: Set<number>): void {
+function setContext(
+  map: GameMap,
+  ox: number,
+  oy: number,
+  radius: number | undefined,
+  out: Set<number>,
+  angulo?: number,
+  span?: number
+): void {
   cTiles = map.tiles;
   cW = map.w | 0;
   cH = map.h | 0;
@@ -116,6 +132,28 @@ function setContext(map: GameMap, ox: number, oy: number, radius: number | undef
   const lim = rr + 0.5;
   cLim2 = lim * lim;
   cOut = out;
+
+  /*
+   * O cone é normalizado AQUI, uma vez, e não a cada pixel em `reveal`.
+   *
+   * `span >= 1` desliga o cone em vez de virar um filtro que aceita tudo: é o
+   * que faz `computeFovCone(..., span = 1)` percorrer literalmente o mesmo
+   * caminho de `computeFov`, em vez de o "mesmo resultado por coincidência
+   * aritmética". A diferença aparece se alguém um dia mexer no filtro.
+   *
+   * `angulo` aceita negativo e >= 1 porque volta é circular: -0.25 e 1.25
+   * significam 0.75 e 0.25. `a - Math.floor(a)` faz isso em uma linha e é
+   * exato em IEEE-754 para os valores que interessam.
+   */
+  cConeOn = false;
+  cAng = 0;
+  cMeioSpan = 0;
+  if (typeof span === 'number' && typeof angulo === 'number' &&
+      isFinite(span) && isFinite(angulo) && span < 1) {
+    cConeOn = true;
+    cAng = angulo - Math.floor(angulo);
+    cMeioSpan = span > 0 ? span / 2 : 0;
+  }
 }
 
 // Marca o tile (x, y) como visível, aplicando o raio CIRCULAR:
@@ -126,6 +164,26 @@ function reveal(x: number, y: number): void {
   const dx = x - cOx;
   const dy = y - cOy;
   if (dx * dx + dy * dy > cLim2) return;
+  if (cConeOn) {
+    /*
+     * O filtro angular entra DEPOIS do corte circular e ANTES de acender — é o
+     * único ponto por onde toda célula visível passa.
+     *
+     * A distância angular é medida no círculo: `at2` cai em [0, 1), então
+     * "dentro do cone" é `at2 <= meio` OU `at2 >= 1 - meio`. O segundo termo é
+     * o que trata o wrap; sem ele, um cone centrado em 0 só enxergaria metade
+     * de si mesmo.
+     *
+     * O filtro atinge as PAREDES também, e isso revoga, DENTRO do cone, o
+     * invariante de :22-26 (parede entra sempre, para o renderizador fechar a
+     * sala). É aceitável porque o cone não tem consumidor de render: quem
+     * desenha continua chamando `computeFov`. Se algum dia um renderizador
+     * passar a consumir cone, esta é a linha a revisitar.
+     */
+    let at2 = cAng - scaledAtan2Approx(dy, dx);
+    if (at2 < 0) at2 = -at2;
+    if (at2 > cMeioSpan && at2 < 1 - cMeioSpan) return;
+  }
   cOut!.add(y * cW + x);
 }
 
@@ -193,12 +251,27 @@ function quadrantCovers(card: number, dx: number, dy: number): boolean {
 }
 
 // Preenche `out` com todos os índices visíveis a partir de (ox, oy).
-function computeInto(map: GameMap, ox: number, oy: number, radius: number | undefined, out: Set<number>): Set<number> {
+//
+// NÃO existe guarda de origem-em-parede aqui, e isso é deliberado: com a origem
+// opaca a varredura roda normalmente e o resultado é um Set NÃO-VAZIO (a origem
+// entra sempre, e o tamanho vai de ~9, quando a origem está no miolo selado de um
+// bloco de parede, a ~197, quando é um pilar isolado). A única guarda de parede
+// do arquivo está em `checkSymmetry`. Não acrescente uma aqui: o renderizador
+// depende deste comportamento para desenhar de dentro de vãos de parede.
+function computeInto(
+  map: GameMap,
+  ox: number,
+  oy: number,
+  radius: number | undefined,
+  out: Set<number>,
+  angulo?: number,
+  span?: number
+): Set<number> {
   out.clear();
   if (!validMap(map)) return out;
   if (!inBounds(map, ox, oy)) return out;
 
-  setContext(map, ox, oy, radius, out);
+  setContext(map, ox, oy, radius, out, angulo, span);
   out.add((oy | 0) * cW + (ox | 0)); // a origem é sempre visível
 
   for (let card = NORTH; card <= WEST; card++) {
@@ -248,6 +321,45 @@ export function computeFov(
 ): Set<number> {
   const set = isSetLike(out) ? out : new Set<number>();
   return computeInto(map, ox, oy, radius, set);
+}
+
+/**
+ * Como `computeFov`, mas limitado a um CONE de visão.
+ *
+ * `angulo` e `span` são FRAÇÃO DE VOLTA, não graus nem radianos: a volta 0 aponta
+ * para leste e cresce na ordem de `DIRS8`, de modo que `DIRS8[i]` ≈ `i / 8`
+ * (ver `scaledAtan2Approx` em `core.ts`). `angulo` aceita negativo e ≥ 1 — volta é
+ * circular, `-0.25` e `1.25` valem `0.75` e `0.25`.
+ *
+ * O cone NÃO poda a varredura: a oclusão continua rodando no círculo inteiro, e o
+ * filtro é aplicado só no momento de acender a célula. É isso que faz o cone
+ * respeitar as sombras — e também significa que **um cone custa o mesmo que um
+ * FOV completo**. Se a motivação for "o NPC vê menos, logo custa menos", a
+ * motivação está errada.
+ *
+ * `span >= 1` (ou não finito, ou `angulo` não finito) desliga o cone, então
+ * `computeFovCone(m, x, y, r, a, 1)` percorre exatamente o caminho de
+ * `computeFov`. `span <= 0` produz o cone degenerado: devolve a origem (que
+ * `computeInto` acrescenta antes de varrer) e nada mais.
+ *
+ * DUAS COISAS QUE ESTA FUNÇÃO NÃO É:
+ *
+ * 1. Não é simétrica, e não pode ser. Se A olha para o norte e B está ao norte,
+ *    A vê B; se B olha para o sul, B não vê A. Isso não é bug — é a definição de
+ *    cone. R27 ("Visão simétrica"), o teste T4 e a sonda da tecla V (R28) valem
+ *    para o FOV COMPLETO, e por isso `checkSymmetry` não aceita cone.
+ * 2. Não tem consumidor hoje, deliberadamente. Dar cone a inimigo exigiria um
+ *    `facing` em `Enemy`, que o ADR-005 (docs/BESTIARIO.md §0.2) proíbe — facing
+ *    de inimigo é derivado por observação no renderer. E `player.facing` é
+ *    declarado "APENAS ANIMAÇÃO", fora do oracle do golden: lê-lo aqui violaria
+ *    R54 e mudaria `game.visible`.
+ */
+export function computeFovCone(
+  map: GameMap, ox: number, oy: number, radius: number | undefined,
+  angulo: number, span: number, out?: Set<number> | null
+): Set<number> {
+  const set = isSetLike(out) ? out : new Set<number>();
+  return computeInto(map, ox, oy, radius, set, angulo, span);
 }
 
 /** (tx, ty) está visível a partir de (ox, oy)? */
