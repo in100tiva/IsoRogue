@@ -22,9 +22,17 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
-import { CONFIG, DIRS8, formatCommand, hash32, makeRng, parseCommand } from '../src/engine/core';
+import {
+  CONFIG,
+  DIRS8,
+  formatCommand,
+  hash32,
+  makeRng,
+  parseCommand,
+  scaledAtan2Approx
+} from '../src/engine/core';
 import { generate, isWalkable, roomAt } from '../src/engine/mapgen';
-import { checkSymmetry, computeFov, isVisibleFrom } from '../src/engine/fov';
+import { checkSymmetry, computeFov, computeFovCone, isVisibleFrom } from '../src/engine/fov';
 import { DIJKSTRA_INF, bestStep, computeDijkstra, fleeMap } from '../src/engine/dijkstra';
 import {
   ALQUIMIA_EXTRAS_MAX,
@@ -3961,6 +3969,773 @@ describe('T17 — a enseada: canais de água no lugar da parede', () => {
       expect(tilesDeCanal(map).length,
         onde + ': o andar da prova não tem canal nenhum — a prova é vazia')
         .toBeGreaterThan(0);
+    }
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T18 — `scaledAtan2Approx`: o ângulo que não depende do motor
+ *
+ * POR QUE ESTE BLOCO EXISTE. O engine ganhou um ângulo, e ângulo entrou na
+ * LÓGICA (o filtro do cone de `computeFovCone`). A partir daí ele cai sob R53
+ * — mesma semente + mesmos comandos ⇒ mesmo resultado — e `Math.atan2` não
+ * serve: a ECMA-262 autoriza que ele seja uma aproximação DEPENDENTE DE
+ * IMPLEMENTAÇÃO, então o último bit não é garantido igual entre V8, JSC e
+ * SpiderMonkey. `scaledAtan2Approx` usa somente `+ - * /` (exatos por
+ * IEEE-754) e `Math.abs`, e por isso é reprodutível bit a bit em qualquer
+ * motor.
+ *
+ * O QUE ESTES CASOS PROTEGEM, e o que eles reconhecidamente NÃO provam:
+ *
+ *   · o CONTRADOMÍNIO — [0, 1), fração de volta, nunca 1, nunca negativa,
+ *     nunca NaN (T18.1). Um NaN aqui vazaria direto para a comparação do
+ *     filtro do cone, onde `NaN > x` é falso e o tile acenderia sempre;
+ *   · a CONVENÇÃO — volta 0 para leste, crescendo na ordem de `DIRS8`, com os
+ *     quatro cardinais EXATOS (T18.2) e as diagonais dentro de 1e-4 (T18.3).
+ *     Convenção é a coisa que um refator inverte sem perceber, então T18.4
+ *     exige MONOTONICIDADE ao longo de `DIRS8`: uma fórmula com o sinal de y
+ *     trocado passa em T18.1 e T18.2 e morre ali;
+ *   · a FORMA — o desvio contra `Math.atan2` normalizado fica abaixo de 1e-3
+ *     (T18.5). Repare no papel de `Math.atan2` neste bloco: ele é referência
+ *     de FORMA, JAMAIS oráculo bit a bit. Exigir igualdade exata contra ele
+ *     seria exigir justamente aquilo que a ECMA-262 não promete — e que é a
+ *     razão de a função própria existir;
+ *   · e a TRAVA DE REGRESSÃO (T18.6): oito saídas fixadas como literais. Elas
+ *     são características DO POLINÔMIO desta implementação, não valores
+ *     "corretos" de trigonometria; trocar o polinômio muda todas elas, e é
+ *     isso que se quer que doa.
+ *
+ * O que nenhum caso local pode provar é a promessa central — igualdade entre
+ * MOTORES. Rodando só no V8, `Math.atan2` também pareceria estável. A prova
+ * dessa parte é a INSPEÇÃO da implementação (só `+ - * /`), e está no
+ * comentário de `core.ts`; aqui vigia-se tudo o mais.
+ * ================================================================== */
+
+const T18 = {
+  /* 3600 direções = uma amostra a cada 0.1° da volta. É a mesma varredura com
+   * que os números deste bloco foram medidos; ampliá-la para 360000 não move
+   * o pior caso (o erro máximo continua 3.233747e-5, e continua nas
+   * diagonais), então 3600 paga o preço certo pelo que descobre. */
+  direcoes: 3600,
+  /** Folga das diagonais contra i/8. O erro real medido é 3.233747e-5. */
+  tolDiagonal: 1e-4,
+  /** Folga da comparação de FORMA contra `Math.atan2` normalizado. */
+  tolForma: 1e-3
+};
+
+/** `Math.atan2` reduzido à mesma convenção: fração de volta em [0, 1). */
+function voltaDeReferencia(y: number, x: number): number {
+  const v = Math.atan2(y, x) / (Math.PI * 2);
+  return v < 0 ? v + 1 : v;
+}
+
+/** Distância CIRCULAR entre duas frações de volta — o wrap de 0.999 para 0.001
+ *  vale 0.002, não 0.998. Sem isto, a comparação de forma acusaria erro de
+ *  quase uma volta inteira exatamente no leste, onde o erro real é zero. */
+function distanciaDeVolta(a: number, b: number): number {
+  let d = a - b;
+  if (d < 0) d = -d;
+  return d > 0.5 ? 1 - d : d;
+}
+
+describe('T18 — scaledAtan2Approx: ângulo determinístico em fração de volta', () => {
+  it('a saída fica sempre em [0, 1): nunca 1, nunca negativa, nunca NaN', () => {
+    let fora: string | null = null;
+    for (let k = 0; k < T18.direcoes && fora === null; k++) {
+      const t = (k / T18.direcoes) * Math.PI * 2;
+      const x = Math.cos(t);
+      const y = Math.sin(t);
+      const v = scaledAtan2Approx(y, x);
+      if (!Number.isFinite(v) || v < 0 || v >= 1) {
+        fora = 'k=' + k + ' (' + x + ',' + y + ') → ' + v;
+      }
+    }
+    expect(fora, 'T18.1: saída fora de [0,1) na varredura de ' + T18.direcoes + ' direções')
+      .toBe(null);
+
+    /* O (0,0) não é direção nenhuma e cairia em 0/0 = NaN sem a guarda de
+     * zero da implementação. Devolver 0 é convenção declarada, não acaso — e
+     * é o que faz a ORIGEM do FOV nunca ser podada por um cone. */
+    expect(scaledAtan2Approx(0, 0), 'T18.1: (0,0) precisa devolver 0, não NaN').toBe(0);
+    expect(Number.isNaN(scaledAtan2Approx(0, 0)), 'T18.1: (0,0) devolveu NaN').toBe(false);
+  });
+
+  it('os quatro cardinais de DIRS8 são EXATOS: 0, 0.25, 0.5 e 0.75', () => {
+    /*
+     * `toBe`, e não `toBeCloseTo`, DE PROPÓSITO. O erro medido nos cardinais é
+     * ZERO — não "pequeno": a implementação sai por caminhos em que o
+     * polinômio nem chega a rodar (a razão a = 0) ou em que o resultado é uma
+     * subtração exata de 0.25/0.5/1. Se um dia deixar de ser exato, este teste
+     * TEM de reprovar: o cardinal exato é o que faz um cone de span estreito
+     * apontado para o leste enxergar a fileira do leste, e não a de baixo.
+     *
+     * Os índices vêm de `DIRS8` (core.ts:105), não de literais soltos: assim a
+     * convenção testada é a MESMA tabela que o resto do jogo usa para desempate.
+     */
+    const cardinais: Array<[number, number]> = [[0, 0], [2, 0.25], [4, 0.5], [6, 0.75]];
+    for (const [i, esperado] of cardinais) {
+      const d = DIRS8[i];
+      const onde = ondeEsta('T18.2', { i, dir: '(' + d[0] + ',' + d[1] + ')' });
+      expect(scaledAtan2Approx(d[1], d[0]), onde + ': cardinal deixou de ser exato')
+        .toBe(esperado);
+    }
+  });
+
+  it('as quatro diagonais de DIRS8 batem com i/8 dentro de 1e-4', () => {
+    /*
+     * As diagonais são o PIOR CASO do polinômio, e o erro é o mesmo nas quatro
+     * por simetria da fórmula: 3.233747e-5 de volta (≈ 0.0116°) — o número
+     * medido, não "aproximadamente 3e-5". A folga de 1e-4 é ~3× o erro real:
+     * apertada o bastante para pegar uma troca de polinômio, larga o bastante
+     * para não reprovar por um bit de arredondamento.
+     */
+    for (const i of [1, 3, 5, 7]) {
+      const d = DIRS8[i];
+      const erro = Math.abs(scaledAtan2Approx(d[1], d[0]) - i / 8);
+      const onde = ondeEsta('T18.3', { i, dir: '(' + d[0] + ',' + d[1] + ')', erro });
+      expect(erro < T18.tolDiagonal, onde + ': diagonal fora de i/8 ± ' + T18.tolDiagonal)
+        .toBe(true);
+    }
+  });
+
+  it('a ordem de DIRS8 é estritamente crescente — a trava da convenção', () => {
+    /*
+     * ESTE é o caso que pega uma inversão de convenção. Com o eixo Y da grade
+     * crescendo para BAIXO, a volta tem de crescer leste → sudeste → sul → …,
+     * exatamente a ordem de `DIRS8`. Uma fórmula com o sinal de y trocado
+     * (isto é, com a volta girando anti-horário na tela) devolveria os MESMOS
+     * valores em (1) e (2) — 0, 0.25, 0.5, 0.75 continuam lá, só que
+     * atribuídos a outras direções — e cairia aqui, na monotonicidade.
+     *
+     * Se este teste reprovar, não conserte o teste: `DIRS8` é ordem congelada
+     * de contrato (core.ts:99) e quem tem de voltar ao lugar é o ângulo.
+     */
+    const voltas = DIRS8.map((d) => scaledAtan2Approx(d[1], d[0]));
+    for (let i = 1; i < voltas.length; i++) {
+      const onde = ondeEsta('T18.4', {
+        i,
+        anterior: voltas[i - 1],
+        atual: voltas[i]
+      });
+      expect(voltas[i] > voltas[i - 1], onde + ': DIRS8 deixou de crescer — convenção invertida?')
+        .toBe(true);
+    }
+    /* E o passo é ~1/8 em cada degrau: crescer sozinho não basta, a escala
+     * também tem de ser a da volta. */
+    for (let i = 0; i < voltas.length; i++) {
+      expect(Math.abs(voltas[i] - i / 8) < T18.tolDiagonal,
+        'T18.4: DIRS8[' + i + '] = ' + voltas[i] + ' não é ≈ ' + i / 8).toBe(true);
+    }
+  });
+
+  it('a FORMA acompanha Math.atan2 normalizado: erro máximo < 1e-3', () => {
+    /*
+     * `Math.atan2` entra aqui como REFERÊNCIA DE FORMA, NUNCA como oráculo bit
+     * a bit — e a distinção é o motivo inteiro de `scaledAtan2Approx` existir.
+     * A ECMA-262 (§21.3.2.8) permite que `Math.atan2` seja uma aproximação
+     * dependente de implementação: dois motores podem devolver dois últimos
+     * bits diferentes para a mesma entrada, e o jogo, que roda no navegador do
+     * jogador, não pode ter a lógica dependendo de qual navegador é.
+     *
+     * Logo o contrato testável é: a curva é a MESMA curva (erro abaixo de 1e-3
+     * de volta ≈ 0.36°), e nada além disso. Erro máximo medido nesta
+     * varredura: 3.2337466987719665e-5, no pior caso das diagonais (225°).
+     */
+    let pior = 0;
+    let piorEm = -1;
+    for (let k = 0; k < T18.direcoes; k++) {
+      const t = (k / T18.direcoes) * Math.PI * 2;
+      const x = Math.cos(t);
+      const y = Math.sin(t);
+      const e = distanciaDeVolta(scaledAtan2Approx(y, x), voltaDeReferencia(y, x));
+      if (e > pior) {
+        pior = e;
+        piorEm = k;
+      }
+    }
+    expect(pior < T18.tolForma,
+      'T18.5: erro de forma ' + pior + ' (em ' + piorEm / 10 + '°) acima de ' + T18.tolForma)
+      .toBe(true);
+    /* Contraprova de varredura vazia: se o laço não tivesse rodado, `piorEm`
+     * continuaria -1 e o teste passaria sem olhar nada. */
+    expect(piorEm >= 0, 'T18.5: a varredura de forma não rodou').toBe(true);
+  });
+
+  it('trava de regressão: os valores característicos do polinômio', () => {
+    /*
+     * Oito entradas VARIADAS — nenhuma cardinal, nenhuma diagonal, razões
+     * quebradas de propósito (3/1, 1/3, -5/2, 2/-7, …), cobrindo os quatro
+     * quadrantes e os dois ramos do `if (ax < ay)`. Os valores foram gerados
+     * UMA vez, rodando a implementação, e colados aqui.
+     *
+     * O QUE ELES SÃO: assinatura desta aproximação específica — os
+     * coeficientes de njuffa/SquidLib que `core.ts` carrega. NÃO são o ângulo
+     * "certo" da trigonometria (contra `Math.atan2` eles diferem na quinta
+     * casa, que é justamente o erro medido em T18.5). Trocar o polinômio por
+     * outro, ainda que mais preciso, muda todos os oito — e é para doer mesmo:
+     * o ângulo entrou na lógica do cone e, por R53, mudar o ângulo é mudar o
+     * mundo que uma semente gera.
+     *
+     * A ordem dos argumentos é a da função: (y, x), com y para BAIXO.
+     */
+    const pinos: Array<[number, number, number]> = [
+      [3, 1, 0.19877860593983854],
+      [1, 3, 0.051221394060161456],
+      [-5, 2, 0.8105723565812135],
+      [2, -7, 0.4556961911278639],
+      [1, 2, 0.07379417405293333],
+      [-2, -3, 0.5935594840366181],
+      [7, -4, 0.33261403716494425],
+      [-1, 5, 0.9685781345557443]
+    ];
+    for (const [y, x, esperado] of pinos) {
+      expect(scaledAtan2Approx(y, x),
+        ondeEsta('T18.6', { y, x }) + ': o polinômio mudou de resposta').toBe(esperado);
+    }
+  });
+});
+
+/* ================================================================== *
+ * T19 — o cone de FOV: `computeFovCone`
+ *
+ * O QUE O CONE É. `computeFovCone` é o `computeFov` de sempre com UM filtro a
+ * mais, aplicado no instante de acender a célula: fora do arco [ângulo ±
+ * span/2] (fração de volta, convenção do T18), a célula não entra. A oclusão
+ * NÃO é podada — o shadowcasting continua varrendo o círculo inteiro —, e é
+ * exatamente isso que faz o cone respeitar as sombras em vez de enxergar
+ * através de parede num setor "liberado".
+ *
+ * AS CINCO PROMESSAS QUE ESTE BLOCO COBRA, e por que cada uma:
+ *
+ *   1. DEGENERAÇÃO LIMPA — `span >= 1` desliga o cone e devolve, elemento por
+ *      elemento, o mesmo conjunto de `computeFov` (T19.1); `span <= 0` devolve
+ *      o cone vazio, que ainda contém a origem (T19.5). São os dois extremos
+ *      onde uma normalização mal escrita produz "quase certo";
+ *   2. SUBCONJUNTO — filtrar nunca acrescenta (T19.2). Se um cone trouxesse um
+ *      tile que o FOV completo não vê, o filtro estaria mexendo na varredura,
+ *      não filtrando o resultado;
+ *   3. CIRCULARIDADE — ângulo é volta, então -0.25 é 0.75 e 1.25 é 0.25, com
+ *      igualdade de CONJUNTO, não de "mais ou menos" (T19.3);
+ *   4. PARTIÇÃO — quatro cones de span 0.25 em 0, 0.25, 0.5 e 0.75 cobrem
+ *      EXATAMENTE o FOV completo (T19.4). Este é o caso que pega erro de wrap
+ *      e erro de borda de uma vez: qualquer célula tem distância circular
+ *      ≤ 0.125 de algum dos quatro centros, então uma célula que sobra é uma
+ *      célula que o filtro perdeu nos dois lados;
+ *   5. NÃO-REENTRÂNCIA — o módulo guarda o cone em variáveis de ESCOPO DE
+ *      MÓDULO, e `setContext` tem de zerá-las em toda chamada. T19.7 faz a ida
+ *      e a volta; sem o reset, o `computeFov` seguinte sairia com o cone
+ *      anterior grudado, e essa é a falha que só apareceria muito depois, como
+ *      um golden misteriosamente diferente.
+ *
+ * DUAS COISAS QUE NÃO SE TESTA AQUI, de propósito: SIMETRIA (cone não é
+ * simétrico, e não pode ser — se A olha para o norte e B, ao norte, olha para
+ * o sul, um vê e o outro não) e ORIGEM EM PAREDE como número exato (T19.6
+ * cobra o comportamento REAL — conjunto não-vazio contendo a origem —, porque
+ * não existe guarda de origem-em-parede em `computeInto` e a ausência dela é
+ * deliberada: o renderizador desenha de dentro de vãos de parede).
+ *
+ * E T4 (simetria) e T5 (vazamento de raio) seguem verdes SEM UMA LINHA
+ * ALTERADA — é a prova de que o cone entrou como caminho novo, e não como
+ * mudança no caminho velho.
+ * ================================================================== */
+
+const T19 = {
+  sementes: 8,
+  origens: 10,
+  raio: CONFIG.FOV_RADIUS,
+  /** Os quatro quadrantes da partição de T19.4. */
+  quartos: [0, 0.25, 0.5, 0.75],
+  /** Cone estreito da prova de não-reentrância: 5% da volta = 18°. */
+  spanEstreito: 0.05
+};
+
+/** Uma amostra determinística: o mapa da semente `i` e N origens caminháveis
+ *  sorteadas pelo RNG do próprio teste — mesmo padrão de T4/T5, para que a
+ *  falha seja sempre a mesma falha, no mesmo tile. */
+function amostraDeFov(tag: string, i: number, quantas: number): { map: GameMap; origens: Point[] } {
+  const semente = tag + '-' + pad(i, 4);
+  const map = generate(semente, 1 + (i % 3));
+  const livres = listaCaminhaveis(map);
+  const rng = rngLocal(fnv1a(tag + '#' + semente));
+  const origens: Point[] = [];
+  for (let k = 0; k < quantas; k++) origens.push(livres[rng.int(0, livres.length - 1)]);
+  return { map: map, origens: origens };
+}
+
+/** Elementos de `a` ausentes de `b`, já em '(x,y)@volta' — a mensagem tem de
+ *  dizer QUAL tile e em QUE ângulo ele estava, senão a falha de um filtro
+ *  angular vira caça ao tesouro. */
+function ausentes(
+  map: GameMap, a: Set<number>, b: Set<number>, ox: number, oy: number
+): string[] {
+  const out: string[] = [];
+  for (const v of Array.from(a)) {
+    if (b.has(v)) continue;
+    const x = v % map.w;
+    const y = (v - x) / map.w;
+    out.push('(' + x + ',' + y + ')@' + scaledAtan2Approx(y - oy, x - ox).toFixed(6));
+  }
+  return out.sort();
+}
+
+/**
+ * Uma sala ABERTA sintética: `lado`×`lado`, moldura de parede, miolo todo piso.
+ *
+ * Os demais casos de T19 usam mapas gerados, e por bom motivo — geometria real,
+ * paredes reais, sombras reais. Mas para julgar DIREÇÃO um mapa gerado é péssimo:
+ * um tile pode estar fora do cone por oclusão em vez de por ângulo, e a asserção
+ * vira ambígua. Numa sala vazia, quem está fora só pode estar fora pelo filtro.
+ */
+function salaAberta(lado: number): GameMap {
+  const tiles = new Uint8Array(lado * lado);
+  for (let y = 0; y < lado; y++) {
+    for (let x = 0; x < lado; x++) {
+      const borda = x === 0 || y === 0 || x === lado - 1 || y === lado - 1;
+      tiles[y * lado + x] = borda ? CONFIG.TILE.WALL : CONFIG.TILE.FLOOR;
+    }
+  }
+  const meio = (lado - 1) >> 1;
+  return {
+    seed: 'T19-SALA', depth: 1, w: lado, h: lado,
+    tiles: tiles,
+    decor: new Uint8Array(lado * lado),
+    agua: new Uint8Array(lado * lado),
+    rooms: [], start: { x: meio, y: meio }, stairs: { x: meio, y: meio },
+    connectivity: 1
+  } as unknown as GameMap;
+}
+
+describe('T19 — cone de FOV: ' + T19.sementes + ' sementes × ' + T19.origens + ' origens', () => {
+  it('T19.0 — o cone aponta PARA ONDE mandaram: cada direção de DIRS8 vê a sua e nenhuma outra', () => {
+    /*
+     * ═══ O CASO QUE OS OUTROS OITO NÃO FAZEM ═══
+     *
+     * Todo o resto de T19 é RELACIONAL: subconjunto, igualdade de conjunto,
+     * união, tamanho, não-vazio, aridade. Nenhuma dessas propriedades sabe para
+     * onde o cone aponta — e um cone virado passa em todas. Medido, com o
+     * suíte inteiro em verde:
+     *
+     *   · trocar `at2 < 1 - cMeioSpan` por `at2 >` transforma o cone no seu
+     *     COMPLEMENTO — um cone "leste" de 18° devolvia 223 de 225 tiles de uma
+     *     sala aberta, incluindo oeste, norte e sul, em vez dos 13 corretos;
+     *   · trocar `scaledAtan2Approx(dy, dx)` por `(dx, dy)` ESPELHA o cone: o
+     *     mesmo cone "leste" passa a apontar para o sul;
+     *   · inverter a convenção dentro de `scaledAtan2Approx` reprova T18 inteiro
+     *     e NENHUM caso de T19.
+     *
+     * As três são mutações de um token, todas plausíveis num refactor, e todas
+     * sobreviviam. A convenção estava travada na função isolada; nada travava
+     * como `reveal` a CONSOME. É isso que este caso conserta.
+     *
+     * A forma da asserção é dupla, e as duas metades importam: o tile na
+     * direção pedida TEM de estar dentro (senão o cone aponta para outro lugar),
+     * e os tiles nas outras sete TÊM de estar fora (senão o filtro não filtra).
+     * Só a primeira metade passaria com o cone-complemento; só a segunda,
+     * com um cone vazio.
+     */
+    const LADO = 21;
+    const map = salaAberta(LADO);
+    const meio = (LADO - 1) >> 1;
+    const raio = 8;
+    /* 18° de abertura: estreito o bastante para separar direções vizinhas de
+     * DIRS8 (que distam 45°), largo o bastante para conter o tile a 3 passos. */
+    const span = 0.05;
+    const PASSOS = 3;
+
+    for (let d = 0; d < DIRS8.length; d++) {
+      const [dx, dy] = DIRS8[d];
+      const angulo = d / 8; // T18.4 garante que DIRS8[i] ≈ i/8
+      const cone = computeFovCone(map, meio, meio, raio, angulo, span);
+      const onde = ondeEsta('T19.0', {
+        direcao: d, delta: '(' + dx + ',' + dy + ')', angulo: angulo.toFixed(3)
+      });
+
+      /* Metade 1 — a direção pedida ESTÁ dentro. */
+      const alvoX = meio + dx * PASSOS;
+      const alvoY = meio + dy * PASSOS;
+      expect(cone.has(alvoY * LADO + alvoX),
+        onde + ': o tile a ' + PASSOS + ' passos NA direção pedida ficou de fora — ' +
+        'o cone aponta para outro lugar').toBe(true);
+
+      /* Metade 2 — as outras sete estão FORA. */
+      for (let outra = 0; outra < DIRS8.length; outra++) {
+        if (outra === d) continue;
+        const [ox2, oy2] = DIRS8[outra];
+        const x2 = meio + ox2 * PASSOS;
+        const y2 = meio + oy2 * PASSOS;
+        expect(cone.has(y2 * LADO + x2),
+          onde + ': o tile na direção ' + outra + ' (' + ox2 + ',' + oy2 + ') entrou num ' +
+          'cone de 18° apontado para ' + d + ' — filtro invertido, espelhado ou desligado')
+          .toBe(false);
+      }
+
+      /* Metade 3 — o tamanho. Um cone de 18° num raio 8 pega uma fatia fina;
+       * se pegar mais que um quinto da sala, ele não está filtrando. */
+      expect(cone.size, onde + ': o cone de 18° abriu demais — ' + cone.size + ' tiles')
+        .toBeLessThan(Math.round(LADO * LADO * 0.2));
+    }
+  });
+
+  it('span = 1 desliga o cone: mesmo tamanho e mesmo conteúdo de computeFov', () => {
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-SPAN1', i, T19.origens);
+      for (const o of origens) {
+        const cheio = computeFov(map, o.x, o.y, T19.raio);
+        /* O ângulo VARIA de propósito: com o cone desligado ele não pode
+         * importar. Um `span >= 1` que virasse "filtro que aceita tudo" em vez
+         * de desligar o cone passaria por coincidência aritmética até o dia em
+         * que alguém mexesse na comparação — aqui, com oito ângulos
+         * diferentes, ele reprova antes. */
+        const cone = computeFovCone(map, o.x, o.y, T19.raio, 0.13 * i, 1);
+        const onde = ondeEsta('T19.1', {
+          semente: map.seed, origem: '(' + o.x + ',' + o.y + ')', angulo: 0.13 * i
+        });
+        expect(cone.size, onde + ': span = 1 mudou o TAMANHO do conjunto').toBe(cheio.size);
+        expect(ausentes(map, cheio, cone, o.x, o.y), onde + ': span = 1 perdeu tiles')
+          .toEqual([]);
+        expect(ausentes(map, cone, cheio, o.x, o.y), onde + ': span = 1 inventou tiles')
+          .toEqual([]);
+        /* E os dois são Sets DISTINTOS: comparar conteúdo só prova algo se não
+         * for a mesma referência devolvida duas vezes. */
+        expect(cone === cheio, onde + ': as duas chamadas devolveram o MESMO Set').toBe(false);
+      }
+    }
+  }, LENTO);
+
+  it('todo cone é subconjunto do FOV completo, em vários ângulos e spans', () => {
+    let apertaramAlgumaVez = 0;
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-SUBSET', i, T19.origens);
+      for (const o of origens) {
+        const cheio = computeFov(map, o.x, o.y, T19.raio);
+        for (const ang of [0, 0.125, 0.3, 0.62, 0.875]) {
+          for (const span of [0.05, 0.25, 0.5, 0.9]) {
+            const cone = computeFovCone(map, o.x, o.y, T19.raio, ang, span);
+            const onde = ondeEsta('T19.2', {
+              semente: map.seed, origem: '(' + o.x + ',' + o.y + ')', ang, span
+            });
+            expect(ausentes(map, cone, cheio, o.x, o.y),
+              onde + ': o cone acendeu tile que o FOV completo não vê').toEqual([]);
+            expect(cone.size, onde + ': cone maior que o FOV completo')
+              .toBeLessThanOrEqual(cheio.size);
+            if (cone.size < cheio.size) apertaramAlgumaVez++;
+          }
+        }
+      }
+    }
+    /* Contraprova de teste vazio: "subconjunto" é verdade trivial se o cone
+     * for sempre o conjunto inteiro. Ele tem de APERTAR de fato. */
+    expect(apertaramAlgumaVez > 0,
+      'T19.2: nenhum cone da varredura ficou menor que o FOV — o filtro não filtrou nada')
+      .toBe(true);
+  }, LENTO);
+
+  it('ângulo é circular: -0.25 ≡ 0.75 e 1.25 ≡ 0.25, com igualdade de conjunto', () => {
+    /*
+     * A normalização é `a - Math.floor(a)`, e é exata em IEEE-754 para estes
+     * valores: -0.25 - (-1) = 0.75 e 1.25 - 1 = 0.25, sem um bit de resíduo.
+     * Por isso a cobrança é IGUALDADE DE CONJUNTO, e não "conjuntos parecidos"
+     * — se um dia a normalização virar um `%` (que em JS preserva o sinal do
+     * dividendo e devolveria -0.25) ou um laço de somas, este caso reprova.
+     */
+    const casos: Array<[number, number]> = [[-0.25, 0.75], [1.25, 0.25], [-1.5, 0.5], [3, 0]];
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-CIRC', i, T19.origens);
+      for (const o of origens) {
+        for (const [bruto, canonico] of casos) {
+          for (const span of [0.05, 0.25]) {
+            const a = computeFovCone(map, o.x, o.y, T19.raio, bruto, span);
+            const b = computeFovCone(map, o.x, o.y, T19.raio, canonico, span);
+            const onde = ondeEsta('T19.3', {
+              semente: map.seed, origem: '(' + o.x + ',' + o.y + ')', bruto, canonico, span
+            });
+            expect(a.size, onde + ': tamanhos diferentes após a normalização').toBe(b.size);
+            expect(ausentes(map, a, b, o.x, o.y), onde + ': o ângulo bruto viu a mais')
+              .toEqual([]);
+            expect(ausentes(map, b, a, o.x, o.y), onde + ': o ângulo bruto viu a menos')
+              .toEqual([]);
+          }
+        }
+      }
+    }
+  }, LENTO);
+
+  it('quatro cones de span 0.25 cobrem EXATAMENTE o FOV completo', () => {
+    /*
+     * A PARTIÇÃO. Todo tile tem distância circular ≤ 0.125 de algum dos quatro
+     * centros (0, 0.25, 0.5, 0.75), então a união tem de fechar o círculo sem
+     * sobra e sem excesso. Dois erros clássicos morrem aqui:
+     *
+     *   · WRAP — o filtro aceita `at2 <= meio` OU `at2 >= 1 - meio`. Quem
+     *     esquece (ou inverte) o segundo termo perde metade do cone de ângulo
+     *     0, e a união deixa de cobrir uma fatia inteira a leste;
+     *   · BORDA — as células que caem exatamente sobre a fronteira (distância
+     *     0.125 de dois centros) têm de entrar em pelo menos um dos dois. Se a
+     *     comparação for estrita dos dois lados, elas somem da união.
+     *
+     * SE ESTE CASO REPROVAR, investigue o filtro antes de afrouxar o teste: a
+     * mensagem lista o tile e o ângulo dele, que é o suficiente para achar em
+     * que lado da comparação ele caiu. Aqui a cobertura é exata — medida, não
+     * suposta — em 8 sementes × 10 origens.
+     */
+    let quartosQueApertaram = 0;
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-UNIAO', i, T19.origens);
+      for (const o of origens) {
+        const cheio = computeFov(map, o.x, o.y, T19.raio);
+        const uniao = new Set<number>();
+        for (const ang of T19.quartos) {
+          const cone = computeFovCone(map, o.x, o.y, T19.raio, ang, 0.25);
+          for (const v of Array.from(cone)) uniao.add(v);
+          if (cone.size < cheio.size) quartosQueApertaram++;
+        }
+        const onde = ondeEsta('T19.4', {
+          semente: map.seed, origem: '(' + o.x + ',' + o.y + ')'
+        });
+        expect(ausentes(map, cheio, uniao, o.x, o.y),
+          onde + ': a união dos 4 quartos NÃO cobriu estes tiles — erro de wrap ou de borda')
+          .toEqual([]);
+        expect(ausentes(map, uniao, cheio, o.x, o.y),
+          onde + ': a união trouxe tiles que o FOV completo não vê').toEqual([]);
+        expect(uniao.size, onde + ': união com tamanho diferente do FOV completo')
+          .toBe(cheio.size);
+      }
+    }
+    /*
+     * CONTRAPROVA DE PARTIÇÃO TRIVIAL. Quatro cones que fossem, cada um, o FOV
+     * INTEIRO também dariam união igual ao FOV — e o caso passaria verde com o
+     * filtro angular completamente desligado. Cada quarto tem de RECORTAR de
+     * verdade; é esta linha que transforma "a união cobre" em "os quatro
+     * quartos particionam".
+     */
+    expect(quartosQueApertaram > 0,
+      'T19.4: nenhum dos quartos ficou menor que o FOV completo — a união é trivial, ' +
+        'o filtro angular não está filtrando')
+      .toBe(true);
+  }, LENTO);
+
+  it('span = 0 e span negativo degeneram sem lançar: só a origem sobrevive ao filtro', () => {
+    /*
+     * `span <= 0` vira meio-span 0, e aí o filtro só deixa passar quem tem
+     * ângulo EXATAMENTE igual ao centro — o que existe (os cardinais são
+     * exatos, T18.2), mas é o cone degenerado. A origem entra de qualquer
+     * jeito porque `computeInto` a acrescenta ANTES de varrer, sem passar por
+     * `reveal`: é a única célula que nenhum filtro angular pode tirar, e é a
+     * garantia de que "o jogador sempre se vê" independe do cone.
+     *
+     * `span = -0.5` é entrada absurda de propósito: a função não pode lançar
+     * nem devolver conjunto vazio para argumento fora de faixa.
+     */
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-ZERO', i, T19.origens);
+      for (const o of origens) {
+        const cheio = computeFov(map, o.x, o.y, T19.raio);
+        const idxOrigem = o.y * map.w + o.x;
+        for (const span of [0, -0.5]) {
+          const onde = ondeEsta('T19.5', {
+            semente: map.seed, origem: '(' + o.x + ',' + o.y + ')', span
+          });
+          expect(() => computeFovCone(map, o.x, o.y, T19.raio, 0.25, span),
+            onde + ': span degenerado lançou').not.toThrow();
+          const cone = computeFovCone(map, o.x, o.y, T19.raio, 0.25, span);
+          expect(cone instanceof Set, onde + ': não devolveu um Set').toBe(true);
+          expect(cone.has(idxOrigem), onde + ': a origem sumiu do cone degenerado').toBe(true);
+          expect(ausentes(map, cone, cheio, o.x, o.y),
+            onde + ': cone degenerado com tile fora do FOV completo').toEqual([]);
+          /*
+           * O TAMANHO, e não só as relações. Sem esta asserção o título deste
+           * caso mente: "não lança + é Set + contém a origem + ⊆ FOV" é
+           * verdade também para um cone de 176°, e uma troca de `: 0` por
+           * `: 0.49` na normalização de `cMeioSpan` passaria verde (medido:
+           * de 9 para 217 tiles numa sala aberta). O piso é generoso de
+           * propósito — o que se prende é a ORDEM DE GRANDEZA do degenerado,
+           * não uma contagem que a geometria do mapa faria oscilar.
+           */
+          expect(cone.size, onde + ': o cone degenerado abriu — não é mais degenerado')
+            .toBeLessThanOrEqual(Math.max(8, Math.round(cheio.size * 0.2)));
+        }
+      }
+    }
+  }, LENTO);
+
+  it('origem em parede devolve conjunto não-vazio; origem fora dos limites, vazio', () => {
+    /*
+     * O COMPORTAMENTO REAL, e não o que seria "mais limpo": não existe guarda
+     * de origem-em-parede em `computeInto`, e a ausência é deliberada (o
+     * renderizador desenha de dentro de vãos de parede). Então de dentro da
+     * pedra o conjunto é NÃO-VAZIO e contém a origem — no miolo selado de um
+     * bloco de parede ele encolhe até uma mão-cheia de tiles, num pilar
+     * isolado passa de uma centena; a ordem de grandeza depende do mapa, e por
+     * isso o que se cobra aqui é a PROPRIEDADE, não o número.
+     *
+     * Fora dos limites é a única saída vazia do arquivo, e vem da guarda de
+     * `inBounds` — que existe, e portanto é cobrada com igualdade a 0.
+     *
+     * Se alguém "consertar" a ausência da guarda de parede, a primeira metade
+     * deste caso reprova. É o aviso, não o bug.
+     */
+    for (let i = 0; i < T19.sementes; i++) {
+      const semente = 'T19-PAREDE-' + pad(i, 4);
+      const map = generate(semente, 1 + (i % 3));
+      const paredes: Point[] = [];
+      for (let y = 0; y < map.h; y++) {
+        for (let x = 0; x < map.w; x++) {
+          if (map.tiles[y * map.w + x] === CONFIG.TILE.WALL) paredes.push({ x: x, y: y });
+        }
+      }
+      expect(paredes.length, 'T19.6: o andar ' + semente + ' não tem parede nenhuma')
+        .toBeGreaterThan(0);
+
+      const rng = rngLocal(fnv1a('T19.6#' + semente));
+      for (let k = 0; k < T19.origens; k++) {
+        const p = paredes[rng.int(0, paredes.length - 1)];
+        const onde = ondeEsta('T19.6', { semente, parede: '(' + p.x + ',' + p.y + ')' });
+        const idx = p.y * map.w + p.x;
+        const cheio = computeFov(map, p.x, p.y, T19.raio);
+        const cone = computeFovCone(map, p.x, p.y, T19.raio, 0.5, 0.25);
+
+        expect(cheio.size, onde + ': computeFov de dentro da parede voltou vazio')
+          .toBeGreaterThan(0);
+        expect(cheio.has(idx), onde + ': a origem opaca não está no próprio FOV').toBe(true);
+        expect(cone.size, onde + ': computeFovCone de dentro da parede voltou vazio')
+          .toBeGreaterThan(0);
+        expect(cone.has(idx), onde + ': a origem opaca sumiu do cone').toBe(true);
+        expect(ausentes(map, cone, cheio, p.x, p.y),
+          onde + ': o cone da origem opaca escapou do FOV completo').toEqual([]);
+      }
+
+      /* Fora dos limites, nos quatro lados: vazio nos dois caminhos. */
+      const foraDoMapa: Point[] = [
+        { x: -1, y: 5 }, { x: map.w, y: 5 }, { x: 5, y: -1 }, { x: 5, y: map.h }
+      ];
+      for (const p of foraDoMapa) {
+        const onde = ondeEsta('T19.6', { semente, fora: '(' + p.x + ',' + p.y + ')' });
+        expect(computeFov(map, p.x, p.y, T19.raio).size,
+          onde + ': computeFov fora dos limites devolveu tiles').toBe(0);
+        expect(computeFovCone(map, p.x, p.y, T19.raio, 0, 0.25).size,
+          onde + ': computeFovCone fora dos limites devolveu tiles').toBe(0);
+      }
+    }
+  }, LENTO);
+
+  it('não-reentrância: o cone não vaza para a chamada seguinte (ida e volta)', () => {
+    /*
+     * O CASO MAIS IMPORTANTE DESTE BLOCO. `cConeOn`, `cAng` e `cMeioSpan` são
+     * estado de MÓDULO — não há um objeto de contexto por chamada, por decisão
+     * de performance herdada do vanilla. Isso significa que `setContext`
+     * PRECISA escrever os três em TODA chamada, inclusive nas sem cone. Se o
+     * reset ficasse dentro do `if` do cone, todo `computeFov` seguinte a um
+     * `computeFovCone` sairia com o cone anterior grudado.
+     *
+     * É uma falha silenciosa das piores: nada lança, nada fica vazio, o jogo
+     * só passa a esconder metade da sala — e a origem, que entra sem passar
+     * pelo filtro, continua lá para dar a impressão de que funciona.
+     *
+     * A prova é feita nas DUAS direções:
+     *   ida   — cone estreito e, logo em seguida, `computeFov`: tem de sair o
+     *           FOV COMPLETO, idêntico à referência tirada antes de qualquer
+     *           cone;
+     *   volta — `computeFov` e, logo em seguida, o mesmo cone estreito: tem de
+     *           sair o MESMO conjunto estreito de antes (um reset que zerasse
+     *           o cone tarde demais quebraria este lado).
+     *
+     * E `isVisibleFrom` entra junto porque ele passa pelo MESMO `setContext`,
+     * por um caminho diferente (`visibleBetween`): um alvo caminhável que o
+     * FOV completo enxerga, mas que está FORA do cone recém-usado, tem de
+     * continuar visível.
+     *
+     * `apertou` é a contraprova de vacuidade: se o cone estreito nunca ficasse
+     * menor que o FOV, "o FOV seguinte é completo" seria verdade sem mérito.
+     */
+    let apertou = 0;
+    let alvosForaDoCone = 0;
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-REENTRA', i, T19.origens);
+      for (const o of origens) {
+        const onde = ondeEsta('T19.7', { semente: map.seed, origem: '(' + o.x + ',' + o.y + ')' });
+        const referencia = computeFov(map, o.x, o.y, T19.raio);
+        const cheioAntes = new Set<number>(Array.from(referencia));
+
+        /* IDA: cone estreito → FOV completo. */
+        const estreito = computeFovCone(map, o.x, o.y, T19.raio, 0, T19.spanEstreito);
+        const estreitoAntes = new Set<number>(Array.from(estreito));
+        const depoisDoCone = computeFov(map, o.x, o.y, T19.raio);
+        expect(depoisDoCone.size,
+          onde + ': computeFov depois de um cone saiu com ' + depoisDoCone.size +
+            ' tiles em vez de ' + cheioAntes.size + ' — o cone VAZOU')
+          .toBe(cheioAntes.size);
+        expect(ausentes(map, cheioAntes, depoisDoCone, o.x, o.y),
+          onde + ': o FOV completo depois do cone perdeu tiles — cone vazado').toEqual([]);
+        if (estreitoAntes.size < cheioAntes.size) apertou++;
+
+        /* VOLTA: FOV completo → cone estreito. */
+        const estreitoDepois = computeFovCone(map, o.x, o.y, T19.raio, 0, T19.spanEstreito);
+        expect(estreitoDepois.size, onde + ': o cone mudou de tamanho depois de um FOV completo')
+          .toBe(estreitoAntes.size);
+        expect(ausentes(map, estreitoAntes, estreitoDepois, o.x, o.y),
+          onde + ': o cone depois do FOV completo perdeu tiles').toEqual([]);
+        expect(ausentes(map, estreitoDepois, estreitoAntes, o.x, o.y),
+          onde + ': o cone depois do FOV completo ganhou tiles').toEqual([]);
+
+        /* E `isVisibleFrom`, que atravessa o mesmo `setContext`. */
+        for (const v of Array.from(cheioAntes)) {
+          if (estreitoAntes.has(v)) continue;
+          const x = v % map.w;
+          const y = (v - x) / map.w;
+          if (!ehCaminhavel(map, x, y)) continue; // T5: o acordo vale para caminháveis
+          alvosForaDoCone++;
+          expect(isVisibleFrom(map, o.x, o.y, x, y, T19.raio),
+            onde + ': isVisibleFrom perdeu o alvo (' + x + ',' + y + '), que está fora do ' +
+              'cone anterior — o cone vazou para visibleBetween').toBe(true);
+          break; // um alvo por origem basta; são 80 origens
+        }
+      }
+    }
+    expect(apertou > 0,
+      'T19.7: o cone estreito nunca ficou menor que o FOV completo — a prova seria vazia')
+      .toBe(true);
+    expect(alvosForaDoCone > 0,
+      'T19.7: nenhuma origem teve alvo caminhável fora do cone — isVisibleFrom não foi provado')
+      .toBe(true);
+  }, LENTO);
+
+  it('checkSymmetry não aceita cone — e continua limpa depois de um cone', () => {
+    /*
+     * A ASSINATURA É PARTE DO CONTRATO. Cone não é simétrico (R27 e a sonda da
+     * tecla V valem para o FOV completo), então `checkSymmetry` não pode nem
+     * OFERECER os parâmetros: `Function.length` conta os parâmetros
+     * declarados antes do primeiro com valor padrão, e `radius?` do
+     * TypeScript compila para parâmetro comum — logo 4 é (map, ox, oy, radius)
+     * e nada mais. Um `angulo`/`span` acrescentado ali faria este número
+     * subir, e é o alarme que se quer.
+     *
+     * `computeFov` = 5 (…, out) e `computeFovCone` = 7 (…, angulo, span, out)
+     * fixam o outro lado: o cone é uma PORTA NOVA, não um parâmetro enfiado na
+     * porta velha, que é o que manteve T4 e T5 verdes sem uma linha alterada.
+     *
+     * Depois disso, a sonda roda LOGO APÓS um cone estreito: `checkSymmetry`
+     * chama `computeInto` sem ângulo, e se o cone tivesse vazado ela acusaria
+     * assimetria em massa (o volta-e-meia do par A→B com B fora do cone).
+     */
+    expect(checkSymmetry.length,
+      'T19.8: a aridade de checkSymmetry mudou — alguém deu cone à sonda de simetria?')
+      .toBe(4);
+    expect(computeFov.length, 'T19.8: a aridade de computeFov mudou').toBe(5);
+    expect(computeFovCone.length, 'T19.8: a aridade de computeFovCone mudou').toBe(7);
+    expect(isVisibleFrom.length, 'T19.8: a aridade de isVisibleFrom mudou').toBe(6);
+
+    for (let i = 0; i < T19.sementes; i++) {
+      const { map, origens } = amostraDeFov('T19-SONDA', i, T19.origens);
+      for (const o of origens) {
+        const onde = ondeEsta('T19.8', { semente: map.seed, origem: '(' + o.x + ',' + o.y + ')' });
+        computeFovCone(map, o.x, o.y, T19.raio, 0.375, T19.spanEstreito);
+        const res = checkSymmetry(map, o.x, o.y, T19.raio);
+        expect(res.broken.map((b) => '(' + b.x + ',' + b.y + ')'),
+          onde + ': FOV assimétrico logo depois de um cone — o cone vazou para a sonda')
+          .toEqual([]);
+        expect(res.tested, onde + ': a sonda não testou nenhum par').toBeGreaterThan(0);
+        expect(res.ok, onde + ': campo ok inconsistente com broken').toBe(res.broken.length === 0);
+      }
     }
   }, LENTO);
 });

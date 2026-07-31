@@ -6,8 +6,36 @@ tags: [fov, shadowcasting, simetria, engine, render]
 
 # 👁️ Campo de visão: shadowcasting simétrico
 
-`src/engine/fov.ts`. Três funções públicas: `computeFov`, `isVisibleFrom` e
-`checkSymmetry`. Raio padrão `CONFIG.FOV_RADIUS` = 9 (`src/engine/core.ts:44`).
+`src/engine/fov.ts`. Quatro funções públicas: `computeFov`, `computeFovCone`,
+`isVisibleFrom` e `checkSymmetry`. Raio padrão `CONFIG.FOV_RADIUS` = 9
+(`src/engine/core.ts:44`).
+
+## O cone (`computeFovCone`)
+
+Modo separado, e **não** uma opção de `computeFov`. Recebe `angulo` e `span` em
+fração de volta — a volta 0 aponta para leste e cresce na ordem de `DIRS8`, de
+modo que `DIRS8[i]` ≈ `i/8` (ver `scaledAtan2Approx` em `core.ts`, que existe
+porque `Math.atan2` não é garantido bit a bit entre engines e o determinismo de
+R53 depende disso).
+
+Três coisas que valem mais que a assinatura:
+
+1. **O cone não poda a varredura.** A oclusão roda no círculo inteiro e o filtro
+   só decide quem acende. É o que faz o cone respeitar as sombras — e significa
+   que ele **custa o mesmo que um FOV completo**. "O NPC vê menos, logo custa
+   menos" é falso aqui.
+2. **Ele quebra a simetria por definição**, e por isso fica fora de
+   `checkSymmetry` e da sonda da tecla V. Se A olha para o norte e B está ao
+   norte, A vê B; se B olha para o sul, B não vê A. R27 e o teste T4 valem para
+   o FOV completo.
+3. **Dentro do cone, o invariante da parede é revogado.** No FOV completo a
+   parede entra sempre (para o renderizador fechar a sala); o filtro angular
+   atinge as paredes também. É aceitável porque o cone não tem consumidor de
+   render — quem desenha continua chamando `computeFov`.
+
+Não há consumidor hoje, e não é por falta de vontade: dar cone a inimigo exigiria
+um `facing` em `Enemy`, que o ADR-005 proíbe, e `player.facing` é declarado
+"apenas animação", fora do oracle do golden.
 
 ## Por que raycasting por amostragem foi proibido
 
