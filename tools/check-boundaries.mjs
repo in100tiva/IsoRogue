@@ -2,8 +2,14 @@
 // Falha o build se a camada de domínio encostar em React, DOM ou entropia não determinística.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const RAIZ = new URL('..', import.meta.url).pathname;
+// `fileURLToPath`, NUNCA `.pathname`. No Windows, `new URL('..', import.meta.url).pathname`
+// devolve `/D:/projetos/...` — com uma barra inicial espúria que `existsSync` rejeita.
+// O efeito não era um erro: a varredura devolvia lista VAZIA e o script saía 0, imprimindo
+// "Fronteiras de camada OK (0 arquivos verificados)". Verde por vacuidade, com o gate de
+// fronteiras inteiro desligado em silêncio. Ver a guarda de sanidade no fim do arquivo.
+const RAIZ = fileURLToPath(new URL('..', import.meta.url));
 
 const REGRAS = [
   {
@@ -81,4 +87,35 @@ if (falhas > 0) {
   console.error('Ver docs/ARQUITETURA-REACT.md §0 — o engine não conhece React, DOM nem relógio.');
   process.exit(1);
 }
+
+/*
+ * GUARDA DE SANIDADE — o gate tem de provar que OLHOU.
+ *
+ * Este script passou meses saindo com código 0 sem verificar UM arquivo sequer: o
+ * `RAIZ` não resolvia no Windows, `arquivos()` devolvia lista vazia, e o laço nunca
+ * rodava. Zero violações em zero arquivos é indistinguível de zero violações em
+ * duzentos — do lado de fora, os dois imprimem sucesso.
+ *
+ * É o modo de falha mais perigoso que um gate pode ter, porque ele mente na direção
+ * tranquilizadora. Um `exit 1` barulhento seria notado no primeiro dia; um verde
+ * vazio sobrevive indefinidamente.
+ *
+ * O piso é deliberadamente frouxo (uma regra, um arquivo): não é uma meta de
+ * cobertura, é um detector de varredura vazia. Se um dia `src/engine` ou
+ * `src/render` for legitimamente esvaziado, este erro é o lembrete de atualizar a
+ * regra em vez de herdar um gate morto.
+ */
+if (verificados === 0) {
+  console.error('GATE CEGO: nenhuma fonte foi verificada.');
+  console.error(`  RAIZ resolvida: ${RAIZ}`);
+  console.error(`  existe? ${existsSync(RAIZ)}`);
+  console.error('  Diretórios das regras:');
+  for (const regra of REGRAS) {
+    const dir = join(RAIZ, regra.dir);
+    console.error(`    ${regra.dir} → ${dir} (existe: ${existsSync(dir)})`);
+  }
+  console.error('\nO script saiu verde sem olhar nada — isso é falha, não sucesso.');
+  process.exit(1);
+}
+
 console.log(`Fronteiras de camada OK (${verificados} arquivos verificados).`);
