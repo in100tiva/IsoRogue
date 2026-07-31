@@ -1002,6 +1002,27 @@ const DIR_TERRENO = DIR_ITEM;
  */
 const ADERECO_EM_CADA = 6;
 
+/* ------------------------------------------------------------------ *
+ * O BRILHO DA POÇA (ver `desenharBrilhoDaAgua`)
+ *
+ * A água é o único terreno que PARECE piso e não é: `map.tiles` a mantém como
+ * `Tile.Floor` e quem a bloqueia é o bitmap `map.agua` (src/engine/mapgen.ts).
+ * O rig já a afunda 6 px e põe espuma na beirada; estes quatro números são a
+ * parte que se mexe, e é ela que fecha a leitura de líquido.
+ * ------------------------------------------------------------------ */
+
+/** Ciclos por segundo do vaivém do reflexo. Devagar: é lâmina parada, não onda. */
+const BRILHO_AGUA_VELOCIDADE = 0.16;
+/** Curso do reflexo, em fração da meia-diagonal do tile. */
+const BRILHO_AGUA_CURSO = 0.34;
+/** Meia-largura do losango do reflexo, em fração da meia-diagonal do tile. */
+const BRILHO_AGUA_MEIA_LARGURA = 0.3;
+/** Alfa nas pontas do curso e no meio dele. Discreto: é reflexo, não holofote. */
+const BRILHO_AGUA_ALFA_MIN = 0.05;
+const BRILHO_AGUA_ALFA_MAX = 0.3;
+/** Fração do brilho que sobrevive no degrau de luz mais escuro do FOV. */
+const BRILHO_AGUA_PISO = 0.35;
+
 /**
  * O sorteio do adereço de um tile: DETERMINÍSTICO, sem estado e sem relógio —
  * `Math.random` é proibido nesta camada (tools/check-boundaries.mjs reprova) e
@@ -2038,21 +2059,30 @@ export class IsoRenderer {
         }
         if (t === this.T_STAIRS) this.drawStairs(ctx, sx, sy, hw, hh, seen, lvl);
         else if (t === this.T_DOOR) this.drawDoor(ctx, sx, sy, hw, hh, wh, bucket, seen, lvl);
-        /* A cachoeira: onde a água tem vazio ou o limite do mapa à frente
-         * (sul/leste), o fluxo escorre por cima da borda. Efeito de render
-         * puro — nada no Game. */
-        if (agua) this.desenharCachoeira(ctx, game, x, y, sx, sy, hw, hh, z, seen);
-        /* O adereço do tileset, no fim do passe de PISOS: depois do bloco (ele
-         * fica em cima do chão) e da sombra da parede (que é decalque de chão),
-         * e antes das entidades desta mesma antidiagonal — que só são
-         * desenhadas no terceiro laço. É o que garante que o herói pise SOBRE o
-         * tufo, e não atrás dele.
-         *
-         * `else` do encadeamento acima porque escada e porta não recebem
-         * adereço: os dois já desenham no losango inteiro, e um seixo em cima
-         * do glifo da escada esconderia a única saída do andar. O resto das
-         * exclusões (quem está de pé no tile) é de `desenharAdereco`. */
-        else this.desenharAdereco(ctx, game, x, y, i, sx, sy + hh, z, decor ? decor[i] : 0, lvl);
+        if (agua) {
+          /* A poça: o BRILHO que anda por cima dela (é o movimento que faz a
+           * superfície ler como líquido, e é o que avisa que ali não se pisa)
+           * e, onde ela encosta no vazio ou no limite do mapa a sul/leste, a
+           * CACHOEIRA escorrendo pela borda. Efeito de render puro — nada no
+           * Game, e nada de `Math.random`: a fase sai de um hash de (x, y). */
+          this.desenharBrilhoDaAgua(ctx, x, y, sx, sy, hw, hh, z, seen, lvl);
+          this.desenharCachoeira(ctx, game, x, y, sx, sy, hw, hh, z, seen);
+        } else if (t !== this.T_STAIRS && t !== this.T_DOOR) {
+          /* O adereço do tileset, no fim do passe de PISOS: depois do bloco (ele
+           * fica em cima do chão) e da sombra da parede (que é decalque de
+           * chão), e antes das entidades desta mesma antidiagonal — que só são
+           * desenhadas no terceiro laço. É o que garante que o herói pise SOBRE
+           * o tufo, e não atrás dele.
+           *
+           * As TRÊS exclusões são explícitas, e não mais um `else` pendurado no
+           * encadeamento de escada/porta: quando a cachoeira entrou no meio, o
+           * `else` passou a casar com o `if (agua)` e a escada voltou a poder
+           * receber seixo — o glifo da única saída do andar coberto por um
+           * adereço, calado. Escada e porta já desenham no losango inteiro;
+           * água não tem onde plantar mato. O resto das exclusões (quem está de
+           * pé no tile) é de `desenharAdereco`. */
+          this.desenharAdereco(ctx, game, x, y, i, sx, sy + hh, z, decor ? decor[i] : 0, lvl);
+        }
       }
 
       /* --- paredes da antidiagonal (translúcidas quando encobrem o herói) --- */
@@ -2086,7 +2116,43 @@ export class IsoRenderer {
         }
       }
 
-      /* --- entidades da antidiagonal (só dentro do FOV — R31) --- */
+      /* --- entidades da antidiagonal (só dentro do FOV — R31) ---
+       *
+       * ═══ A ORDEM DO PINTOR E O QUE ELA CUSTA (medido) ═══
+       *
+       * Este é o terceiro passe da faixa `s`, e o passe de PISOS da faixa `s+1`
+       * roda depois dele. Ou seja: o chão dos tiles da frente é desenhado por
+       * cima das entidades daqui. Isso é correto — os tiles da frente estão
+       * mais perto da câmera —, mas só continua inofensivo enquanto o bloco de
+       * terreno não subir acima do plano do chão. Os números, medidos sobre os
+       * rigs de `./tilesets/nivel1.ts` em px de tela a zoom 1:
+       *
+       *   · o bloco de piso sobe EXATAMENTE 16,0 px acima do centro do próprio
+       *     losango — o vértice norte dele, nem um pixel além. As lâminas de
+       *     grama não estouram esse teto porque estão todas nas bordas +Y e +X,
+       *     as que a projeção mostra À FRENTE do próprio tile; as do miolo são
+       *     baixas de propósito. test/render.test.ts trava esse limite;
+       *   · sobre a COLUNA de uma entidade (faixa de ±12 px em volta da âncora
+       *     dela), o chão dos vizinhos da frente começa em +10,0 px abaixo da
+       *     âncora — (x+1,y) e (x,y+1) — e em +16,0 px — (x+1,y+1). Não é
+       *     arbitrário: é onde o plano z = 0 daqueles tiles realmente passa
+       *     naquela coluna de tela;
+       *   · o elenco desce, abaixo da própria âncora: guerreiro 9,4 px · goblin
+       *     5,1 · mercador 6,1 · slime 13,6 · ogro 19,6.
+       *
+       * Conclusão: nenhum pixel de entidade com z >= 0 pode ser coberto por
+       * piso vizinho — a conta não permite. O que É coberto é exatamente o que
+       * o rig modelou ABAIXO do plano do chão, e aí a oclusão está certa: aquilo
+       * está enterrado. Sobram 3,6 px no slime e 9,6 px no ogro, e é essa a
+       * origem do "sprite por baixo do chão" — não a ordem, e não as lâminas.
+       * O conserto é de RIG (subir o corpo do bicho para z >= 0), mora em
+       * `./characters/`, e está registrado aqui com o número para quem for
+       * fazê-lo não precisar medir de novo.
+       *
+       * A PAREDE é outro assunto: ela cobre até 26 px ACIMA da âncora de quem
+       * está atrás, e é para isso que existe `ALFA_PAREDE_OCULTA` — nos três
+       * tiles do canto frontal do herói, que são exatamente os três medidos
+       * acima. */
       for (x = lo; x <= hi; x++) {
         y = s - x;
         i = y * w + x;
@@ -2544,31 +2610,6 @@ export class IsoRenderer {
    * ------------------------------------------------------------------ */
 
   /**
-   * O bloco de terreno de um tile, colado pela ÂNCORA do atlas sobre o centro
-   * do losango — o mesmo ponto onde o Guerreiro assenta as botas. É essa
-   * coincidência que faz o herói ficar EM CIMA do piso e ao PÉ da parede sem
-   * nenhum ajuste de offset: o rig do tileset põe o topo do piso em z = 0 (ver
-   * a calibração no cabeçalho de `./tilesets/nivel1.ts`) e a projeção de z = 0 é
-   * exatamente a âncora.
-   *
-   * A luz entra por `quadroModulado`, como no elenco: o terreno escurece com a
-   * distância, e as cores emissivas do tileset (a flor laranja do nível 1)
-   * atravessam acesas sem que este método saiba que elas existem.
-   *
-   * Devolve `false` quando não há pixel nenhum a colar (atlas indisponível) —
-   * o sinal de "desenhe do jeito antigo" para quem chamou.
-   *
-   * Posição arredondada e tamanho não: é o que o resto do arquivo faz com todo
-   * sprite, e no terreno tem uma consequência a mais que vale registrar. Em
-   * zoom 1 os tiles distam 32/16 px INTEIROS, então arredondar preserva o
-   * espaçamento exato e os blocos encaixam sem costura. Em zoom fracionário
-   * pode sobrar meio pixel entre dois blocos — e o que aparece nessa fresta não
-   * é o fundo, é a SAIA do bloco de trás (o corpo de 4u que desce abaixo do
-   * topo, desenhado antes por estar numa antidiagonal anterior). Ou seja: o pior
-   * caso é uma linha escura de um pixel onde o tileset já desenha o contorno
-   * entre blocos.
-   */
-  /**
    * A CACHOEIRA: onde uma poça encosta no vazio, a água escorre por cima da
    * borda e cai no abismo.
    *
@@ -2605,19 +2646,23 @@ export class IsoRenderer {
     h = (h * 1664525 + 1013904223) >>> 0;
     const fase = (this.t * 1.6 + (h / 4294967296)) % 1;
     const queda = (hh * 3.2) * z;
+    /* A queda nasce na LÂMINA D'ÁGUA, não no plano do chão seco: desde que a
+     * poça afundou para valer (6 px no nível 1), começar em `sy + hh` fazia o
+     * fluxo brotar no ar, acima da superfície de onde ele deveria transbordar. */
+    const topo = sy + hh + this.tileset.aguaAfundaPx * z;
 
     const desenhar = (px: number): void => {
       const largura = Math.max(1, hw * 0.34);
       ctx.save();
       ctx.globalAlpha = ctx.globalAlpha * 0.9;
       ctx.fillStyle = claro;
-      ctx.fillRect(px - largura / 2, sy + hh, largura, queda);
+      ctx.fillRect(px - largura / 2, topo, largura, queda);
       /* Três lâminas de espuma descendo, defasadas: é o que dá movimento sem
        * animar textura nenhuma. */
       ctx.fillStyle = espuma;
       for (let k = 0; k < 3; k++) {
         const t = (fase + k / 3) % 1;
-        const yy = sy + hh + t * queda;
+        const yy = topo + t * queda;
         ctx.fillRect(px - largura / 2 + 1, yy, Math.max(1, largura - 2), Math.max(1, 2 * z));
       }
       ctx.restore();
@@ -2627,26 +2672,131 @@ export class IsoRenderer {
     if (paraLeste) desenhar(sx + hw * 0.42);
   }
 
+  /**
+   * O BRILHO QUE ANDA NA POÇA — o reflexo que atravessa a lâmina devagar.
+   *
+   * Não é enfeite: é LINGUAGEM DE REGRA. A água bloqueia o passo (`isWalkable`
+   * devolve falso para todo tile de `map.agua` — src/engine/mapgen.ts) e, pelo
+   * corte de canto de `mover`, tranca também as diagonais em volta. Medido em
+   * quatro sementes, um andar tem 41 a 58 tiles de água que recusam 95 a 148
+   * passos ortogonais e 50 a 86 diagonais de alvo livre. Terreno que barra tem
+   * de gritar que barra, e o que o olho lê como líquido não é a cor — é o
+   * MOVIMENTO. O rig entrega o afundamento e a espuma parada; a coisa que se
+   * mexe só pode vir daqui, porque rig não anima.
+   *
+   * O desenho é um losango claro, alinhado à grade (o mesmo `pathDiamond` do
+   * chão), que desliza pelo eixo do tile e some nas pontas. Losango e não
+   * retângulo porque um retângulo em isométrica cisalha e vira mancha —
+   * [[texto-em-isometrica-cisalha]] vale para qualquer forma reta.
+   *
+   * Determinismo, como em toda esta camada: a fase sai de um hash de (x, y)
+   * misturado ao relógio visual. `Math.random` é proibido aqui e o lint pega.
+   *
+   * Só no que está VISÍVEL: a poça lembrada não pisca. Fora do FOV o terreno é
+   * memória, e memória não tem reflexo.
+   */
+  private desenharBrilhoDaAgua(
+    ctx: CanvasRenderingContext2D, x: number, y: number,
+    sx: number, sy: number, hw: number, hh: number, z: number, seen: boolean, lvl: number
+  ): void {
+    if (!seen) return;
+    const espuma = this.tileset.paleta.aguaEspuma;
+    if (!espuma) return;
+    /* Hash de (x, y): poças vizinhas brilham fora de compasso, o que é o que
+     * impede a superfície inteira de piscar como um letreiro. */
+    let h = ((x * 2246822519) ^ (y * 3266489917) ^ 0x85ebca6b) >>> 0;
+    h = (h * 1664525 + 1013904223) >>> 0;
+    const fase = h / 4294967296;
+    /* Vaivém suave em vez de laço: o reflexo volta, não recomeça. */
+    const u = Math.sin((this.t * BRILHO_AGUA_VELOCIDADE + fase) * TAU);
+    const cy = sy + hh + this.tileset.aguaAfundaPx * z;
+    /* Desliza pelo eixo (+1, 0) do grid — em tela, a diagonal para baixo-direita. */
+    const px = sx + u * hw * BRILHO_AGUA_CURSO;
+    const py = cy + u * hh * BRILHO_AGUA_CURSO;
+    const rx = hw * BRILHO_AGUA_MEIA_LARGURA;
+    const ry = hh * BRILHO_AGUA_MEIA_LARGURA;
+    /* Mais fraco nas pontas do curso, cheio no meio: o reflexo entra e sai da
+     * lâmina em vez de bater na beirada e sumir. */
+    const forca = 1 - Math.abs(u);
+    /* E ele obedece à LUZ do tile, ao contrário do convite e do texto de XP:
+     * reflexo é cenário, não feedback — água longe da tocha reflete menos. Não
+     * apaga de todo (`BRILHO_AGUA_PISO`) porque o que ele comunica é "aqui não
+     * se pisa", e essa informação vale no escuro também. */
+    const luz = BRILHO_AGUA_PISO + (1 - BRILHO_AGUA_PISO) * (lvl / (LEVELS - 1));
+    ctx.save();
+    ctx.globalAlpha =
+      ctx.globalAlpha * luz * (BRILHO_AGUA_ALFA_MIN + forca * (BRILHO_AGUA_ALFA_MAX - BRILHO_AGUA_ALFA_MIN));
+    ctx.fillStyle = espuma;
+    pathDiamond(ctx, px, py - ry, rx, ry);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /**
+   * O bloco de terreno de um tile, colado pela ÂNCORA do atlas sobre o centro
+   * do losango — o MESMO ponto e o MESMO critério do herói, dos monstros, dos
+   * despojos e dos pontos de parada. É essa coincidência, e só ela, que faz o
+   * terreno e o elenco dividirem uma grade só.
+   *
+   * ═══ POR QUE A ÂNCORA, E NÃO O CENTRO DO QUADRO ═══
+   *
+   * `atlas.ancoraX/ancoraY` NÃO é "o meio do desenho": é a projeção da ORIGEM
+   * do modelo, o ponto (0, 0, 0) do rig, medida em px dentro do quadro (ver
+   * `ancoraArteX = margem − x0` em `./spriteForge`). Como o tileset calibra
+   * todo bloco com o topo do piso em z = 0 (cabeçalho de `./tilesets/nivel1.ts`)
+   * e a projeção manda `(0,0,0)` para o centro do losango, colar a âncora no
+   * centro do losango é colar a SUPERFÍCIE do bloco exatamente onde o jogo diz
+   * que o chão daquele tile está.
+   *
+   * Medido, e não deduzido (sonda de forja do piso de grama, zoom 1):
+   *
+   *   piso grama    quadro 68×57  âncora (34, 27)  centro do quadro (34, 28,5)
+   *   parede terra  quadro 68×83  âncora (34, 63)  centro do quadro (34, 41,5)
+   *   água          quadro 68×49  âncora (34, 19)  centro do quadro (34, 24,5)
+   *   tufo          quadro 20×25  âncora (10, 17)  centro do quadro (10, 12,5)
+   *
+   * Com a âncora em (34, 27), os quatro cantos do quadrado do tile em z = 0
+   * caem em (34, 11), (66, 27), (34, 43) e (2, 27) — ou seja, um losango de
+   * 64 × 32 px centrado na âncora, que é `CONFIG.TW × CONFIG.TH` na mosca.
+   *
+   * A tentativa anterior colava pelo centro do quadro mais uma correção
+   * `(alturaFrame − ancoraY)/2`. Ela punha a origem do modelo ABAIXO do centro
+   * do losango, e por uma distância DIFERENTE em cada peça — porque a distância
+   * entre a âncora e o centro do quadro depende de quanto o rig sobe e desce, e
+   * cada rig sobe e desce o seu: +14 px no piso, +32 px na parede, +10 px na
+   * água, +9 px no tufo. Daí os três sintomas de uma vez: o elenco (colado pela
+   * âncora, certo) parecia flutuar sobre um chão que descera 14 px; a parede
+   * descia 32 px e cobria quem estava atrás dela; e o piso, a água e o adereço
+   * do MESMO tile desalinhavam entre si, porque cada um errava por um número
+   * diferente. Escada, porta e sombra de parede continuavam em cima do losango
+   * de verdade (são primitivas, não sprite) e ficavam pairando num buraco preto
+   * — que era o retrato mais claro do defeito.
+   *
+   * A luz entra por `quadroModulado`, como no elenco: o terreno escurece com a
+   * distância, e as cores emissivas do tileset (a flor laranja do nível 1)
+   * atravessam acesas sem que este método saiba que elas existem.
+   *
+   * Devolve `false` quando não há pixel nenhum a colar (atlas indisponível) —
+   * o sinal de "desenhe do jeito antigo" para quem chamou.
+   *
+   * Posição arredondada e tamanho não: é o que o resto do arquivo faz com todo
+   * sprite, e no terreno tem uma consequência a mais que vale registrar. Em
+   * zoom 1 os tiles distam 32/16 px INTEIROS, então arredondar preserva o
+   * espaçamento exato e os blocos encaixam sem costura. Em zoom fracionário
+   * pode sobrar meio pixel entre dois blocos — e o que aparece nessa fresta não
+   * é o fundo, é a SAIA do bloco de trás (o corpo de 4u que desce abaixo do
+   * topo, desenhado antes por estar numa antidiagonal anterior). Ou seja: o pior
+   * caso é uma linha escura de um pixel onde o tileset já desenha o contorno
+   * entre blocos.
+   */
   private colarTerreno(
     ctx: CanvasRenderingContext2D, atlas: AtlasPersonagem,
     cx: number, cy: number, z: number, lvl: number
   ): boolean {
     const f = quadroModulado(atlas, DIR_TERRENO, 'parado', 0, lvl / (LEVELS - 1));
     if (!f.fonte) return false;
-    // O terreno é âncora de CAIXA, não de corpo: o rig foi calibrado na origem
-    // (z = 0 é o topo do piso e o corpo desce em -Z), então o retículo do atlas
-    // o envolve com a âncora no plano da superfície e NÃO no meio do quadro.
-    // Colar por `ancoraX/Y` desloca o losango para cima — é o que fazia a
-    // fileira de trás ser coberta e a frente ficar vazia, e deslocava o
-    // desenho conforme a direção. O piso não gira e não sobe: o centro do
-    // quadro é a resposta certa, e é estável para todas as peças do tileset.
-    // E o centro do quadro no EIXO DA TELA é um tiquinho abaixo do centro do
-    // frame: o retículo do atlas cresce para BAIXO da âncora (o corpo do rig
-    // desce em -Z), então colar no meio do quadro sobe a peça metade do corpo.
-    // `alturaFrame - ancoraY` é exatamente a distância da âncora ao topo: o
-    // deslocamento vertical certo para a superfície cair no centro do losango.
-    const dx = Math.round(cx - (atlas.larguraFrame / 2) * z);
-    const dy = Math.round(cy - (atlas.alturaFrame / 2) * z) + Math.round((atlas.alturaFrame - atlas.ancoraY) * z / 2);
+    const dx = Math.round(cx - atlas.ancoraX * z);
+    const dy = Math.round(cy - atlas.ancoraY * z);
     const suave = ctx.imageSmoothingEnabled;
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(f.fonte, f.sx, f.sy, f.largura, f.altura, dx, dy, f.largura * z, f.altura * z);

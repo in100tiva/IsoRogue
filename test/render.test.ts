@@ -51,8 +51,10 @@ import { setStorage } from '../src/engine/save';
 import { store } from '../src/engine/store';
 import type { Enemy, Game, Item, ItemKind, Point } from '../src/engine/types';
 import { IsoRenderer } from '../src/render/IsoRenderer';
+import { ART_POR_U, PIXEL, medirModelo } from '../src/render/model3d';
 import { COL_HOVER_LINE, LEVELS, buildLuts } from '../src/render/palette';
-import { limparCacheAtlas, limparCacheLuz } from '../src/render/spriteForge';
+import { giroDaDirecao, limparCacheAtlas, limparCacheLuz } from '../src/render/spriteForge';
+import { TILESET_NIVEL1 } from '../src/render/tilesets';
 
 /* Sem localStorage: cada caso parte de um estado explícito. */
 setStorage(null);
@@ -358,6 +360,14 @@ function facingDoMercador(r: IsoRenderer): number {
 interface AtlasMedido {
   larguraFrame: number;
   alturaFrame: number;
+  /**
+   * A projeção da ORIGEM do rig dentro do quadro (`spriteForge`). É o ponto que
+   * tem de cair no centro do losango — para o terreno E para o elenco. Sem ele
+   * não dá para provar o alinhamento: a colagem é `centro − âncora`, e sem a
+   * âncora só se veem dois números de tela sem relação declarada.
+   */
+  ancoraX: number;
+  ancoraY: number;
 }
 
 /**
@@ -389,6 +399,33 @@ function medidasDoPapel(r: IsoRenderer, papel: string): Set<string> {
 /** As colagens cujo quadro é de um dos atlas daquele papel. */
 function colagensDe(colagens: Colagem[], medidas: Set<string>): Colagem[] {
   return colagens.filter((c) => medidas.has(medida(c.largura, c.altura)));
+}
+
+/**
+ * O cache de atlas dos PONTOS DE PARADA (mercador, caldeirão, estante, mesa).
+ * Privado pelo mesmo motivo de `atlasTerreno`, e lido aqui pela mesma razão: é
+ * o único jeito de reconhecer a peça numa colagem e de saber a âncora dela.
+ */
+function atlasesDeParada(r: IsoRenderer): Map<string, AtlasMedido | null> {
+  return (r as unknown as { atlasParada: Map<string, AtlasMedido | null> }).atlasParada;
+}
+
+/**
+ * ONDE aquela colagem assentou: o ponto do mundo em que a ORIGEM do rig caiu.
+ *
+ * É a conta de `colarTerreno` e de `desenharParada` desfeita — as duas colam em
+ * `centro − âncora·zoom`, então somar a âncora de volta devolve o centro. É esta
+ * função que transforma "dois `drawImage` em posições diferentes" em "duas peças
+ * apontando para o MESMO ponto de referência", que é o invariante em teste.
+ */
+function assentamento(c: Colagem, a: AtlasMedido, z: number): { x: number; y: number } {
+  return { x: c.dx + a.ancoraX * z, y: c.dy + a.ancoraY * z };
+}
+
+/** O centro do losango de um tile — o ponto onde tudo assenta. */
+function centroDoLosango(r: IsoRenderer, g: Game, x: number, y: number): { x: number; y: number } {
+  const p = r.tileToScreen(g, x, y);
+  return { x: p.sx, y: p.sy + (CONFIG.TH / 2) * r.cam.zoom };
 }
 
 /**
@@ -1188,5 +1225,313 @@ describe('IsoRenderer — o terreno do tileset', () => {
     const nComAdereco = contar();
     expect(nComAdereco, 'o herói pisou no adereço e ele continuou desenhado')
       .toBe(nSemAdereco - 1);
+  });
+
+  /* ------------------------------------------------------------------ *
+   * A ESCADA NÃO RECEBE ADEREÇO — regressão de um `else` que trocou de dono
+   * ------------------------------------------------------------------ */
+
+  it('a escada não recebe adereço: o glifo da saída nunca é coberto', () => {
+    /*
+     * O passe de pisos era `if (escada) … else if (porta) … else adereço`. Quando
+     * a cachoeira entrou entre o encadeamento e o `else`, o `else` passou a casar
+     * com `if (agua)` — e a escada, que estava protegida pela estrutura, voltou a
+     * sortear seixo em silêncio. Um adereço em cima do glifo esconde a única
+     * saída do andar, e nada no jogo avisa.
+     *
+     * A prova é por ELIMINAÇÃO, o mesmo método do caso anterior: acha-se um tile
+     * visível QUE TEM adereço, transforma-se ele em escada e o total tem de cair
+     * de exatamente um. Se a exclusão não existisse, o total não se mexeria.
+     */
+    const g = store.getGame();
+    g.enemies = [];
+    g.items = [];
+    g.mercador = null;
+    g.bancada = null;
+    g.alquimiaExtras = [];
+
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+    const medidas = medidasDoPapel(renderer, '1:adereco');
+    const contar = (): number => {
+      falso.colagens.length = 0;
+      renderer.draw(g);
+      return colagensDe(falso.colagens, medidas).length;
+    };
+    const n0 = colagensDe(falso.colagens, medidas).length;
+    expect(n0, 'o andar não recebeu adereço nenhum').toBeGreaterThan(0);
+
+    let comAdereco: Point | null = null;
+    for (const c of todosOsTilesVisiveisLivres()) {
+      if (g.map.tiles[c.y * g.map.w + c.x] !== CONFIG.TILE.FLOOR) continue;
+      if (g.map.agua && g.map.agua[c.y * g.map.w + c.x]) continue;
+      g.bancada = c;
+      const n = contar();
+      g.bancada = null;
+      if (n === n0 - 1) { comAdereco = c; break; }
+    }
+    expect(comAdereco, 'nenhum tile visível tinha adereço para ceder').not.toBeNull();
+
+    const alvo = comAdereco as Point;
+    const i = alvo.y * g.map.w + alvo.x;
+    const antes = g.map.tiles[i];
+    g.map.tiles[i] = CONFIG.TILE.STAIRS;
+    expect(contar(), 'nasceu adereço em cima do glifo da escada').toBe(n0 - 1);
+    g.map.tiles[i] = CONFIG.TILE.DOOR;
+    expect(contar(), 'nasceu adereço em cima da porta').toBe(n0 - 1);
+    g.map.tiles[i] = antes;
+    expect(contar(), 'o adereço não voltou quando o tile virou piso de novo').toBe(n0);
+  });
+});
+
+/* ================================================================== *
+ * A GRADE: o terreno e o elenco assentam no MESMO ponto
+ *
+ * Este bloco existe por causa de uma regressão que custou os três sintomas de
+ * uma vez — herói e mobília "descentralizados", peças de terreno cobrindo
+ * entidades, e cantos que a imagem mostrava abertos recusando a passagem.
+ *
+ * A causa foi uma só: `colarTerreno` deixou de colar pela ÂNCORA do atlas e
+ * passou a colar pelo centro do quadro mais uma correção. `ancoraX/ancoraY` NÃO
+ * é o meio do desenho — é a projeção da origem `(0,0,0)` do rig dentro do
+ * quadro (ver `spriteForge`), e como o tileset calibra todo bloco com o topo do
+ * piso em z = 0, essa origem é EXATAMENTE o centro do losango. O centro do
+ * quadro, por outro lado, depende de quanto cada rig sobe e desce: o erro dava
+ * +14 px no piso, +32 px na parede, +10 px na água e +9 px no tufo — cada peça
+ * do MESMO tile num lugar diferente, e o elenco (que sempre colou pela âncora)
+ * flutuando sobre tudo.
+ *
+ * O que estes casos travam, e que nenhum outro alcança:
+ *
+ *   1. o piso e a peça do mesmo tile reconstroem o MESMO ponto, e esse ponto é
+ *      o centro do losango. A diferença entre as duas colagens é, na conta,
+ *      exatamente a diferença das âncoras — que é o que a frase "usam o mesmo
+ *      critério" quer dizer em números;
+ *   2. NENHUM bloco de piso sai da grade: todo assentamento cai num centro de
+ *      losango conhecido do mapa;
+ *   3. o rig do terreno não sobe acima do vértice N do próprio losango. Este é
+ *      o guarda GEOMÉTRICO da ordem do pintor: o passe de pisos de uma
+ *      antidiagonal roda DEPOIS das entidades da anterior, então um bloco que
+ *      passasse do próprio vértice cobriria quem está atrás — e o conserto não
+ *      seria de ordem, seria de rig. Hoje as lâminas de grama respeitam o
+ *      limite na mosca (topo em −16,0 px, o vértice); o caso está aqui para o
+ *      dia em que alguém quiser lâminas de 6u.
+ * ================================================================== */
+
+describe('IsoRenderer — a grade do terreno e a do elenco', () => {
+  let falso: ContextoFalso;
+  let renderer: IsoRenderer;
+
+  beforeEach(() => {
+    store.newRun(SEMENTE);
+    instalarDomDeForja();
+    falso = criarContextoFalso();
+    renderer = new IsoRenderer(criarCanvasFalso(falso.ctx));
+  });
+
+  afterEach(() => {
+    removerDomDeForja();
+  });
+
+  it('o piso e a peça do MESMO tile assentam no centro do losango', () => {
+    const g = store.getGame();
+    /* Um tile visível, livre e de piso comum: o caldeirão vai para cima dele, e
+     * é o par (bloco de piso, peça) daquele losango que este caso mede. */
+    let alvo: Point | null = null;
+    for (const c of todosOsTilesVisiveisLivres()) {
+      const i = c.y * g.map.w + c.x;
+      if (g.map.tiles[i] !== CONFIG.TILE.FLOOR) continue;
+      if (g.map.agua && g.map.agua[i]) continue;
+      alvo = c;
+      break;
+    }
+    expect(alvo, 'o campo de visão não ofereceu um tile de piso seco').not.toBeNull();
+    const tile = alvo as Point;
+
+    g.enemies = [];
+    g.items = [];
+    g.mercador = null;
+    g.alquimiaExtras = [];
+    g.bancada = tile;
+
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+
+    const z = renderer.cam.zoom;
+    const centro = centroDoLosango(renderer, g, tile.x, tile.y);
+
+    /* Qual variante de piso o tile usa: a MESMA conta do renderer (bucket do
+     * decor, fechado com módulo sobre a lista do tileset). Sem isto não dá para
+     * escolher o atlas certo entre as oito chaves de `1:piso:k`. */
+    const bucket = g.map.decor ? g.map.decor[tile.y * g.map.w + tile.x] & 7 : 0;
+    const k = bucket % TILESET_NIVEL1.piso.length;
+    const atlasPiso = atlasesDoTerreno(renderer).get('1:piso:' + k);
+    const atlasCald = atlasesDeParada(renderer).get('caldeirao');
+    expect(atlasPiso, 'o atlas do piso daquele tile não foi forjado').toBeTruthy();
+    expect(atlasCald, 'o atlas do caldeirão não foi forjado').toBeTruthy();
+    const ap = atlasPiso as AtlasMedido;
+    const ac = atlasCald as AtlasMedido;
+
+    /* As duas colagens: reconhecidas pelo tamanho do quadro (a assinatura de
+     * quem foi colado) e, no caso do piso, pela posição — há um bloco de piso
+     * por tile visível, e só um deles é o do losango em questão. */
+    const doPiso = falso.colagens.filter(
+      (c) => c.largura === ap.larguraFrame && c.altura === ap.alturaFrame
+    );
+    const daPeca = falso.colagens.filter(
+      (c) => c.largura === ac.larguraFrame && c.altura === ac.alturaFrame
+    );
+    expect(daPeca.length, 'o caldeirão não foi colado').toBe(1);
+
+    const pontoPeca = assentamento(daPeca[0], ac, z);
+    expect(Math.abs(pontoPeca.x - centro.x), 'a peça não assentou no centro do losango (x)')
+      .toBeLessThanOrEqual(0.5);
+    expect(Math.abs(pontoPeca.y - centro.y), 'a peça não assentou no centro do losango (y)')
+      .toBeLessThanOrEqual(0.5);
+
+    const pisoDoTile = doPiso.filter((c) => {
+      const p = assentamento(c, ap, z);
+      return Math.abs(p.x - centro.x) <= 0.5 && Math.abs(p.y - centro.y) <= 0.5;
+    });
+    expect(
+      pisoDoTile.length,
+      'nenhum bloco de piso assentou no centro daquele losango — terreno e elenco em grades diferentes'
+    ).toBe(1);
+
+    /* E o fecho da frase: a diferença entre os dois pontos de colagem é
+     * INTEIRAMENTE explicada pelas âncoras. Um pixel de folga em cada eixo é o
+     * arredondamento que as duas colagens fazem em separado (`Math.round` por
+     * peça), não um deslocamento. */
+    const dxEsperado = (ac.ancoraX - ap.ancoraX) * z;
+    const dyEsperado = (ac.ancoraY - ap.ancoraY) * z;
+    expect(
+      Math.abs((pisoDoTile[0].dx - daPeca[0].dx) - dxEsperado),
+      'a diferença horizontal entre as colagens não é a diferença das âncoras'
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.abs((pisoDoTile[0].dy - daPeca[0].dy) - dyEsperado),
+      'a diferença vertical entre as colagens não é a diferença das âncoras'
+    ).toBeLessThanOrEqual(1);
+  });
+
+  it('nenhum sprite de terreno sai da grade: todo assentamento é um centro de losango', () => {
+    const g = store.getGame();
+    renderer.update(g, 0.016);
+    renderer.draw(g);
+
+    const z = renderer.cam.zoom;
+    /* Todos os centros de losango do mapa, arredondados — a grade inteira. */
+    const grade = new Set<string>();
+    for (let y = 0; y < g.map.h; y++) {
+      for (let x = 0; x < g.map.w; x++) {
+        const c = centroDoLosango(renderer, g, x, y);
+        grade.add(Math.round(c.x) + ',' + Math.round(c.y));
+      }
+    }
+
+    /*
+     * Os atlas de terreno indexados pela assinatura do quadro. Uma medida pode
+     * ter MAIS DE UM dono — o piso de lajota e a água são os dois 68×52 — e as
+     * âncoras deles diferem em 8 px, que é justamente o afundamento da poça.
+     * Por isso a conferência é "ALGUM dono explica esta colagem", e não "o dono
+     * é este": com espaçamento vertical de 32 px entre losangos de mesma coluna,
+     * dois candidatos a 8 px de distância jamais caem os dois na grade — a
+     * ambiguidade não afrouxa a prova.
+     */
+    const candidatos = new Map<string, AtlasMedido[]>();
+    for (const [, atlas] of atlasesDoTerreno(renderer)) {
+      if (!atlas) continue;
+      const m = medida(atlas.larguraFrame, atlas.alturaFrame);
+      const lista = candidatos.get(m);
+      if (lista) lista.push(atlas);
+      else candidatos.set(m, [atlas]);
+    }
+    expect(candidatos.size, 'nenhum atlas de terreno foi forjado').toBeGreaterThan(0);
+
+    let conferidos = 0;
+    for (const c of falso.colagens) {
+      const donos = candidatos.get(medida(c.largura, c.altura));
+      if (!donos) continue;
+      const pontos = donos.map((a) => {
+        const p = assentamento(c, a, z);
+        return Math.round(p.x) + ',' + Math.round(p.y);
+      });
+      expect(
+        pontos.some((p) => grade.has(p)),
+        'um sprite de terreno assentou fora da grade de losangos: ' + pontos.join(' | ')
+      ).toBe(true);
+      conferidos++;
+    }
+    expect(conferidos, 'nenhum sprite de terreno foi conferido').toBeGreaterThan(10);
+  });
+
+  it('nenhum bloco do tileset sobe acima do vértice N do próprio losango', () => {
+    /*
+     * O GUARDA GEOMÉTRICO da ordem do pintor. Os pisos de uma antidiagonal são
+     * desenhados DEPOIS das entidades da antidiagonal anterior — é o preço de
+     * um passe único por faixa, e não se conserta com ordem. O que mantém isso
+     * inofensivo é o RIG: enquanto o bloco não passar do vértice norte do
+     * próprio losango, nenhum pixel dele pode cair sobre quem está atrás.
+     *
+     * `CONFIG.TH / 2` = 16 px é o vértice. Hoje os pisos batem exatos nele (as
+     * lâminas de grama são todas das bordas +Y e +X, as que a projeção mostra à
+     * frente, e por isso não estouram o topo). Uma lâmina de 6u no miolo do
+     * bloco quebraria este caso — e é para isso que ele existe.
+     *
+     * A PAREDE fica de fora, e é decisão, não esquecimento: ela SOBE 36 px de
+     * propósito (é o volume que o prisma geométrico sempre ocupou) e cobrir o
+     * que está atrás é o trabalho dela. Quem cuida do caso em que isso encobre
+     * o herói é `ALFA_PAREDE_OCULTA`, não a geometria.
+     */
+    const limite = CONFIG.TH / 2;
+    const giro = giroDaDirecao(2); // DIR_TERRENO: giro zero, o bloco sem rotação
+    const pecas: Array<[string, unknown]> = [];
+    TILESET_NIVEL1.piso.forEach((m, i) => { pecas.push(['piso[' + i + ']', m]); });
+    TILESET_NIVEL1.aderecos.forEach((m, i) => { pecas.push(['adereço[' + i + ']', m]); });
+    if (TILESET_NIVEL1.agua) pecas.push(['água', TILESET_NIVEL1.agua]);
+
+    for (const [nome, modelo] of pecas) {
+      const c = medirModelo(modelo as never, {
+        pose: TILESET_NIVEL1.repouso, giro: giro, escala: ART_POR_U
+      });
+      const sobe = -c.minY * PIXEL;
+      expect(sobe, nome + ' sobe ' + sobe.toFixed(1) + ' px acima do centro do losango — o teto é ' + limite)
+        .toBeLessThanOrEqual(limite);
+    }
+  });
+
+  it('a poça AFUNDA o bastante para ler como obstáculo', () => {
+    /*
+     * A água é o único terreno que parece piso e não é: `map.tiles` a mantém
+     * como `Tile.Floor` e quem barra o passo é o bitmap `map.agua`
+     * (`isWalkable`, src/engine/mapgen.ts) — e, pelo corte de canto de `mover`,
+     * ela tranca também as diagonais em volta. Medido em quatro sementes, um
+     * andar tem 41 a 58 tiles de água que recusam de 95 a 148 passos ortogonais
+     * e de 50 a 86 diagonais cujo ALVO estava livre.
+     *
+     * Regra que não se vê é regra que o jogador chama de bug. Com o afundamento
+     * antigo de 1,2u (3 px) a poça lia como laje azul rente ao chão; o degrau
+     * mínimo para o barranco do vizinho aparecer acima da lâmina é meia fileira
+     * de tela. Este caso trava o número, não a cor.
+     */
+    expect(TILESET_NIVEL1.agua, 'o tileset perdeu o rig de água').toBeTruthy();
+    expect(
+      TILESET_NIVEL1.aguaAfundaPx,
+      'a poça afundou de menos: o degrau não aparece e a água lê como piso'
+    ).toBeGreaterThanOrEqual(6);
+    /* E ela não pode virar cratera: mais que uma fileira inteira e a lâmina
+     * some atrás do bloco da frente. */
+    expect(TILESET_NIVEL1.aguaAfundaPx, 'a poça virou buraco').toBeLessThanOrEqual(CONFIG.TH / 2);
+
+    /* O topo do rig tem de estar de fato ABAIXO do plano do chão, e por esse
+     * mesmo tanto: o número acima só vale se o modelo o obedecer. */
+    const c = medirModelo(TILESET_NIVEL1.agua as never, {
+      pose: TILESET_NIVEL1.repouso, giro: giroDaDirecao(2), escala: ART_POR_U
+    });
+    const sobe = -c.minY * PIXEL;
+    expect(
+      CONFIG.TH / 2 - sobe,
+      'o rig da água não afunda o que o tileset declara'
+    ).toBeGreaterThanOrEqual(TILESET_NIVEL1.aguaAfundaPx - 1);
   });
 });

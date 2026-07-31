@@ -3022,9 +3022,12 @@ describe('T15 — missões: geração por andar, abate, entrega e travessia', ()
  *     `map.agua` tem w*h, e o snapshot é v6 com `agua=` antes de `map=`
  *     (T16.0);
  *   · o vazio só existe FORA do construído: nunca em sala, nunca encostado
- *     em piso, nunca no anel externo — e todo andar TEM penhasco (T16.1);
+ *     em chão que se pisa — e todo andar TEM penhasco (T16.1);
  *   · as poças são regiões 4-conexas de 2..5 tiles, dentro de uma sala só,
- *     longe do início e da escada, em ~metade das salas (T16.2);
+ *     longe do início e da escada, em ~metade das salas (T16.2). Os braços
+ *     de mar que a fase da enseada acrescentou têm régua própria e bloco
+ *     próprio — T17 —, e T16.2 os recorta da amostra em vez de fingir que
+ *     toda água do andar é poça;
  *   · nada fica isolado pela água: do início se alcança a escada e TODO
  *     tile transitável (T16.3);
  *   · o jogador é barrado por água e por vazio sem consumir turno, com uma
@@ -3076,6 +3079,24 @@ function componentesDeAgua(map: GameMap): number[][] {
 function dentroDeSala(map: GameMap, x: number, y: number): boolean {
   for (const r of map.rooms) {
     if (x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return true;
+  }
+  return false;
+}
+
+/**
+ * Um corpo d'água é CANAL quando tem ao menos um tile fora de todo retângulo
+ * de sala — isto é, quando ocupa tile que, sem a fase da enseada, seria
+ * parede. Poça não sai do retângulo da sala; canal não entra nele. Quando os
+ * dois se encostam, o componente 4-conexo é um só e conta como canal: é
+ * exatamente a "consistência de ambiente" que o dono pediu (a poça da sala
+ * lida como margem interna da mesma enseada), e as regras de tamanho da poça
+ * não se aplicam a um corpo que já é braço de mar.
+ */
+function ehCorpoDeCanal(map: GameMap, comp: number[]): boolean {
+  for (const i of comp) {
+    const x = i % map.w;
+    const y = (i - x) / map.w;
+    if (!dentroDeSala(map, x, y)) return true;
   }
   return false;
 }
@@ -3138,7 +3159,7 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
     game.map.agua[game.map.start.y * map.w + game.map.start.x] = 0;
   }, LENTO);
 
-  it('o vazio fica fora do construído: nunca em sala, nunca encostado em piso, moldura intacta', () => {
+  it('o vazio fica fora do construído: nunca em sala, nunca ao lado de chão pisável, moldura intacta', () => {
     let andares = 0;
     let andaresSemVazio = 0;
     for (let i = 0; i < 24; i++) {
@@ -3179,13 +3200,32 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
               .toBe(false);
             expect(x === 0 || y === 0 || x === map.w - 1 || y === map.h - 1,
               onde + ': vazio no anel externo em (' + x + ',' + y + ')').toBe(false);
-            /* O precipício nunca encosta no construído: entre o vazio e o
-             * piso há sempre a parede de divisa — a borda da cachoeira. */
+            /* O precipício nunca encosta em CHÃO QUE SE PISA: entre o vazio e
+             * o lugar onde o jogador põe o pé há sempre a divisa — parede ou,
+             * desde a fase da enseada, água.
+             *
+             * A régua era `ehCaminhavel` (o tile CRU) e passou a ser
+             * `ehTransitavel` (o tile cru menos a água) quando o canal nasceu,
+             * e a troca é deliberada, não uma frouxidão para o teste passar:
+             *   · o que o invariante protege é a QUEDA — ninguém pode estar de
+             *     pé ao lado do abismo sem uma borda no meio —, e água é borda
+             *     tão intransponível quanto parede (`isWalkable` recusa as
+             *     duas, e é o mesmo ponto de leitura para jogador, Dijkstra,
+             *     IA e restore);
+             *   · a boca do canal É a costa: o mar de fora entrando pelo mapa
+             *     só se lê como mar se a água encostar no vazio. O renderer já
+             *     contava com isso desde o dia em que ganhou a cachoeira, que
+             *     desenha o fluxo despencando exatamente onde a água toca o
+             *     precipício — e que, sem canal, nunca chegava a aparecer;
+             *   · a parte dura do invariante continua intacta e é ESTA linha
+             *     que a mede: nenhum tile TRANSITÁVEL, em nenhuma das oito
+             *     direções, encosta no vazio. */
             for (const d of DIRS8) {
               const nx = x + d[0];
               const ny = y + d[1];
-              expect(ehCaminhavel(map, nx, ny),
-                onde + ': vazio encostado em piso — (' + x + ',' + y + ') toca (' + nx + ',' + ny + ')')
+              expect(ehTransitavel(map, nx, ny),
+                onde + ': vazio encostado em chão que se pisa — (' + x + ',' + y +
+                  ') toca (' + nx + ',' + ny + ')')
                 .toBe(false);
             }
           }
@@ -3204,6 +3244,7 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
     let salasTotal = 0;
     let salasComPoca = 0;
     let componentesTotal = 0;
+    let corposDeCanal = 0;
     for (let i = 0; i < 24; i++) {
       const semente = 'T16-POCA-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
@@ -3222,8 +3263,14 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
         }
 
         const comps = componentesDeAgua(map);
-        componentesTotal += comps.length;
         for (const comp of comps) {
+          /* O braço de mar tem régua própria e bloco próprio (T17): aqui só
+           * as POÇAS — os corpos que nascem e morrem dentro de uma sala. */
+          if (ehCorpoDeCanal(map, comp)) {
+            corposDeCanal++;
+            continue;
+          }
+          componentesTotal++;
           expect(comp.length >= 2 && comp.length <= 5,
             onde + ': região de água com ' + comp.length + ' tiles — fora de 2..5').toBe(true);
           /* Uma sala só: `roomAt` dá o MESMO id para todos os tiles da
@@ -3285,6 +3332,10 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
     expect(componentesTotal, 'T16.2: nenhuma poça na amostra inteira').toBeGreaterThan(0);
     expect(salasComPoca < salasTotal, 'T16.2: TODA sala tem poça — o chance(0.6) morreu?')
       .toBe(true);
+    /* Contraprova do recorte: se nenhum corpo fosse canal, este teste teria
+     * voltado a ser o de antes da enseada sem ninguém perceber. */
+    expect(corposDeCanal, 'T16.2: nenhum corpo de canal na amostra — o recorte não recortou nada')
+      .toBeGreaterThan(0);
   }, LENTO);
 
   it('nada fica isolado pela água: do início se alcança a escada e todo tile transitável', () => {
@@ -3533,6 +3584,353 @@ describe('T16 — penhasco e poças: vazio e água barram o passo', () => {
       const inquilino = degradado.enemies.find((e) => e.id === 9701);
       expect(inquilino, 'T16.6: o inimigo plantado no vazio sobreviveu ao restore')
         .toBe(undefined);
+    }
+  }, LENTO);
+});
+
+/* ================================================================== *
+ * T17 — a enseada: o canal é a água que substitui a PAREDE
+ *
+ * POR QUE ESTE BLOCO EXISTE, e por que ele não cabia dentro do T16: até a
+ * fase da enseada, água era relevo de SALA — a poça, sorteada sobre piso,
+ * dentro de um retângulo, 2 a 5 tiles. O dono mandou a referência de um mapa
+ * de ilha, em que a água DELIMITA o terreno: braços de mar entram pelo mapa e
+ * barram a passagem no lugar dos muros. Isso é outra coisa, com outra régua e
+ * outro risco, e um bloco que mistura as duas não protege nenhuma.
+ *
+ * O CANAL, EM UMA FRASE: uma faixa de água que nasce na costa (a parede da
+ * crosta que encosta no vazio), avança comendo muro e deixa margem de piso ao
+ * lado. Onde o canal passa, a parede some e a água toma o lugar.
+ *
+ * A REGRA DE OURO — nenhum canal isola nada — sai de uma decisão estrutural,
+ * e é ela que estes casos vigiam de quatro lados:
+ *
+ *   · o canal SÓ come parede. Um tile que já barrava o passo continua
+ *     barrando, com outro visual. Disso decorre que o CONJUNTO DE TILES
+ *     SECOS do andar atravessa a fase intacto — nenhuma sala perde caminho,
+ *     e `populate`, que sorteia sobre `isWalkable`, devolve o mesmo elenco
+ *     nos mesmos tiles (T17.1 e T17.5);
+ *   · e mesmo assim a conectividade é MEDIDA, não deduzida: BFS independente
+ *     do início até a escada e até todo tile seco, em 180 andares (T17.2);
+ *   · determinismo: a água inteira — poça e canal — é função de (semente,
+ *     profundidade), e o canal consome o stream '#agua' que já existia, no
+ *     fim dele, depois das poças (T17.3);
+ *   · e nada do que o jogador precisa alcançar amanhece molhado: início,
+ *     escada, mercador, caldeirão, extras da estação, item e inimigo (T17.4).
+ * ================================================================== */
+
+/** Números do T17 — a varredura é larga de propósito: canal é geometria, e
+ *  geometria falha em andar específico, não na média. */
+const T17 = {
+  sementes: 60,      // × profundidades 1..3 = 180 andares na conectividade
+  sementesCanal: 60, // amostra do censo de canais
+  minAncorados: 0.90 // piso de andares com enseada ancorada na costa
+};
+
+/* As réguas do gerador que o teste conhece de fora (src/engine/mapgen.ts).
+ * Duplicá-las aqui é intencional: o oráculo tem de ser independente, e uma
+ * régua importada do próprio módulo provaria apenas que o módulo concorda
+ * consigo mesmo. */
+const T17_COMP_MAX = 8;   // comprimento máximo do eixo do canal
+const T17_LARGURA_MAX = 2;
+const T17_CANAIS_MAX = 3;
+
+/** Tiles de água que ocupam lugar de parede: água FORA de todo retângulo de
+ *  sala. Poça não sai da sala; canal não entra nela — a fronteira é limpa. */
+function tilesDeCanal(map: GameMap): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < map.agua.length; i++) {
+    if (!map.agua[i]) continue;
+    const x = i % map.w;
+    const y = (i - x) / map.w;
+    if (!dentroDeSala(map, x, y)) out.push(i);
+  }
+  return out;
+}
+
+/** Corpos d'água que contêm canal (podem trazer a poça vizinha junto). */
+function corposDeCanal(map: GameMap): number[][] {
+  return componentesDeAgua(map).filter((c) => ehCorpoDeCanal(map, c));
+}
+
+/** O tile encosta (4-vizinhança) em piso SECO? É a margem da enseada. */
+function temMargemSeca(map: GameMap, x: number, y: number): boolean {
+  for (const d of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+    if (ehTransitavel(map, x + d[0], y + d[1])) return true;
+  }
+  return false;
+}
+
+/** O tile encosta (4-vizinhança) no VAZIO? É a boca, no mar de fora. */
+function encostaNoVazio(map: GameMap, x: number, y: number): boolean {
+  for (const d of [[1, 0], [0, 1], [-1, 0], [0, -1]]) {
+    const nx = x + d[0];
+    const ny = y + d[1];
+    if (nx < 0 || ny < 0 || nx >= map.w || ny >= map.h) continue;
+    if (map.tiles[ny * map.w + nx] === CONFIG.TILE.VOID) return true;
+  }
+  return false;
+}
+
+describe('T17 — a enseada: canais de água no lugar da parede', () => {
+  it('os canais existem, nascem na costa do penhasco e sempre têm margem', () => {
+    let andares = 0;
+    let comCanal = 0;
+    let ancorados = 0;
+    let corpos = 0;
+    let tilesTotal = 0;
+    let maiorPorAndar = 0;
+    for (let i = 0; i < T17.sementesCanal; i++) {
+      const semente = 'T17-CANAL-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const onde = ondeEsta('T17.1', { semente, depth });
+        andares++;
+
+        const tiles = tilesDeCanal(map);
+        const bodies = corposDeCanal(map);
+        tilesTotal += tiles.length;
+        if (tiles.length > maiorPorAndar) maiorPorAndar = tiles.length;
+        if (tiles.length > 0) comCanal++;
+
+        /* Teto do andar: no máximo CANAL_MAX braços, cada um com no máximo
+         * comprimento × largura tiles. Dois braços que se encostam viram UM
+         * corpo — daí a comparação ser com o teto, e não com a igualdade. */
+        expect(bodies.length, onde + ': mais corpos de canal do que o gerador sorteia')
+          .toBeLessThanOrEqual(T17_CANAIS_MAX);
+        expect(tiles.length,
+          onde + ': ' + tiles.length + ' tiles de canal — acima do teto do gerador')
+          .toBeLessThanOrEqual(T17_CANAIS_MAX * T17_COMP_MAX * T17_LARGURA_MAX);
+
+        /* Cada tile de canal, um por um: é PISO com o bitmap marcado (a mesma
+         * representação da poça — nenhum valor novo em `Tile`, nenhum formato
+         * novo no save), e jamais na moldura externa do mapa. */
+        for (const i0 of tiles) {
+          const x = i0 % map.w;
+          const y = (i0 - x) / map.w;
+          expect(map.tiles[i0], onde + ': tile de canal em (' + x + ',' + y + ') não é piso')
+            .toBe(CONFIG.TILE.FLOOR);
+          expect(x === 0 || y === 0 || x === map.w - 1 || y === map.h - 1,
+            onde + ': canal furou a moldura em (' + x + ',' + y + ')').toBe(false);
+          expect(ehTransitavel(map, x, y),
+            onde + ': tile de canal em (' + x + ',' + y + ') é transitável — a água não barrou')
+            .toBe(false);
+        }
+
+        /* Cada CORPO com canal: nasce no mar (encosta no vazio) e tem margem
+         * (encosta em piso seco). A margem não é enfeite — é o que faz o
+         * braço ser uma enseada com beira, e não uma bolha d'água enterrada
+         * na rocha que nenhuma sala enxerga. */
+        for (const corpo of bodies) {
+          corpos++;
+          let costa = false;
+          let margem = false;
+          for (const i0 of corpo) {
+            const x = i0 % map.w;
+            const y = (i0 - x) / map.w;
+            if (encostaNoVazio(map, x, y)) costa = true;
+            if (temMargemSeca(map, x, y)) margem = true;
+          }
+          expect(margem, onde + ': corpo de canal de ' + corpo.length +
+            ' tiles sem nenhuma margem de piso seco').toBe(true);
+          if (costa) ancorados++;
+        }
+      }
+    }
+    expect(andares, 'T17.1: a varredura não rodou os 180 andares').toBe(T17.sementesCanal * 3);
+    /* A contraprova que impede este bloco inteiro de passar verde sem canal
+     * nenhum: a enseada tem de aparecer, e ancorada na borda. */
+    const fracao = comCanal / andares;
+    expect(fracao >= T17.minAncorados,
+      'T17.1: só ' + comCanal + '/' + andares + ' andares (' + (fracao * 100).toFixed(1) +
+        '%) ganharam canal — a enseada sumiu?').toBe(true);
+    expect(ancorados, 'T17.1: nenhum corpo de canal nasceu encostado no vazio — ' +
+      'os braços viraram piscina no meio da rocha').toBe(corpos);
+    expect(tilesTotal, 'T17.1: nenhum tile de canal na amostra inteira').toBeGreaterThan(0);
+    expect(maiorPorAndar >= 3,
+      'T17.1: o maior canal da amostra tem ' + maiorPorAndar + ' tiles — braço curto demais')
+      .toBe(true);
+  }, LENTO);
+
+  it('a regra de ouro: nenhum canal isola sala, escada ou início', () => {
+    for (let i = 0; i < T17.sementes; i++) {
+      const semente = 'T17-CONECT-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const map = generate(semente, depth);
+        const onde = ondeEsta('T17.2', { semente, depth });
+
+        /* BFS independente sobre a caminhabilidade EFETIVA — piso seco, porta
+         * e escada. É o mesmo oráculo do T16.3, aqui varrendo 180 andares:
+         * conectividade é a única coisa que o canal poderia quebrar, e o
+         * gerador prefere reverter o braço inteiro a arriscar. */
+        const r = alcancaveis(map, map.agua);
+        const secos = contarCaminhaveis(map) - contarAgua(map);
+        expect(r.inicioInvalido, onde + ': o início ficou sem piso seco').toBe(false);
+        expect(r.total, onde + ': o canal isolou ' + (secos - r.total) + ' tiles secos')
+          .toBe(secos);
+        expect(r.vistos[map.stairs.y * map.w + map.stairs.x],
+          onde + ': o canal cortou o caminho do início até a escada').toBe(1);
+        expect(map.connectivity, onde + ': map.connectivity efetiva !== 1').toBe(1);
+
+        /* Sala por sala: nenhuma amanhece sem um tile seco alcançável. Uma
+         * sala inteira do outro lado da água seria o pior estrago possível
+         * do canal, e a BFS global sozinha não diria em qual sala foi. */
+        for (const sala of map.rooms) {
+          let vivo = 0;
+          for (let y = sala.y; y < sala.y + sala.h; y++) {
+            for (let x = sala.x; x < sala.x + sala.w; x++) {
+              if (r.vistos[y * map.w + x]) vivo++;
+            }
+          }
+          expect(vivo, onde + ': a sala #' + sala.id + ' ficou sem tile seco alcançável')
+            .toBeGreaterThan(0);
+        }
+      }
+    }
+  }, LENTO);
+
+  it('determinismo: a mesma semente devolve a mesma água, tile a tile', () => {
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T17-DET-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const a = generate(semente, depth);
+        const b = generate(semente, depth);
+        const onde = ondeEsta('T17.3', { semente, depth });
+        expect(Array.from(b.agua), onde + ': o bitmap de água divergiu entre duas gerações')
+          .toEqual(Array.from(a.agua));
+        expect(Array.from(b.tiles), onde + ': os tiles divergiram entre duas gerações')
+          .toEqual(Array.from(a.tiles));
+        expect(tilesDeCanal(b), onde + ': os canais divergiram entre duas gerações')
+          .toEqual(tilesDeCanal(a));
+
+        /* Semente vizinha dá canal DIFERENTE: sem esta linha, um gerador que
+         * ignorasse a semente e cavasse sempre o mesmo braço passaria verde
+         * no teste de determinismo. */
+        const outra = generate('T17-DET-outra-' + pad(i, 4), depth);
+        expect(tilesDeCanal(outra).join(','),
+          onde + ': duas sementes diferentes cavaram o MESMO canal')
+          .not.toBe(tilesDeCanal(a).join(','));
+      }
+    }
+  }, LENTO);
+
+  it('a água nunca cobre início, escada, mercador, caldeirão, extras, item ou inimigo', () => {
+    let comEstacao = 0;
+    for (let i = 0; i < 24; i++) {
+      const semente = 'T17-SECO-' + pad(i, 4);
+      for (let depth = 1; depth <= 2; depth++) {
+        const game = createState(semente, depth);
+        const map = game.map;
+        const onde = ondeEsta('T17.4', { semente, depth });
+        const molhado = (p: Point | null, quem: string): void => {
+          if (!p) return;
+          expect(ehAgua(map, p.x, p.y), onde + ': ' + quem + ' debaixo d\'água em (' +
+            p.x + ',' + p.y + ')').toBe(false);
+          expect(ehTransitavel(map, p.x, p.y), onde + ': ' + quem +
+            ' fora de piso seco em (' + p.x + ',' + p.y + ')').toBe(true);
+        };
+        molhado(map.start, 'o início');
+        molhado(map.stairs, 'a escada');
+        molhado({ x: game.player.x, y: game.player.y }, 'o jogador');
+        molhado(game.mercador, 'o mercador');
+        molhado(game.bancada, 'o caldeirão');
+        for (let k = 0; k < game.alquimiaExtras.length; k++) {
+          molhado(game.alquimiaExtras[k], 'o extra #' + k + ' da estação');
+        }
+        for (const e of game.enemies) molhado({ x: e.x, y: e.y }, 'o inimigo ' + e.id);
+        for (const it of game.items) molhado({ x: it.x, y: it.y }, 'o item ' + it.id);
+        if (game.bancada) comEstacao++;
+      }
+    }
+    /* Contraprova: a amostra precisa ter tido estação para provar algo sobre
+     * ela — 48 andares sem caldeirão nenhum seriam 48 asserções vazias. */
+    expect(comEstacao, 'T17.4: nenhum andar da amostra montou a estação de alquimia')
+      .toBeGreaterThan(0);
+  }, LENTO);
+
+  it('o canal não roubou u32 de ninguém: a população saiu onde já saía', () => {
+    /*
+     * A PROVA QUE O DONO PEDIU, e a única forma honesta de fazê-la dentro de
+     * um teste: as posições abaixo foram COLHIDAS DO GERADOR DE ANTES DA
+     * ENSEADA (commit 9a7fd4e, `git show HEAD:src/engine/mapgen.ts`) e estão
+     * congeladas aqui. Se um dia o canal — ou qualquer coisa na fase da água
+     * — consumir um u32 fora do stream '#agua', ou morder um tile de piso,
+     * este caso fica vermelho apontando a linha exata.
+     *
+     * POR QUE ISTO PODE SER EXIGIDO, e não é sorte: o canal só escreve sobre
+     * `WALL`. O conjunto de tiles que `isWalkable` aceita sai da fase idêntico
+     * ao que entrou, e `populate` sorteia posições justamente sobre esse
+     * conjunto. As poças, que MEXEM nele, continuam sendo geradas primeiro e
+     * com os mesmos sorteios de sempre; os canais entram no fim do mesmo
+     * stream, depois delas. Por isso o elenco inteiro — inimigos, itens,
+     * mercador, caldeirão e extras — não se moveu um tile.
+     *
+     * `seco` é a contagem de tiles caminháveis a seco do andar, e é a métrica
+     * que pega o erro mais silencioso de todos: um canal que comesse piso
+     * derrubaria o número sem mexer, necessariamente, em nenhuma posição.
+     */
+    const CONGELADO = [
+      { seed: 'T17-STREAMS-0001', depth: 1, seco: 813,
+        e: 'linker@8,21 linker@15,21 linker@14,37 linker@24,35 linker@33,16 linker@38,27',
+        it: 'potion@13,23 potion@13,31 potion@22,33 potion@32,15',
+        par: 'merc@4,4 banc@4,2 alq@5,2;4,3' },
+      { seed: 'T17-STREAMS-0001', depth: 2, seco: 790,
+        e: 'linker@8,15 linker@7,15 linker@21,11 linker@27,6 linker@41,17 linker@9,27 ' +
+          'linker@14,36 linker@24,34',
+        it: 'potion@4,17 potion@18,12 potion@38,11 potion@3,26 potion@22,41',
+        par: 'merc@4,5 banc@10,8 alq@11,8;10,9' },
+      { seed: 'T17-STREAMS-0002', depth: 1, seco: 802,
+        e: 'chaser@2,36 linker@12,42 linker@20,11 linker@33,8 linker@27,21 linker@41,20',
+        it: 'potion@11,40 potion@26,7 potion@32,8 potion@40,21',
+        par: 'merc@2,4 banc@6,6 alq@6,5;5,6' },
+      { seed: 'T17-STREAMS-0002', depth: 2, seco: 880,
+        e: 'linker@5,12 linker@19,14 chaser@28,9 linker@29,14 chaser@8,24 linker@4,38 ' +
+          'linker@27,25 linker@24,39',
+        it: 'potion@4,15 potion@20,9 potion@3,27 potion@9,40 potion@26,25',
+        par: 'merc@5,2 banc@3,6 alq@2,6;4,6' },
+      { seed: 'T17-STREAMS-0003', depth: 1, seco: 777,
+        e: 'linker@12,11 linker@11,8 linker@22,9 linker@3,20 linker@41,2 linker@17,38',
+        it: 'potion@11,12 potion@8,21 potion@38,3 potion@11,36',
+        par: 'merc@3,10 banc@6,7 alq@6,6;6,8' },
+      { seed: 'T17-STREAMS-0003', depth: 2, seco: 811,
+        e: 'chaser@8,17 chaser@25,12 linker@24,18 linker@32,21 linker@42,18 linker@24,36 ' +
+          'linker@41,31 linker@33,41',
+        it: 'potion@7,12 potion@21,5 potion@19,19 potion@41,18 potion@31,40',
+        par: 'merc@5,7 banc@4,2 alq@5,2;4,3' }
+    ];
+
+    for (const caso of CONGELADO) {
+      const map = generate(caso.seed, caso.depth);
+      const p = populate(map, caso.depth, 1);
+      const onde = ondeEsta('T17.5', { semente: caso.seed, depth: caso.depth });
+
+      let secos = 0;
+      for (let i = 0; i < map.tiles.length; i++) {
+        if (WALK.has(map.tiles[i]) && !map.agua[i]) secos++;
+      }
+      expect(secos, onde + ': o piso seco do andar mudou — o canal comeu chão')
+        .toBe(caso.seco);
+      expect(secos, onde + ': map.walkable não bate com a contagem do teste')
+        .toBe(map.walkable);
+
+      expect(p.enemies.map((e) => e.kind + '@' + e.x + ',' + e.y).join(' '),
+        onde + ': os inimigos se moveram — alguém roubou u32 do stream de população')
+        .toBe(caso.e);
+      expect(p.items.map((it) => it.kind + '@' + it.x + ',' + it.y).join(' '),
+        onde + ': os itens se moveram — alguém roubou u32 do stream de população')
+        .toBe(caso.it);
+      const par = [
+        p.mercador ? 'merc@' + p.mercador.x + ',' + p.mercador.y : 'merc@-',
+        p.bancada ? 'banc@' + p.bancada.x + ',' + p.bancada.y : 'banc@-',
+        'alq@' + p.alquimiaExtras.map((x) => x.x + ',' + x.y).join(';')
+      ].join(' ');
+      expect(par, onde + ': o mercador ou a estação mudaram de tile').toBe(caso.par);
+
+      /* E o canal EXISTE nestes mesmos andares — senão a igualdade acima
+       * seria a prova trivial de que nada foi acrescentado. */
+      expect(tilesDeCanal(map).length,
+        onde + ': o andar da prova não tem canal nenhum — a prova é vazia')
+        .toBeGreaterThan(0);
     }
   }, LENTO);
 });
