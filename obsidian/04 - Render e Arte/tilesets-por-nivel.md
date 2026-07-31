@@ -123,10 +123,17 @@ nada — atlas só é forjado quando alguém pede.
   revertida inteira).
 - **Ambos bloqueiam** jogador e inimigos: `isWalkable` recusa a água num ponto único, e os
   dois entram no `occupied` do contexto de turno.
-- **Cachoeira**: onde a poça encosta no vazio, um fluxo desce pela borda com lâminas de espuma
-  marchando por `dt`. É efeito de TELA, não rig — modelá-lo em caixa exigiria um rig por
-  combinação de borda. As cores vêm do **tileset**, não das LUTs: a água do andar 2 pode ser
-  lava.
+- **A cachoeira foi ELIMINADA (31/07)**, depois de três versões reprovadas: raias planas,
+  depois tubos de vidro pendurados, depois lâmina inclinada. Nenhuma leu bem, e a razão é
+  conceitual — uma queda d'água precisa de volume, névoa e destino, e nada disso cabe num
+  efeito de tela desenhado por cima de um bloco de 32px.
+- **O vazio virou MAR.** A decisão do dono, e é a melhor: em vez de abismo preto com água
+  escorrendo para dentro, o que cerca a ilha é água. A barreira é idêntica (o engine já
+  recusava o passo no vazio), o rig já existia, e a leitura melhora sozinha — ilha cercada de
+  mar é uma imagem que se explica em silêncio.
+  O mar é desenhado **antes da regra de descoberta** (R29), de propósito: o oceano é
+  CONTEXTO, não segredo. Ninguém "descobre" que existe mar em volta — vê-se do primeiro
+  passo, como se vê o horizonte. Esconder devolveria o abismo preto.
 
 ## O que quebra se mudar
 

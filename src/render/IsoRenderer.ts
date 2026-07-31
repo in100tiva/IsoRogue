@@ -1298,11 +1298,6 @@ export class IsoRenderer {
   private readonly T_WALL: number;
   /** Tile.Void do mapgen (fase 2.3): a beira do penhasco. −1 quando o mapa não tem. */
   private readonly T_VOID: number;
-  /**
-   * Os índices dos tiles de água JUNTO ao vazio, recalculados uma vez por mapa:
-   * a água não se move, e varrer o mapa inteiro a cada frame é desperdício.
-   */
-  private cachoeirasDoMapa: { mapa: unknown; indices: number[] } | null = null;
   private readonly T_DOOR: number;
   private readonly T_STAIRS: number;
 
@@ -2042,11 +2037,29 @@ export class IsoRenderer {
         i = y * w + x;
         t = tiles[i];
         if (t === this.T_WALL) continue;
-        // O VAZIO não desenha nada: é a beira do penhasco, e o que fica embaixo
-        // é o fundo escuro do canvas — nenhum piso, parede ou adereço. A
-        // cachoeira que escorre para dentro dele é desenhada pela parede/piso
-        // da borda, nunca por ele.
-        if (t === this.T_VOID) continue;
+        // O VAZIO VIROU MAR (decisão do dono, 31/07): em vez de abismo preto
+        // com cachoeira escorrendo — que nunca leu bem —, o que cerca a ilha é
+        // ÁGUA. A barreira é a mesma (o engine já recusa o passo no vazio), a
+        // leitura é infinitamente melhor, e o rig já existia. O tile é
+        // desenhado como água e segue adiante: sem adereço, sem escada, sem
+        // sombra de parede — é mar aberto.
+        /* O MAR vem ANTES da regra de descoberta, e de propósito: o oceano que
+         * cerca a ilha é CONTEXTO, não segredo. R29 esconde o que o jogador
+         * ainda não explorou — mas ninguém "descobre" que existe mar em volta;
+         * ele se vê do primeiro passo, como se vê o horizonte. Escondê-lo
+         * devolveria o abismo preto que o dono acabou de reprovar. */
+        if (t === this.T_VOID) {
+          seen = vis.has(i);
+          sx = hw * (2 * x - s) + ox;
+          dx = x - p.x;
+          dy = y - p.y;
+          d2 = dx * dx + dy * dy;
+          /* Mar distante escurece com a distância como tudo o mais, mas nunca
+           * some: o piso mínimo mantém a silhueta da ilha legível. */
+          lvl = d2 < lightMax ? luts.LIGHT_LEVEL[d2] : 0;
+          this.drawFloor(ctx, sx, sy, hw, hh, z, 0, 0, seen, lvl, true);
+          continue;
+        }
         seen = vis.has(i);
         known = seen || (expl ? expl[i] !== 0 : false);
         if (!known) continue; // nunca visto: nada é desenhado (R29)
@@ -2259,58 +2272,6 @@ export class IsoRenderer {
         const c = this.coletas[i];
         if (!vis.has(c.y * w + c.x)) continue;
         this.desenharPopColeta(ctx, c, hw, hh, ox, oy, z);
-      }
-    }
-
-    /* As cachoeiras, por cima de TUDO que está desenhado: o fluxo escorrendo
-     * para dentro do vazio é o contorno do mapa inteiro, e não pode ser
-     * coberto nem por parede nem por entidade. Varre o mapa uma vez por frame
-     * — o custo é linear nos tiles de água junto ao vazio, que são poucos. */
-    if (game.map.agua && this.T_VOID >= 0) {
-      /* A cachoeira nasce na PAREDE que encosta na água, não na poça — assim
-       * ela aparece mesmo quando a poça está fora do FOV (o jogador vê a
-       * parede ao lado, não a água no escuro). O índice é recalculado uma vez
-       * por mapa, porque a água não se move. */
-      if (this.cachoeirasDoMapa === null || this.cachoeirasDoMapa.mapa !== game.map) {
-        const aguaMap = game.map.agua;
-        const tiles = game.map.tiles;
-        const mapW = game.map.w;
-        const mapH = game.map.h;
-        const lista: number[] = [];
-        for (let y = 0; y < mapH; y++) {
-          for (let x = 0; x < mapW; x++) {
-            const i = y * mapW + x;
-            if (!aguaMap[i]) continue;
-            const temVazio =
-              (y + 1 < mapH && tiles[(y + 1) * mapW + x] === this.T_VOID) ||
-              (y - 1 >= 0 && tiles[(y - 1) * mapW + x] === this.T_VOID) ||
-              (x + 1 < mapW && tiles[y * mapW + x + 1] === this.T_VOID) ||
-              (x - 1 >= 0 && tiles[y * mapW + x - 1] === this.T_VOID);
-            if (temVazio) lista.push(i);
-          }
-        }
-        this.cachoeirasDoMapa = { mapa: game.map, indices: lista };
-      }
-      const mapaW = game.map.w;
-      const vis = game.visible;
-      const expl = game.explored;
-      for (const i of this.cachoeirasDoMapa.indices) {
-        /* A visibilidade olha a VIZINHANÇA, não só o tile: a queda fica na
-         * beira do abismo, e o jogador enxerga a borda de onde ele está, na
-         * margem — exigir o tile exato no FOV escondia toda cachoeira.
-         * Explorado também serve: a beira do mapa não volta a ser segredo. */
-        const x = i % mapaW;
-        const y = (i - x) / mapaW;
-        const perto =
-          vis.has(i) ||
-          (expl && expl[i] !== 0) ||
-          vis.has(i - 1) || vis.has(i + 1) ||
-          vis.has(i - mapaW) || vis.has(i + mapaW);
-        if (!perto) continue;
-        const s2 = x + y;
-        const sx2 = hw * (2 * x - s2) + ox;
-        const sy2 = s2 * hh + oy;
-        this.desenharCachoeira(ctx, game, x, y, sx2, sy2, hw, hh, wh, z, true);
       }
     }
 
@@ -2677,133 +2638,6 @@ export class IsoRenderer {
    * Determinismo: a variação de fase vem de um hash de (x, y) — nada de
    * `Math.random`, que é proibido no render e o lint pega.
    */
-  private desenharCachoeira(
-    ctx: CanvasRenderingContext2D, game: Game, x: number, y: number,
-    sx: number, sy: number, hw: number, hh: number, wh: number, z: number, seen: boolean
-  ): void {
-    if (!seen || this.T_VOID < 0) return;
-    const map = game.map;
-    const w = map.w;
-    const tiles = map.tiles;
-    /* Só as bordas que a projeção MOSTRA: sul (y+1) e leste (x+1). As outras
-     * duas ficam atrás do próprio bloco e o fluxo nunca apareceria. */
-    /* As QUATRO bordas: não só sul e leste. Uma poça encostada no abismo em
-     * qualquer lado escorre para ele — e a poça da referência do dono escorria
-     * exatamente para oeste, que eu não estava desenhando. */
-    const paraSul = y + 1 < map.h && tiles[(y + 1) * w + x] === this.T_VOID;
-    const paraNorte = y - 1 >= 0 && tiles[(y - 1) * w + x] === this.T_VOID;
-    const paraLeste = x + 1 < w && tiles[y * w + x + 1] === this.T_VOID;
-    const paraOeste = x - 1 >= 0 && tiles[y * w + x - 1] === this.T_VOID;
-    if (!paraSul && !paraNorte && !paraLeste && !paraOeste) return;
-
-    /* As cores vêm do TILESET, não das LUTs: a água do andar 2 pode ser lava,
-     * e o fluxo tem de acompanhar o terreno. */
-    const paleta = this.tileset.paleta;
-    const claro = paleta.aguaLuz ?? '#5fc8ff';
-    const escuro = paleta.aguaBase ?? '#2b8fd8';
-    const espuma = paleta.aguaEspuma ?? '#e8f7ff';
-
-    /* Fase da queda: hash do tile + o relógio, para os filetes não marcharem
-     * todos juntos como um metrônomo. */
-    let h = ((x * 374761393) ^ (y * 668265263) ^ 0x9e3779b9) >>> 0;
-    h = (h * 1664525 + 1013904223) >>> 0;
-    const fase = (this.t * 1.4 + (h / 4294967296)) % 1;
-
-    /* A queda nasce na LÂMINA D'ÁGUA, não no plano seco — e agora TAMBÉM na
-     * borda: a espuma coroa o transbordamento, que é o que separa uma coluna
-     * caindo do céu de uma queda d'água que sai da poça. */
-    const topo = sy + hh + this.tileset.aguaAfundaPx * z;
-    /* A queda morre numa BASE com espuma — a bacia onde a água aterrissa no
-     * vazio. Sem ela o fluxo sumia para dentro da tela como uma corda solta. */
-
-    /**
-     * O jato, desenhado como LÂMINA COLADA NA FACE do bloco — não como coluna
-     * solta no ar.
-     *
-     * A rodada anterior desenhava retângulos verticais compridos com uma
-     * elipse arredondada embaixo: na tela viraram três TUBOS DE VIDRO
-     * pendurados no vazio, e o dono reprovou na hora. Três erros num só
-     * desenho, e todos de conceito:
-     *
-     *   1. COMPRIMENTO — a queda descia 3 losangos, muito além da face do
-     *      bloco de onde ela sai. Água que cai num abismo some no escuro
-     *      depois de um vão curto; o que se vê é o TRECHO COLADO na parede.
-     *      Agora a lâmina tem a altura do bloco (`wh`) mais um respingo;
-     *   2. FORMA — a base arredondada é a assinatura de um tubo, não de uma
-     *      queda. Trocada por respingo: duas lascas horizontais que se abrem,
-     *      que é como pixel art desenha água batendo;
-     *   3. INCLINAÇÃO — a face lateral do bloco isométrico é um
-     *      PARALELOGRAMO, e a lâmina tem de acompanhar essa inclinação
-     *      (meio pixel de x por pixel de y, a razão 2:1 do losango), senão
-     *      ela cruza a parede em diagonal e denuncia que é um retângulo
-     *      pregado por cima.
-     *
-     * `sinal` diz para que lado a face corre: +1 quando a queda sai pela
-     * borda leste (a face desce para a direita) e −1 pela oeste.
-     */
-    const desenhar = (px: number, sinal: number): void => {
-      const larg = Math.max(3, hw * 0.44);
-      const meia = larg / 2;
-      /* A altura da face do bloco, mais um respingo curto. Nada de descer
-       * até o infinito: o resto da queda se perde no escuro do abismo. */
-      const alturaFace = wh > 0 ? wh : hh * 2 * z;
-      const total = alturaFace + hh * 0.9 * z;
-
-      ctx.save();
-      ctx.globalAlpha = ctx.globalAlpha * 0.95;
-
-      /* 1. A LÂMINA, em fatias que acompanham a inclinação da face. Cada
-       * fatia anda `sinal * 0,5px` em x por px de y — a razão 2:1. */
-      const passo = Math.max(1, Math.round(1 * z));
-      for (let dy = 0; dy < total; dy += passo) {
-        const desl = sinal * dy * 0.5;
-        const t = dy / total;
-        /* estreita de leve na descida: a água acelera e afina */
-        const w2 = meia * (1 - t * 0.22);
-        ctx.fillStyle = t < 0.12 ? espuma : (t > 0.82 ? claro : escuro);
-        ctx.fillRect(px + desl - w2, topo + dy, w2 * 2, passo);
-      }
-
-      /* 2. OS FILETES que descem: a única animação, e ela acompanha a mesma
-       * inclinação — filete reto sobre lâmina inclinada lê como risco. */
-      ctx.fillStyle = espuma;
-      for (let k = 0; k < 3; k++) {
-        const t = (fase + k / 3) % 1;
-        const dy = t * total;
-        const desl = sinal * dy * 0.5;
-        const w2 = meia * (1 - (dy / total) * 0.22);
-        ctx.fillRect(px + desl - w2 * 0.5, topo + dy, Math.max(1, w2), Math.max(1, 2 * z));
-      }
-
-      /* 3. A CRISTA no lábio: a lasca clara onde a água transborda a borda.
-       * É ela que amarra o jato à poça — sem ela ele nasce do nada. */
-      ctx.fillStyle = espuma;
-      ctx.fillRect(px - meia * 1.15, topo - Math.max(1, 1 * z), meia * 2.3, Math.max(2, 2.5 * z));
-
-      /* 4. O RESPINGO no fim: duas lascas que se abrem para os lados. Não é
-       * uma bacia com fundo — é água batendo e espirrando. */
-      const fimY = topo + total;
-      const deslFim = sinal * total * 0.5;
-      ctx.fillStyle = espuma;
-      ctx.fillRect(px + deslFim - meia * 1.4, fimY, meia * 2.8, Math.max(1, 2 * z));
-      ctx.fillRect(px + deslFim - meia * 1.9, fimY + Math.max(1, 2 * z), meia * 0.9, Math.max(1, 1.5 * z));
-      ctx.fillRect(px + deslFim + meia * 1.0, fimY + Math.max(1, 2 * z), meia * 0.9, Math.max(1, 1.5 * z));
-
-      ctx.restore();
-    };
-
-    /* Cada borda tem o seu ponto de saída. Sul e leste saem na quina de baixo
-     * (a que a câmera vê); norte e oeste saem na quina de cima, atrás do
-     * próprio bloco — a queda ainda aparece escorrendo pelas laterais. */
-    /* O sinal é o lado para onde a face do bloco corre: leste e norte descem
-     * para a direita (+1), sul e oeste para a esquerda (−1). É o que faz a
-     * lâmina deitar SOBRE a parede em vez de cruzá-la. */
-    if (paraSul) desenhar(sx - hw * 0.30, -1);
-    if (paraLeste) desenhar(sx + hw * 0.30, 1);
-    if (paraNorte) desenhar(sx + hw * 0.30, 1);
-    if (paraOeste) desenhar(sx - hw * 0.30, -1);
-  }
-
   /**
    * O BRILHO QUE ANDA NA POÇA — o reflexo que atravessa a lâmina devagar.
    *
