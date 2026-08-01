@@ -48,7 +48,7 @@ import {
 import { generate, inBounds, isWalkable, roomAt } from './mapgen';
 import { computeFov } from './fov';
 import { computeDijkstra } from './dijkstra';
-import type { ItemDef, ReceitaDef } from './entities';
+import type { Instalacao, ItemDef, ReceitaDef } from './entities';
 import {
   ALQUIMIA_EXTRAS_MAX,
   ARCHETYPES,
@@ -71,7 +71,8 @@ import {
   populate,
   processEnemies,
   rollDamage,
-  sortearDespojos
+  sortearDespojos,
+  validarInstalacao
 } from './entities';
 import {
   base64ToBytes,
@@ -1980,6 +1981,16 @@ export function restore(dados: unknown): Game | null {
    *
    * Note que NÃO forçamos `null` quando o save omite: `null` significaria "este
    * andar não tem mercador", que é uma afirmação que um save antigo nunca fez. */
+  /* Guardados ANTES de o save sobrescrever: são o que `populate` calculou agora,
+   * já filtrados pela articulação, e viram o fallback da validação lá embaixo.
+   * Sem esta cópia, uma peça podada só poderia virar `null` — e um andar sem
+   * mercador é o bug de conteúdo invisível que criou a fase 2.1. */
+  const paradasGeradas: Instalacao = {
+    mercador: game.mercador,
+    bancada: game.bancada,
+    extras: game.alquimiaExtras
+  };
+
   const mercadorSalvo = reconstruirPonto(obj.mercador, map);
   if (mercadorSalvo) game.mercador = mercadorSalvo;
   const bancadaSalva = reconstruirPonto(obj.bancada, map);
@@ -1990,6 +2001,71 @@ export function restore(dados: unknown): Game | null {
    * quando o save traz um caldeirão diferente. Sem lista salva, a estação
    * retoma sem decoração — o motivo por extenso está em `SaveData`. */
   game.alquimiaExtras = reconstruirExtras(obj.alquimiaExtras, map, game.bancada);
+
+  /* A MESMA garantia que `populate` dá, aplicada ao que veio do SAVE.
+   *
+   * `reconstruirPonto` confere só `isWalkable`, e isso não basta: um tile
+   * caminhável pode ser a única garganta do andar. Sem esta linha, todo save
+   * gravado por build anterior ao filtro de articulação retoma no andar
+   * trancado — medido, 35,07% partidos e 15,53% com a escada presa —, e como a
+   * partida autossalva a cada turno, a posição quebrada se regrava.
+   *
+   * E não é só dívida legada: um save correto quebra sozinho quando o mapa muda
+   * debaixo dele (12,19% dos saves sãos, medido). A validação fica aqui porque
+   * o problema renasce a cada mudança de `mapgen`, não numa migração única.
+   *
+   * O QUE FOR PODADO CAI PARA O PONTO RECÉM-GERADO, e não para `null`. A poda é
+   * cirúrgica na causa mas cega no efeito: como a ordem é extras → caldeirão →
+   * mercador e nenhuma dessas remoções destrava uma garganta que é DO mercador,
+   * um save adulterado nessa peça levava a instalação inteira junto — medido, 71
+   * de 71 andares retomavam sem mercador, sem bancada e sem decoração. Trocar um
+   * andar trancado por um andar vazio conserta o travamento e reabre o bug de
+   * conteúdo invisível que criou a fase 2.1 (o dono jogou uma expedição inteira
+   * e não achou o vendedor).
+   *
+   * O fallback é `paradasGeradas`, calculado por `populate` alguns milissegundos
+   * antes para esta mesma seed+depth e já filtrado pela articulação: é seguro por
+   * construção, é determinístico, e é o mesmo fallback que T13.8 já exige do
+   * "ponto na parede". Retomada honesta, nunca recusa de run — e nunca andar
+   * mudo. */
+  const instalacaoSalva: Instalacao = {
+    mercador: game.mercador,
+    bancada: game.bancada,
+    extras: game.alquimiaExtras
+  };
+  validarInstalacao(map, game.player, instalacaoSalva);
+
+  /* SÓ recupera o que a PODA tirou, nunca o que o save deliberadamente não trouxe.
+   *
+   * A distinção não é preciosismo, é contrato: `SaveData` diz que save sem lista
+   * de extras retoma SEM decoração ("nunca mobília inventada", e T14.7 cobra
+   * isso). Um fallback que olhasse só o resultado final não saberia diferenciar
+   * "a estante foi podada agora" de "este save nunca teve estante", e ressuscitaria
+   * mobília que o andar nunca teve.
+   *
+   * Por isso a comparação é com o estado de ANTES da validação, peça a peça. E os
+   * EXTRAS ficam de fora da recuperação por decisão: são decoração, o contrato
+   * acima os trata como opcionais, e recolocá-los é o caminho mais curto para
+   * ressuscitar exatamente o maior ofensor histórico do travamento (525 dos 1041
+   * andares partidos eram extras).
+   *
+   * A recolocação passa pela validação DE NOVO: o ponto gerado é seguro sozinho,
+   * mas o save pode ter trazido outra peça que, somada a ele, volta a estrangular
+   * — é o mesmo caso de combinação que obrigou o Tarjan a ser incremental em
+   * `populate`. Se ainda assim não couber, aí sim `null`: o andar perde a peça,
+   * mas nunca a passagem. */
+  const podouMercador = instalacaoSalva.mercador === null && mercadorSalvo !== null;
+  const podouBancada = instalacaoSalva.bancada === null && bancadaSalva !== null;
+  const recuperada: Instalacao = {
+    mercador: podouMercador ? paradasGeradas.mercador : instalacaoSalva.mercador,
+    bancada: podouBancada ? paradasGeradas.bancada : instalacaoSalva.bancada,
+    extras: instalacaoSalva.extras
+  };
+  validarInstalacao(map, game.player, recuperada);
+
+  game.mercador = recuperada.mercador;
+  game.bancada = recuperada.bancada;
+  game.alquimiaExtras = recuperada.extras;
 
   /* As caçadas SUBSTITUEM a lista que `createState` gerou — o save é a fonte
    * da verdade porque a lista acumula andares e progresso, e nada disso

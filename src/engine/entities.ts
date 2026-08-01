@@ -1284,10 +1284,37 @@ function alcancePeloPasso(
 }
 
 /** A instalação da entrada, enquanto ela ainda pode encolher. */
-interface Instalacao {
+export interface Instalacao {
   mercador: Point | null;
   bancada: Point | null;
   extras: Point[];
+}
+
+/**
+ * A MESMA poda do cinto de segurança, para quem NÃO passou por `populate`.
+ *
+ * Existe por causa de um buraco medido: `populate` ganhou o filtro de
+ * articulação, mas o RESTORE de save não. Um save gravado por build anterior à
+ * correção traz as posições antigas, e `restore` as aceita conferindo apenas
+ * `isWalkable` — o andar volta trancado. Medido em 3000 andares com posições
+ * produzidas pelo código pré-correção: 35,07% partidos e 15,53% com a escada
+ * presa, exatamente os números que a correção tinha acabado de eliminar. E como
+ * a partida autossalva a cada turno, a posição quebrada se REGRAVA: o andar
+ * trancado não se conserta sozinho.
+ *
+ * Não é dívida de uma vez só. Um save PERFEITO no mapa em que foi gravado quebra
+ * quando o mapa muda debaixo dele — 12,19% dos saves sãos partem quando o
+ * `mapgen` muda, e este projeto mexeu em `mapgen` três vezes nos últimos quatro
+ * PRs. Toda mudança futura de geração reabre a porta; por isso a validação mora
+ * aqui, e não numa migração de versão de save.
+ *
+ * O `taken` descartável é deliberado: quem chama isto está reconstruindo um
+ * estado pronto, não distribuindo conteúdo, então não há nada depois para
+ * respeitar a reserva. A poda em si é idêntica à de `populate` — extras primeiro,
+ * caldeirão depois, mercador por último.
+ */
+export function validarInstalacao(map: GameMap, start: Point, inst: Instalacao): void {
+  podarAtePassar(map, start, inst, new Set<number>());
 }
 
 /**

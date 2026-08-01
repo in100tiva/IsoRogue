@@ -5278,3 +5278,432 @@ describe('T20 — o povoamento não tranca a passagem', () => {
     }
   }, LENTO);
 });
+
+/* ================================================================== *
+ * T21 — a RETOMADA também não pode trancar a passagem
+ *
+ * POR QUE ESTE BLOCO EXISTE: T20 fechou a porta de `populate`, e só dela. O
+ * `restore` (game.ts) continuava aceitando os pontos de parada do save
+ * conferindo APENAS `isWalkable` — e "caminhável" não é "seguro": a única
+ * garganta do andar é um tile caminhável como qualquer outro. Um save gravado
+ * por build anterior ao filtro de articulação carrega justamente as posições que
+ * T20 passou a recusar, e a retomada as plantava de volta, uma a uma.
+ *
+ * MEDIDO, em 3000 andares com posições produzidas pelo código pré-correção:
+ * 35,07% retomavam com o mapa PARTIDO e 15,53% com a ESCADA INALCANÇÁVEL — os
+ * mesmos números que `populate` tinha acabado de zerar. E o buraco não fechava
+ * sozinho: a partida autossalva a cada turno, então a posição quebrada se
+ * REGRAVA a cada passo do herói dentro da prisão que ela criou.
+ *
+ * E NÃO É DÍVIDA DE UMA VEZ SÓ — é o que impede a validação de virar uma
+ * migração de versão de save. Um save PERFEITO no mapa em que foi gravado quebra
+ * quando o mapa muda debaixo dele: 12,19% dos saves sãos partem quando o
+ * `mapgen` muda, e este projeto mexeu em `mapgen` três vezes nos últimos quatro
+ * PRs. Toda mudança futura de geração reabre a porta, e por isso a checagem mora
+ * no `restore`, todo restore, para sempre.
+ *
+ * O QUE CADA TESTE PROTEGE:
+ *   · T21.1 — o teste central: save com o mercador num PONTO DE ARTICULAÇÃO
+ *     achado por FORÇA BRUTA (a única fonte de verdade que não é o próprio
+ *     código sob teste) volta do `restore` com o andar inteiro, a escada
+ *     alcançável e o mercador fora do gargalo;
+ *   · T21.2 — o contrapeso, sem o qual T21.1 seria fácil de forjar: um save SÃO
+ *     atravessa o `restore` INTACTO. Uma poda gulosa passaria em T21.1 e
+ *     destruiria toda partida boa; aqui ela reprova.
+ *
+ * A VIZINHANÇA usada é a REAL do passo — a de `mover()` em game.ts: `DIRS8`, com
+ * o teste de canto consultando `isWalkable` (o TERRENO), porque `esbarrar` e
+ * `esbarrarTerreno` só recusam o tile de DESTINO. Um móvel na quina tira o
+ * próprio tile do caminho e não fecha a diagonal. Medir com 4-vizinhança
+ * inventaria gargalos; medir com 8-vizinhança crua liberaria cantos que o jogo
+ * não deixa cortar. Só a vizinhança certa responde à pergunta certa.
+ * ================================================================== */
+
+/**
+ * A BFS do passo a partir de uma ORIGEM QUALQUER.
+ *
+ * Irmã de `alcancaveisPeloPasso` (T20) e deliberadamente separada dela: T20 mede
+ * o andar recém-povoado a partir de `map.start`, que é onde o herói nasce; T21
+ * mede o andar RETOMADO a partir de `game.player`, que é onde o SAVE o pôs.
+ * Hoje os dois coincidem nas sementes deste bloco, e é exatamente por isso que a
+ * distinção precisa estar no código e não na cabeça de quem lê: no dia em que um
+ * teste salvar a partida com o herói já andado, medir de `map.start` daria uma
+ * prova sobre um andar que ninguém está jogando.
+ */
+function alcancaveisPeloPassoDe(
+  map: GameMap,
+  bloqueados: Set<number>,
+  origem: Point
+): { vistos: Uint8Array; total: number } {
+  const w = map.w;
+  const h = map.h;
+  const vistos = new Uint8Array(w * h);
+  const fila = new Int32Array(w * h);
+  let ini = 0;
+  let fim = 0;
+  const livre = (x: number, y: number): boolean =>
+    ehTransitavel(map, x, y) && !bloqueados.has(y * w + x);
+
+  if (!livre(origem.x, origem.y)) return { vistos: vistos, total: 0 };
+  const oi = origem.y * w + origem.x;
+  vistos[oi] = 1;
+  fila[fim++] = oi;
+  let total = 1;
+  while (ini < fim) {
+    const i = fila[ini++];
+    const x = i % w;
+    const y = (i - x) / w;
+    for (const d of DIRS8) {
+      const nx = x + d[0];
+      const ny = y + d[1];
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const ni = ny * w + nx;
+      if (vistos[ni]) continue;
+      if (!livre(nx, ny)) continue;
+      /* O corte de canto de `mover` consulta o TERRENO, não os sólidos. */
+      if (d[0] !== 0 && d[1] !== 0) {
+        if (!ehTransitavel(map, x + d[0], y)) continue;
+        if (!ehTransitavel(map, x, y + d[1])) continue;
+      }
+      vistos[ni] = 1;
+      total++;
+      fila[fim++] = ni;
+    }
+  }
+  return { vistos: vistos, total: total };
+}
+
+/** Os sólidos permanentes de um estado de partida — o que `esbarrar` recusa. */
+function solidosDoJogo(game: Game): Point[] {
+  const out: Point[] = [];
+  if (game.mercador) out.push(game.mercador);
+  if (game.bancada) out.push(game.bancada);
+  for (const e of game.alquimiaExtras) out.push(e);
+  return out;
+}
+
+function bloqueiosDoJogo(game: Game): Set<number> {
+  const set = new Set<number>();
+  for (const p of solidosDoJogo(game)) set.add(p.y * game.map.w + p.x);
+  return set;
+}
+
+/**
+ * Um PONTO DE ARTICULAÇÃO do grafo do passo no anel 2..4 do herói, achado por
+ * FORÇA BRUTA: para cada candidato, uma BFS com ele bloqueado, comparada com a
+ * BFS do mapa prístino. É o oráculo independente — o engine acha articulação com
+ * Tarjan, e usar Tarjan aqui provaria só que Tarjan concorda consigo mesmo.
+ *
+ * O ANEL 2..4 é o escopo por ser exatamente onde o código pré-correção plantava
+ * o mercador (`varrerEntrada`, entities.ts): o save adulterado que este bloco
+ * monta tem de ser um save PLAUSÍVEL, não um arquivo impossível.
+ *
+ * As três exclusões, e o motivo de cada uma:
+ *   · os tiles já ocupados por caldeirão e decoração — o save mantém aqueles
+ *     dois de pé, e empilhar dois sólidos no mesmo tile não é o cenário medido;
+ *   · a ESCADA — mercador em cima dela é outro defeito (e outra discussão); aqui
+ *     a pergunta é sobre alcance, não sobre quem senta onde;
+ *   · o próprio herói já sai de graça, porque o anel começa em Chebyshev 2.
+ *
+ * `perdeSozinho` é a prova de gargalo no mapa NU; `perdeNoConjunto` confirma que
+ * o save inteiro (caldeirão + decoração + este tile) de fato parte o andar — é
+ * ele que garante que a PROVA DE MORDIDA morde: sem a validação em `restore`, é
+ * este número que reprova a asserção principal.
+ */
+interface Gargalo {
+  tile: Point;
+  perdeSozinho: number;
+  perdeNoConjunto: number;
+}
+
+function acharGargaloNoAnel(game: Game): Gargalo | null {
+  const map = game.map;
+  const heroi: Point = { x: game.player.x, y: game.player.y };
+  const pristino = alcancaveisPeloPassoDe(map, new Set<number>(), heroi);
+  /* Os outros sólidos do save ficam de pé: o cenário é "o mercador foi parar no
+   * lugar errado", não "o andar inteiro mudou de mobília". */
+  const outros = new Set<number>();
+  if (game.bancada) outros.add(game.bancada.y * map.w + game.bancada.x);
+  for (const e of game.alquimiaExtras) outros.add(e.y * map.w + e.x);
+
+  for (let y = heroi.y - 4; y <= heroi.y + 4; y++) {
+    for (let x = heroi.x - 4; x <= heroi.x + 4; x++) {
+      const d = Math.max(Math.abs(x - heroi.x), Math.abs(y - heroi.y));
+      if (d < 2 || d > 4) continue;
+      if (!ehTransitavel(map, x, y)) continue;
+      const i = y * map.w + x;
+      if (outros.has(i)) continue;
+      if (x === map.stairs.x && y === map.stairs.y) continue;
+
+      const so = new Set<number>([i]);
+      const sozinho = alcancaveisPeloPassoDe(map, so, heroi);
+      /* Bloquear um tile SEMPRE custa ele mesmo; articulação é o que custa MAIS
+       * do que ele mesmo. O `+1` é essa diferença, e sem ele todo tile do mapa
+       * pareceria um gargalo. */
+      const perdeSozinho = pristino.total - 1 - sozinho.total;
+      if (perdeSozinho <= 0) continue;
+
+      const conjunto = new Set<number>(outros);
+      conjunto.add(i);
+      const cheio = alcancaveisPeloPassoDe(map, conjunto, heroi);
+      const perdeNoConjunto = pristino.total - conjunto.size - cheio.total;
+      if (perdeNoConjunto <= 0) continue;
+
+      return {
+        tile: { x: x, y: y },
+        perdeSozinho: perdeSozinho,
+        perdeNoConjunto: perdeNoConjunto
+      };
+    }
+  }
+  return null;
+}
+
+/** O save recém-gravado, já em forma de objeto solto — pronto para adulterar. */
+function saveCru(game: Game): Record<string, unknown> {
+  const armazem = armazemDeMemoria();
+  expect(escreverSave(game, armazem), 'T21: o save não foi gravado').toBe(true);
+  const bruto = armazem.getItem(CONFIG.STORAGE_KEY);
+  expect(typeof bruto, 'T21: o save gravado não é texto').toBe('string');
+  return JSON.parse(String(bruto)) as Record<string, unknown>;
+}
+
+/**
+ * O andar retomado ficou inteiro? A referência é o mapa PRÍSTINO medido do
+ * herói: todo tile que o herói alcançaria sem sólido nenhum continua alcançável
+ * depois deles — descontados, claro, os tiles que os próprios sólidos ocupam.
+ *
+ * Comparar com o total de caminháveis seria frágil (relevo pode ter bolsão
+ * inalcançável por terreno); comparar com o prístino pergunta exatamente o que
+ * importa: os sólidos custaram algo ALÉM dos próprios tiles?
+ */
+function tilesPerdidosNaRetomada(game: Game): Point[] {
+  const map = game.map;
+  const heroi: Point = { x: game.player.x, y: game.player.y };
+  const pristino = alcancaveisPeloPassoDe(map, new Set<number>(), heroi);
+  const bloq = bloqueiosDoJogo(game);
+  const agora = alcancaveisPeloPassoDe(map, bloq, heroi);
+  const perdidos: Point[] = [];
+  for (let y = 0; y < map.h; y++) {
+    for (let x = 0; x < map.w; x++) {
+      const i = y * map.w + x;
+      if (!pristino.vistos[i]) continue;
+      if (bloq.has(i)) continue; // o tile do próprio sólido não é perda
+      if (agora.vistos[i]) continue;
+      perdidos.push({ x: x, y: y });
+    }
+  }
+  return perdidos;
+}
+
+describe('T21 — a retomada de save não tranca a passagem', () => {
+  it('save com o mercador num ponto de articulação retoma com o andar inteiro', () => {
+    const partidos: string[] = [];
+    const escadasPresas: string[] = [];
+    const gargalosAceitos: string[] = [];
+    let andaresComGargalo = 0;
+    let perdaSemValidacao = 0;
+    let podasCompletas = 0;
+
+    for (let i = 0; i < 30; i++) {
+      const semente = 'T21-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const game = createState(semente, depth);
+        /* Sem mercador no andar não há o que adulterar — e sem caldeirão o
+         * cenário perde a metade interessante (a poda em cascata). */
+        if (!game.mercador || !game.bancada) continue;
+
+        const gargalo = acharGargaloNoAnel(game);
+        if (!gargalo) continue; // esta semente não oferece garganta no anel
+        andaresComGargalo++;
+        perdaSemValidacao += gargalo.perdeNoConjunto;
+
+        const onde = ondeEsta('T21.1', {
+          semente,
+          depth,
+          gargalo: '(' + gargalo.tile.x + ',' + gargalo.tile.y + ')'
+        });
+
+        /* O SAVE DO BUILD ANTIGO, reproduzido: tudo igual ao que a partida
+         * gravaria hoje, menos o mercador, que vai para a garganta — que é
+         * precisamente o que `varrerEntrada` fazia antes de ganhar o filtro de
+         * articulação, e que `reconstruirPonto` aceita sem pestanejar porque o
+         * tile é `isWalkable`. */
+        const save = saveCru(game);
+        save.mercador = { x: gargalo.tile.x, y: gargalo.tile.y };
+
+        const voltou = restore(save);
+        expect(voltou, onde + ': restore recusou o save em vez de consertá-lo').not.toBe(null);
+        if (!voltou) continue;
+
+        /* ---- ASSERÇÃO PRINCIPAL: o andar NÃO está partido ---- */
+        const perdidos = tilesPerdidosNaRetomada(voltou);
+        if (perdidos.length > 0) {
+          partidos.push(onde + ': a retomada perdeu ' + perdidos.length + ' tiles — ' +
+            'sólidos [' + pontosEmTexto(solidosDoJogo(voltou)) + '], ' +
+            'primeiros perdidos ' + pontosEmTexto(perdidos.slice(0, 6)));
+        }
+
+        /* ---- A ESCADA continua alcançável ---- */
+        const bloq = bloqueiosDoJogo(voltou);
+        const alcance = alcancaveisPeloPassoDe(voltou.map, bloq,
+          { x: voltou.player.x, y: voltou.player.y });
+        const escada = voltou.map.stairs;
+        if (escada && alcance.vistos[escada.y * voltou.map.w + escada.x] !== 1) {
+          escadasPresas.push(onde + ': escada (' + escada.x + ',' + escada.y + ') presa ' +
+            'atrás de [' + pontosEmTexto(solidosDoJogo(voltou)) + ']');
+        }
+
+        /* ---- ASSERÇÃO DE COMPORTAMENTO: o mercador saiu da garganta ----
+         *
+         * QUAL DOS DOIS COMPORTAMENTOS, depois de ler `restore` (game.ts) e
+         * `validarInstalacao`/`podarAtePassar` (entities.ts): é PODA. A
+         * instalação salva é remontada num `Instalacao`, `validarInstalacao` a
+         * encolhe enquanto o andar estiver partido, e o que sobra é reescrito em
+         * `game.mercador`/`game.bancada`/`game.alquimiaExtras`. O tile não é
+         * "corrigido" para outro lugar: a peça CAI (vira `null`). Como a ordem
+         * da poda é extras → caldeirão → mercador, e nenhuma delas destrava uma
+         * garganta que é do MERCADOR, o andar volta sem instalação nenhuma —
+         * conteúdo a menos, que é o preço documentado por `podarAtePassar` para
+         * não devolver partida travada.
+         *
+         * A asserção DURA aqui é só o invariante — o mercador não ficou na
+         * garganta —, porque é ele que o jogo promete. A contagem de podas
+         * completas logo abaixo registra o comportamento de hoje; se um dia o
+         * `restore` passar a recolocar a peça no ponto determinístico de
+         * `createState` (que é o que o comentário de `restore` promete, e o que
+         * o código NÃO faz), é aquela contagem que muda, não este invariante. */
+        if (voltou.mercador &&
+            voltou.mercador.x === gargalo.tile.x &&
+            voltou.mercador.y === gargalo.tile.y) {
+          gargalosAceitos.push(onde + ': o mercador continua na garganta — a validação ' +
+            'do restore não agiu');
+        }
+        if (!voltou.mercador && !voltou.bancada && voltou.alquimiaExtras.length === 0) {
+          podasCompletas++;
+        }
+      }
+    }
+
+    /* Prova de que o teste não é vazio: sem garganta nenhuma, tudo acima passaria
+     * calado e provaria coisa nenhuma. */
+    expect(andaresComGargalo > 0,
+      'T21.1: nenhuma das 30 sementes ofereceu um ponto de articulação no anel 2..4 — ' +
+      'a prova não exercitou nada').toBe(true);
+    /* E de que o save adulterado REALMENTE partiria o andar sem a validação: é
+     * esta soma que a prova de mordida derruba quando `validarInstalacao` sai
+     * de `restore`. */
+    expect(perdaSemValidacao > 0,
+      'T21.1: os saves adulterados não custariam tile nenhum — o cenário perdeu o dente')
+      .toBe(true);
+
+    /* A PRINCIPAL VEM PRIMEIRO, e a ordem aqui é decisão, não acaso: o `expect`
+     * do Vitest aborta o teste no primeiro vermelho, então a asserção que
+     * aparece é a que explica a falha para quem chegou agora. "O andar voltou
+     * partido" é o defeito; "o mercador ficou na garganta" é a causa, e ela vem
+     * logo abaixo, na mesma execução seguinte.
+     *
+     * Invariante DURO, como em T20.1: um andar partido é uma partida travada na
+     * mão de quem retomou o save. Não há piso percentual aqui. */
+    expect(partidos.length,
+      'T21.1: ' + partidos.length + ' de ' + andaresComGargalo + ' retomadas devolveram o ' +
+      'andar PARTIDO:\n' + partidos.slice(0, 8).join('\n')).toBe(0);
+    expect(gargalosAceitos.length,
+      'T21.1: ' + gargalosAceitos.length + ' de ' + andaresComGargalo + ' retomadas ' +
+      'aceitaram o mercador na garganta:\n' + gargalosAceitos.slice(0, 8).join('\n')).toBe(0);
+    expect(escadasPresas.length,
+      'T21.1: ' + escadasPresas.length + ' de ' + andaresComGargalo + ' retomadas deixaram a ' +
+      'ESCADA PRESA:\n' + escadasPresas.slice(0, 8).join('\n')).toBe(0);
+    /*
+     * O CONTEÚDO SOBREVIVE À PODA — e este é o segundo invariante, não uma
+     * caracterização.
+     *
+     * A poda é cirúrgica na causa e cega no efeito: como a ordem é extras →
+     * caldeirão → mercador, e nenhuma dessas remoções destrava uma garganta que é
+     * DO mercador, um save adulterado nessa peça levava a instalação inteira
+     * junto. A primeira versão desta correção fazia exatamente isso — 71 de 71
+     * andares voltavam sem mercador, sem bancada e sem decoração —, e trocar um
+     * andar TRANCADO por um andar VAZIO conserta o travamento reabrindo o bug de
+     * conteúdo invisível que criou a fase 2.1: o dono jogou uma expedição inteira
+     * e não achou o vendedor.
+     *
+     * Por isso `restore` recupera a peça podada para o ponto que `populate`
+     * acabou de calcular (seguro por construção, porque passou pelo filtro de
+     * articulação) e revalida. O número certo aqui é ZERO: nenhum andar volta
+     * mudo. Se algum dia voltar a subir, a pergunta não é "quantos" — é por que a
+     * recuperação parou de caber. */
+    expect(podasCompletas,
+      'T21.1: ' + podasCompletas + ' de ' + andaresComGargalo + ' retomadas voltaram SEM ' +
+      'instalação nenhuma. O andar destravou, mas perdeu mercador, bancada e estação — ' +
+      'a recuperação para o ponto recém-gerado não agiu.').toBe(0);
+    /* E a contraprova: a instalação recuperada não pode ter voltado para a
+     * garganta. Já coberto por `gargalosAceitos` acima para o mercador; aqui
+     * fecha-se o outro lado, provando que alguma peça de fato voltou. */
+    expect(andaresComGargalo - podasCompletas > 0,
+      'T21.1: nenhum andar conservou instalação — a asserção acima passou por vacuidade')
+      .toBe(true);
+  }, LENTO);
+
+  it('save SÃO atravessa o restore intacto — a validação não é poda gulosa', () => {
+    /*
+     * O CONTRAPESO, na mesma disciplina de T20.6: recusar tile é fácil, recusar
+     * DEMAIS é o modo de falhar desta correção. Uma `validarInstalacao` que
+     * podasse a instalação inteira em todo restore passaria no teste de cima com
+     * louvor — o andar ficaria sempre inteiro, porque não sobraria sólido nenhum
+     * — e apagaria mercador, caldeirão e estação de TODA partida salva do jogo.
+     * Aqui a pergunta se inverte: o que `populate` plantou tem de voltar do
+     * `restore` exatamente onde estava, tile por tile.
+     */
+    const mexidos: string[] = [];
+    let andares = 0;
+    let comEstacaoCompleta = 0;
+
+    for (let i = 0; i < 40; i++) {
+      const semente = 'T21-SAO-' + pad(i, 4);
+      for (let depth = 1; depth <= 3; depth++) {
+        const game = createState(semente, depth);
+        if (!game.mercador && !game.bancada && game.alquimiaExtras.length === 0) continue;
+        andares++;
+        if (game.alquimiaExtras.length === ALQUIMIA_EXTRAS_MAX) comEstacaoCompleta++;
+
+        const onde = ondeEsta('T21.2', { semente, depth });
+        const voltou = restore(saveCru(game));
+        expect(voltou, onde + ': restore recusou um save são').not.toBe(null);
+        if (!voltou) continue;
+
+        if (JSON.stringify(voltou.mercador) !== JSON.stringify(game.mercador)) {
+          mexidos.push(onde + ': o mercador saiu de ' + JSON.stringify(game.mercador) +
+            ' para ' + JSON.stringify(voltou.mercador));
+        }
+        if (JSON.stringify(voltou.bancada) !== JSON.stringify(game.bancada)) {
+          mexidos.push(onde + ': o caldeirão saiu de ' + JSON.stringify(game.bancada) +
+            ' para ' + JSON.stringify(voltou.bancada));
+        }
+        if (JSON.stringify(voltou.alquimiaExtras) !== JSON.stringify(game.alquimiaExtras)) {
+          mexidos.push(onde + ': a decoração saiu de ' +
+            pontosEmTexto(game.alquimiaExtras) + ' para ' +
+            pontosEmTexto(voltou.alquimiaExtras));
+        }
+        /* E o andar continua inteiro, claro: a instalação sã nunca foi problema,
+         * mas medir aqui é de graça e fecha o cerco pelos dois lados. */
+        const perdidos = tilesPerdidosNaRetomada(voltou);
+        if (perdidos.length > 0) {
+          mexidos.push(onde + ': save SÃO retomou partido em ' + perdidos.length + ' tiles');
+        }
+      }
+    }
+
+    expect(andares > 0,
+      'T21.2: nenhuma das 40 sementes trouxe instalação para preservar').toBe(true);
+    /* Sem estação completa em nenhum andar, o teste não teria exercitado a poda
+     * dos EXTRAS — que é a primeira a disparar e portanto a mais fácil de sair
+     * gulosa sem ninguém notar. */
+    expect(comEstacaoCompleta > 0,
+      'T21.2: nenhum andar montou a estação completa — a decoração não foi exercitada')
+      .toBe(true);
+    expect(mexidos.length,
+      'T21.2: o restore mexeu em ' + mexidos.length + ' peças de saves SÃOS (de ' +
+      andares + ' andares) — a validação está podando o que não devia:\n' +
+      mexidos.slice(0, 8).join('\n')).toBe(0);
+  }, LENTO);
+});
