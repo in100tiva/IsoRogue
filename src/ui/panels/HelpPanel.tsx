@@ -15,7 +15,10 @@ const LINHAS: readonly LinhaAjuda[] = [
   { teclas: ['Q', 'E', 'Z', 'C'], acao: 'Diagonais' },
   { teclas: ['.', 'Espaço'], acao: 'Esperar um turno' },
   { teclas: ['H', '1'], acao: 'Usar poção' },
-  { teclas: ['>', 'Enter'], acao: 'Descer a escada' },
+  /* A ação diz ONDE a escada está porque a lista de teclas é o lugar em que o
+   * jogador procura quando não sabe o que fazer — e "não achei a escada" foi
+   * exatamente a queixa que criou o bloco "Saída do andar" (ExitPanel.tsx). */
+  { teclas: ['>', 'Enter'], acao: 'Descer a escada (veja Saída do andar)' },
   { teclas: ['V'], acao: 'Sonda de visão no cursor' },
   { teclas: ['Shift', 'D', 'F3'], acao: 'Painel de depuração' },
   { teclas: ['F'], acao: 'Câmera segue o jogador' },

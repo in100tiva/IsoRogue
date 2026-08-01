@@ -1508,9 +1508,16 @@ export function generate(seedStr: string, depth: number): GameMap {
     notes.splice(2, 0, 'Mapa regenerado ' + regenerations + ' ' +
       plural(regenerations, 'vez', 'vezes') + ' com semente derivada.');
   }
+  /* O QUALIFICADOR "em quatro direções" não é preciosismo: desde que o painel
+   * ganhou a bússola da saída (`ui/panels/ExitPanel.tsx`), existem DOIS números
+   * de passos até a escada na tela, e eles não batem. Este aqui é `bfsFrom` —
+   * quatro direções, sobre o mapa CRU, antes da água; o do painel é o campo de
+   * Dijkstra do jogador — oito direções, sobre o mapa final. O de baixo é
+   * sempre maior, e nunca é o número de passos que o jogador vai dar. Duas
+   * medidas com o mesmo nome viram, invariavelmente, um relato de bug. */
   notes.push('Escada na sala ' + (stairRoom ? '#' + stairRoom.id : 'mais afastada') +
     ' em (' + stairX + ',' + stairY + '), a ' + Math.max(0, bestDist) + ' ' +
-    plural(Math.max(0, bestDist), 'passo', 'passos') + ' do início.');
+    plural(Math.max(0, bestDist), 'passo', 'passos') + ' do início em quatro direções.');
 
   if (vazios > 0) {
     notes.push('O nível é um penhasco: ' + vazios + ' ' +

@@ -5,11 +5,17 @@
  * legacy/src-vanilla/shell.html: cabeçalho, vitais, semente, estado do mapa,
  * registro, ajuda. Nada aqui lê o jogo — cada bloco assina o que precisa.
  *
- * A BOLSA (fase 1 dos despojos) é o único bloco que não vem daquela lista: ela
- * entra logo depois dos Vitais porque é a mesma natureza de dado — o que o
- * JOGADOR é e o que o jogador CARREGA ficam juntos, antes de qualquer coisa
- * sobre o andar. Acrescentar um bloco à barra é mudança de contrato de UI, e
- * está declarada aqui e no teste que fixa a ordem (test/ui.test.tsx).
+ * A SAÍDA DO ANDAR (a bússola da escada) é o primeiro bloco fora daquela lista
+ * e vem logo depois dos Vitais, antes até da bolsa. O porquê está por extenso
+ * em `panels/ExitPanel.tsx`, e em uma frase: o bloco existe porque o jogador
+ * não achava a escada, e enterrá-lo no rodapé da barra — ao lado do "Estado do
+ * mapa", que é o seu lugar temático — seria esconder a cura no mesmo armário do
+ * problema. Para onde eu vou é decisão de turno, como quanta vida eu tenho.
+ *
+ * A BOLSA (fase 1 dos despojos) vem em seguida, pela mesma natureza de dado — o
+ * que o JOGADOR é e o que o jogador CARREGA ficam juntos, antes de qualquer
+ * coisa sobre o andar. Acrescentar um bloco à barra é mudança de contrato de
+ * UI, e está declarada aqui e no teste que fixa a ordem (test/ui.test.tsx).
  *
  * A TROCA (fase 2 da economia) é o segundo, e é CONDICIONAL: `TradePanel`
  * devolve `null` a menos que o jogador esteja sobre o mercador ou sobre o
@@ -39,6 +45,7 @@
 import { useReducer } from 'react';
 
 import { BagPanel } from './panels/BagPanel';
+import { ExitPanel } from './panels/ExitPanel';
 import { Header } from './panels/Header';
 import { HelpPanel } from './panels/HelpPanel';
 import { LogPanel } from './panels/LogPanel';
@@ -55,6 +62,7 @@ export function Sidebar() {
     <aside className="painel">
       <Header />
       <Vitals />
+      <ExitPanel />
       <BagPanel />
       <QuestPanel />
       <TradePanel />

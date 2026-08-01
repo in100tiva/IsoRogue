@@ -219,8 +219,21 @@ export function QuestPanel() {
         <p className="nota" id="missoes-vazia">Sem missões neste andar.</p>
       ) : (
         <dl className="tabela" id="lista-missoes">
-          {missoes.map((m) => (
-            <LinhaMissao key={m.key} m={m} bag={bag} perto={pertoDoMercador} />
+          {/*
+            A CHAVE É O ÍNDICE, e de propósito — `m.key` NÃO serve.
+
+            `MissaoKey` não é única por partida (está escrito no tipo, em
+            types.ts): as caçadas são geradas POR ANDAR e ATRAVESSAM a descida,
+            então uma 'abate-chaser' do andar 1 convive com a do andar 2 na
+            mesma lista. Com `key={m.key}` o React reclamava de chave duplicada
+            no primeiro andar que repetisse um arquétipo — e como a lista é
+            APPEND-ONLY na ordem de geração (`descend` concatena, nunca reordena
+            nem remove), o índice é estável: a missão de posição 3 continua
+            sendo a mesma missão para sempre. É o caso raro em que o índice não
+            é preguiça, e sim a identidade real do item.
+          */}
+          {missoes.map((m, i) => (
+            <LinhaMissao key={i} m={m} bag={bag} perto={pertoDoMercador} />
           ))}
         </dl>
       )}

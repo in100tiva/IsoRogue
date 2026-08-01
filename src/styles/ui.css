@@ -255,6 +255,23 @@
 
 .valor-otimo { color: var(--verde); }
 
+/* --------------------------------------------------------- saída do andar */
+
+/* A bússola da escada (`panels/ExitPanel.tsx`) não inventa primitivo: as duas
+   linhas são `.tabela` / `.tabela-linha`, e o verde de `.valor-otimo` — que na
+   conectividade quer dizer "perfeito" — aqui quer dizer "chegou, pode descer".
+   O único nome novo é o da frase de rodapé, que é o mesmo idioma de
+   `.bolsa-preco`: mono, um ponto menor, no cinza dos rótulos. Ela diz o que
+   vem depois da escada, e isso é contexto, não valor. */
+.saida-dica {
+  margin: 8px 0 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.04em;
+  color: var(--fraco);
+}
+
 /* ------------------------------------------------------------------ bolsa */
 
 /* A bolsa reusa `.tabela` / `.tabela-linha` do estado do mapa — mesma leitura

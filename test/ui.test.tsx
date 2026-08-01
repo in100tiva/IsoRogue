@@ -157,15 +157,17 @@ describe('UI — smoke da casca React (§7.4)', () => {
   it('monta <App/> sob StrictMode com todos os painéis e os id do contrato §9', () => {
     const { container } = montarApp();
 
-    /* Ordem dos blocos fixada pelo §9 do CONTRACTS.md — com a Bolsa (fase 1
-     * dos despojos) logo após os Vitais: o que o jogador é e o que ele carrega
-     * ficam juntos, antes de qualquer coisa sobre o andar (ver Sidebar.tsx).
-     * As Missões (fase 3) entram entre a bolsa e a semente: o porquê de
-     * carregar, o que se carrega, e só então o andar. */
+    /* Ordem dos blocos fixada pelo §9 do CONTRACTS.md — com a Saída do andar
+     * (a bússola da escada) logo após os Vitais, e a Bolsa (fase 1 dos
+     * despojos) em seguida: para onde eu vou e o que eu carrego são decisão de
+     * turno, antes de qualquer estatística do andar (ver Sidebar.tsx). As
+     * Missões (fase 3) entram entre a bolsa e a semente: o porquê de carregar,
+     * o que se carrega, e só então o andar. */
     const titulos = Array.from(container.ownerDocument.querySelectorAll('.painel .titulo'))
       .map((el) => (el.textContent || '').trim());
     expect(titulos, 'blocos do painel lateral fora de ordem ou ausentes').toEqual([
-      'Vitais', 'Bolsa', 'Missões', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+      'Vitais', 'Saída do andar', 'Bolsa', 'Missões', 'Semente', 'Estado do mapa',
+      'Registro', 'Ajuda'
     ]);
     expect(screen.getByText('Nível'), 'rótulo Nível ausente').toBeTruthy();
     expect(screen.getByText('Turno'), 'rótulo Turno ausente').toBeTruthy();
@@ -175,6 +177,7 @@ describe('UI — smoke da casca React (§7.4)', () => {
       'hud-vida', 'hud-vida-barra', 'hud-nivel', 'hud-turno', 'hud-atk', 'hud-pocoes',
       'hud-heroi-nivel', 'hud-xp', 'hud-xp-barra',
       'map-conect', 'map-salas', 'map-inimigos', 'map-itens', 'map-visiveis',
+      'saida-direcao', 'saida-passos', 'saida-dica',
       'tooltip', 'debug', 'morte', 'morte-corpo', 'btn-nova'
     ];
     for (const id of ids) {
@@ -185,6 +188,92 @@ describe('UI — smoke da casca React (§7.4)', () => {
     expect(document.getElementById('morte')!.hasAttribute('hidden')).toBe(true);
     expect(document.getElementById('tooltip')!.hasAttribute('hidden')).toBe(true);
     expect(document.querySelector('.palco > canvas#cv'), 'canvas fora do palco').toBeTruthy();
+
+    esperarConsoleLimpo();
+  });
+
+  /* ------------------------------------------------------------------ *
+   * A BÚSSOLA DA SAÍDA (`panels/ExitPanel.tsx`)
+   *
+   * O bloco existe porque a mecânica da descida sempre funcionou e o jogador
+   * mesmo assim não achava a escada: 45×45 de mapa, raio 9 de visão, escada a
+   * ~30 tiles do início. O que estes casos travam é que o painel APONTA — a
+   * direção certa, com a tecla certa, e o número de passos do caminho real.
+   * ------------------------------------------------------------------ */
+
+  it('a bússola aponta a escada com direção, tecla e passos do caminho real', () => {
+    montarApp();
+    const g = store.getGame();
+
+    const direcao = document.getElementById('saida-direcao')!.textContent || '';
+    const passos = document.getElementById('saida-passos')!.textContent || '';
+
+    /* A semente do teste não nasce em cima da escada — se um dia nascer, o caso
+     * de baixo é que cobre esse estado, e este aqui estaria medindo outra coisa. */
+    expect(
+      g.player.x === g.map.stairs.x && g.player.y === g.map.stairs.y,
+      'a semente do teste nasceu em cima da escada'
+    ).toBe(false);
+
+    /* DIREÇÃO: um dos oito octantes da grade, com a tecla de `MOVE_KEY` ao lado.
+     * A tecla é o que resolve a ambiguidade do isométrico — 'norte' da grade não
+     * é o topo da tela, mas W é sempre W. */
+    expect(direcao, 'a direção da saída saiu fora do formato "nome (TECLA)"')
+      .toMatch(/^(leste|sudeste|sul|sudoeste|oeste|noroeste|norte|nordeste) \([WASDQEZC]\)$/);
+
+    /* E é a direção CERTA: o sinal de cada eixo do nome tem de bater com o sinal
+     * do vetor até a escada (o eixo apagado pelo octante não opina). */
+    const dx = g.map.stairs.x - g.player.x;
+    const dy = g.map.stairs.y - g.player.y;
+    if (/leste/.test(direcao)) expect(dx, 'apontou leste com a escada a oeste').toBeGreaterThan(0);
+    if (/oeste/.test(direcao)) expect(dx, 'apontou oeste com a escada a leste').toBeLessThan(0);
+    if (/^sul|^sudeste|^sudoeste/.test(direcao)) {
+      expect(dy, 'apontou sul com a escada ao norte').toBeGreaterThan(0);
+    }
+    if (/^norte|^nordeste|^noroeste/.test(direcao)) {
+      expect(dy, 'apontou norte com a escada ao sul').toBeLessThan(0);
+    }
+
+    /* PASSOS: o valor do campo de Dijkstra, portanto o caminho REAL — nunca
+     * menor que a linha reta de Chebyshev, que ignora parede, água e vazio. */
+    const reta = Math.max(Math.abs(dx), Math.abs(dy));
+    expect(Number(passos), 'os passos até a saída não são um número').not.toBeNaN();
+    expect(Number(passos), 'o caminho até a escada saiu menor que a linha reta')
+      .toBeGreaterThanOrEqual(reta);
+
+    expect(document.getElementById('saida-dica')!.textContent, 'a dica não diz para onde a escada leva')
+      .toContain('andar ' + (g.depth + 1));
+
+    esperarConsoleLimpo();
+  });
+
+  it('sobre a escada a bússola troca de mensagem e ensina a descer', () => {
+    montarApp();
+    const g = store.getGame();
+
+    act(() => {
+      g.player.x = g.map.stairs.x;
+      g.player.y = g.map.stairs.y;
+      /* `setHover` é a via pública mais barata de acordar os assinantes sem
+       * consumir turno — o mesmo truque dos testes do balcão. */
+      store.setHover({ x: g.player.x, y: g.player.y });
+    });
+
+    expect(document.getElementById('saida-direcao')!.textContent, 'a bússola não percebeu a chegada')
+      .toBe('você está nela');
+    expect(document.getElementById('saida-passos')!.textContent, 'passos deviam zerar em cima da escada')
+      .toBe('0');
+    const dica = document.getElementById('saida-dica')!.textContent || '';
+    expect(dica, 'a dica não ensina a tecla de descer').toContain('>');
+    expect(dica, 'a dica não ensina a tecla de descer').toContain('Enter');
+
+    /* E a tecla FUNCIONA a partir daí: descer é o ponto de todo o bloco. */
+    const antes = g.depth;
+    act(() => {
+      fireEvent.keyDown(window, { key: '>', code: 'Period', shiftKey: true });
+    });
+    expect(store.getGame().depth, 'a escada não desceu com > estando em cima dela')
+      .toBe(antes + 1);
 
     esperarConsoleLimpo();
   });
@@ -655,7 +744,8 @@ describe('UI — smoke da casca React (§7.4)', () => {
     const titulos = Array.from(document.querySelectorAll('.painel .titulo'))
       .map((el) => (el.textContent || '').trim());
     expect(titulos, 'o balcão entrou fora de lugar na barra lateral').toEqual([
-      'Vitais', 'Bolsa', 'Missões', 'Mercador', 'Semente', 'Estado do mapa', 'Registro', 'Ajuda'
+      'Vitais', 'Saída do andar', 'Bolsa', 'Missões', 'Mercador', 'Semente',
+      'Estado do mapa', 'Registro', 'Ajuda'
     ]);
     expect(document.getElementById('troca-moedas')!.textContent, 'moedas do balcão').toBe('0');
 
