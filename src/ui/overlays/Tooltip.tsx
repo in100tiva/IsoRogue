@@ -5,9 +5,16 @@
  * legacy/src-vanilla/70-game.js e de `showTooltip` / `posicionarTooltip` de
  * legacy/src-vanilla/60-ui.js.
  *
- * Os seis campos, NESTA ordem e com estes textos:
- *   arquétipo (título) · Vida x/y · Distância (Chebyshev) · Dijkstra do tile da
- *   criatura · Estado · Ação planejada (`ent.plan`).
+ * Os sete campos, NESTA ordem e com estes textos:
+ *   arquétipo (título) · Nível · Vida x/y · Distância (Chebyshev) · Dijkstra do
+ *   tile da criatura · Estado · Ação planejada (`ent.plan`).
+ *
+ * O NÍVEL entrou na emenda da descida (§15 do docs/BESTIARIO.md), e este é o
+ * único lugar onde ele cabe: o nível do monstro não é campo de `Enemy` — é
+ * `nivelDoMonstro(kind, andar)`, o do arquétipo mais um por andar descido —,
+ * então sem esta linha o jogador só o descobre pelo XP que aparece DEPOIS do
+ * abate. O balão é onde ele pergunta "vale a pena encarar isto?", e a resposta
+ * é justamente esse número comparado com o dele.
  *
  * Só aparece sobre criatura VISÍVEL: o índice do tile sob o cursor precisa estar
  * em `game.visible` (R31). `pointer-events: none` vem do CSS (`.tooltip`).
@@ -21,7 +28,7 @@
 import { useLayoutEffect, useRef } from 'react';
 import { store } from '../../engine/store';
 import { cheb, idx } from '../../engine/core';
-import { ARCHETYPES, enemyAt } from '../../engine/entities';
+import { ARCHETYPES, enemyAt, nivelDoMonstro } from '../../engine/entities';
 import { DIJKSTRA_INF } from '../../engine/dijkstra';
 import { useGameVersion } from '../hooks/useGameStore';
 import { usePointer } from '../hooks/usePointer';
@@ -106,6 +113,7 @@ export function Tooltip() {
   return (
     <div id="tooltip" ref={ref} className="tooltip" role="tooltip">
       <div className="tt-nome">{nomeDe(ent)}</div>
+      <div>{'Nível ' + nivelDoMonstro(ent.kind, g.depth) + ' (você: ' + g.player.level + ')'}</div>
       <div>{'Vida ' + ent.hp + '/' + ent.maxHp}</div>
       <div>{'Distância ' + dist}</div>
       <div>{'Dijkstra ' + dv}</div>

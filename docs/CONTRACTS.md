@@ -454,6 +454,7 @@ Abaixo de 900px de largura, o painel vira uma faixa inferior rolável (responsiv
 Painel lateral contém, nesta ordem:
 1. **Cabeçalho**: título, nível (profundidade), turno.
 2. **Vitais**: barra de vida com número, ataque, poções.
+2b. **Saída do andar** (emenda 2026-08-01): direção e passos até a escada.
 3. **Semente**: `<input id="seed">` + botões `Gerar`, `Aleatória`, `Copiar`.
    `Copiar` usa `navigator.clipboard` com fallback para seleção do input; nunca lança.
 4. **Estado do mapa**: conectividade em % (com destaque verde em 100%), salas, inimigos,
@@ -468,6 +469,31 @@ Painel lateral contém, nesta ordem:
 > barra âmbar de progresso. Ids novos: `#hud-heroi-nivel`, `#hud-xp`,
 > `#hud-xp-barra`. Os ids antigos e os valores que mostram não mudaram.
 
+> **Emenda 2026-08-01 (a bússola da saída):** entra o bloco **Saída do andar**, logo
+> depois dos Vitais — antes da Bolsa, e portanto o segundo bloco da barra. Duas linhas
+> na `.tabela` de sempre e uma frase de rodapé:
+>
+> - **Direção** (`#saida-direcao`) — o octante da GRADE em que a escada está, com a
+>   tecla de movimento daquela direção ao lado (`sudeste (C)`). A tecla existe porque o
+>   mundo é isométrico: o "norte" da grade não é o topo da tela, mas `W` é sempre `W`.
+>   Sobre a escada, o valor vira `você está nela`, em `.valor-otimo`;
+> - **Passos** (`#saida-passos`) — o valor do campo de Dijkstra do jogador no tile da
+>   escada: o caminho REAL, contornando parede, água e vazio. Não é linha reta. Sem rota
+>   (mapa fabricado à mão), `sem rota`;
+> - **`#saida-dica`** — para onde a escada leva, ou como descer quando o jogador já está
+>   em cima dela.
+>
+> Nenhuma informação nova entrou no jogo: o balão de criatura já mostra valores de
+> Dijkstra desde o vanilla. O bloco existe porque a descida sempre funcionou e o jogador
+> mesmo assim não achava a escada — 45×45 de mapa, raio 9 de visão, escada a ~30 tiles
+> do início (medido em 200 andares, com **zero** escadas inalcançáveis).
+>
+> O **balão de criatura** passa de seis para SETE campos: `Nível N (você: M)` entra logo
+> abaixo do arquétipo, porque o nível do monstro agora depende do andar (§15.1 do
+> BESTIARIO) e não há outro lugar em que o jogador o leia antes do abate.
+>
+> Ids novos: `#saida-direcao`, `#saida-passos`, `#saida-dica`.
+
 ### Elementos com id fixo (o `game.js` e o `ui.js` dependem destes)
 
 `#cv` (canvas), `#seed`, `#btn-gerar`, `#btn-aleatoria`, `#btn-copiar`, `#log`,
@@ -477,6 +503,9 @@ Painel lateral contém, nesta ordem:
 
 > **Emenda 2026-07-30 (§16 do BESTIARIO):** acrescentar à lista — `#hud-heroi-nivel`,
 > `#hud-xp`, `#hud-xp-barra`.
+
+> **Emenda 2026-08-01 (a bússola da saída):** acrescentar à lista — `#saida-direcao`,
+> `#saida-passos`, `#saida-dica`.
 
 ### API
 
@@ -495,6 +524,10 @@ R.UI.setDebug(game)         // atualiza o painel #debug (seed, FPS, pos, tile so
 
 Ao passar o mouse sobre uma criatura **visível**: vida (`x/y`), arquétipo, distância
 (Chebyshev), valor de Dijkstra do tile dela, estado e ação planejada (`ent.plan`).
+
+> **Emenda 2026-08-01:** entra o **nível** (`Nível N (você: M)`), logo abaixo do
+> arquétipo — o do monstro é `nivelDoMonstro(kind, andar)` (§15.1 do BESTIARIO), que
+> sobe um por andar descido, e o do herói é `player.level`. Sete campos, nesta ordem.
 
 ### Tela de morte
 

@@ -237,11 +237,14 @@ export type ArchetypeShape = 'triangulo' | 'hexagono' | 'duplo-losango';
  * Definição fixa de arquétipo (`R.Ent.ARCH`). `fem` é o gênero gramatical do
  * nome em pt-BR — o registro concorda artigo e particípio por ele.
  *
- * `nivel` é o nível do monstro na escala de balanceamento (§15 do
- * BESTIARIO): Slime 1, Goblin 2, Ogro 3. É ele que dirige o XP do abate
- * (100 × 2^(nivelMonstro − nivelHeroi), cortado a zero quando o herói passa
- * três níveis) e a tabela de spawn, que desloca a mistura conforme o nível
- * do herói.
+ * `nivel` é o nível BASE do monstro na escala de balanceamento (§15.1 do
+ * BESTIARIO): Slime 1, Goblin 2, Ogro 3. O nível EFETIVO soma um por andar
+ * descido — `nivelDoMonstro(kind, andar)`, em entities.ts —, e é o efetivo
+ * que dirige o XP do abate (100 × 2^(nivelMonstro − nivelHeroi), cortado a
+ * zero quando o herói passa três níveis).
+ *
+ * O nível NÃO dirige mais a tabela de spawn: a mistura sai do ANDAR (§15.4),
+ * não do nível de ninguém.
  */
 export interface Archetype {
   key: ArchetypeKey;
@@ -424,7 +427,7 @@ export interface Missao {
   entregue: boolean;
 }
 
-/** Retorno de `populate(map, depth, heroLevel)`. */
+/** Retorno de `populate(map, depth)`. */
 export interface Population {
   enemies: Enemy[];
   items: Item[];
