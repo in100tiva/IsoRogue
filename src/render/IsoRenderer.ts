@@ -1470,7 +1470,7 @@ export class IsoRenderer {
   /* --- o texto de XP flutuante (docs/BESTIARIO.md §16) --- */
   /** Flutuantes vivos. Poucos e de vida curta — varridos por quadro sem índice. */
   private readonly flutuantes: FlutuanteXp[] = [];
-  /** Atlas do texto por VALOR (o conjunto é fechado: 25/50/100/200/400). */
+  /** Atlas do texto por VALOR (25/50/100/200/400/800…, ver `modeloDeXp`). */
   private readonly atlasXp = new Map<number, AtlasPersonagem | null>();
   /** Buffer de tingimento do clarão de dano (o sprite não é um caminho, não dá para preencher). */
   private tinta: HTMLCanvasElement | null = null;
@@ -3584,9 +3584,11 @@ export class IsoRenderer {
 
   /**
    * §16 — o atlas do texto de um valor de XP, forjado sob demanda e uma vez
-   * só (o padrão de `atlasDoInimigo`): o conjunto é fechado, então no máximo
-   * cinco atlases existem por instância. Valor fora da escala (§15) guarda
-   * `null` e o flutuante simplesmente não sai — degradar sem lançar.
+   * só (o padrão de `atlasDoInimigo`). Os valores são potências de dois vezes
+   * 100 (§15), então a partida inteira encosta em meia dúzia deles mesmo depois
+   * de o nível do monstro passar a subir com o andar. Valor que não é XP (zero,
+   * negativo, quebrado) guarda `null` e o flutuante simplesmente não sai —
+   * degradar sem lançar.
    */
   private atlasDoXp(xp: number): AtlasPersonagem | null {
     const pronto = this.atlasXp.get(xp);

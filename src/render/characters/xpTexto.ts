@@ -1,9 +1,9 @@
 /*
  * ISOROGUE — src/render/characters/xpTexto.ts
  *
- * O texto de XP flutuante dos abates (+25, +50, +100, +200, +400 — o conjunto
- * FECHADO da escala de §15 do BESTIARIO: 100 × 2^(nivelMonstro − nivelHeroi),
- * cortada a zero com três níveis de diferença) como rig de caixas, na MESMA
+ * O texto de XP flutuante dos abates (+25, +50, +100, +200, +400, +800 … — a
+ * escala de §15 do BESTIARIO: 100 × 2^(nivelMonstro − nivelHeroi), cortada a
+ * zero com três níveis de diferença) como rig de caixas, na MESMA
  * técnica dos personagens (docs/PERSONAGEM.md §4): cada pixel do glifo é um
  * cubo de 1u, o rig inteiro é rasterizado no buffer de arte com a projeção
  * isométrica de sempre e lido na coluna ('parado', 0) de um atlas forjado sob
@@ -14,7 +14,9 @@
  * frente e lado, e a quantização de §4.3 dá a leitura de bloco.
  *
  * Nada aqui toca o engine (R54): quem decide QUANTO vale o texto é o engine
- * (`game.abatesRecentes`); este módulo só sabe desenhar os cinco valores.
+ * (`game.abatesRecentes`); este módulo só sabe desenhar um número. Desde que o
+ * nível do monstro passou a subir com o andar, o conjunto de valores deixou de
+ * ser fechado — ver `modeloDeXp`.
  */
 
 import type { Caixa, No } from '../model3d';
@@ -126,10 +128,9 @@ export function criarModeloXpTexto(texto: string): No {
 }
 
 /**
- * Os cinco valores da escala de §15, forjáveis. Fora deles o renderer NÃO
- * desenha flutuante nenhum (degradar sem lançar: uma escala futura que gere
- * outro valor simplesmente não mostra texto até o modelo existir — nunca
- * quebra o jogo).
+ * Os cinco valores que a escala de §15 produzia quando o nível do monstro era
+ * só o do arquétipo. Continuam pré-forjados no import porque são os que quase
+ * todo abate rende — mas o conjunto DEIXOU DE SER FECHADO (ver `modeloDeXp`).
  */
 export const MODELO_XP: Readonly<Record<number, No>> = {
   25: criarModeloXpTexto('+25'),
@@ -139,7 +140,44 @@ export const MODELO_XP: Readonly<Record<number, No>> = {
   400: criarModeloXpTexto('+400')
 };
 
-/** O rig de um valor de XP, ou `null` fora do conjunto fechado (§15). */
+/** Teto de rigs memoizados. Ver `modeloDeXp` — é trava de vazamento, não de escala. */
+const TETO_MEMO = 32;
+
+/** Os rigs forjados sob demanda, além dos cinco de `MODELO_XP`. */
+const memo = new Map<number, No>();
+
+/**
+ * O rig de um valor de XP.
+ *
+ * O CONJUNTO ERA FECHADO em 25/50/100/200/400 e deixou de ser na emenda da
+ * descida: o nível do monstro passou a somar um por andar (`nivelDoMonstro`,
+ * engine/entities.ts), então 800, 1600 e adiante são valores COMUNS — um goblin
+ * do andar 3 contra um herói de nível 1 rende 800. Com a tabela fechada esses
+ * abates simplesmente não mostravam texto, e o flutuante sumia exatamente nos
+ * abates que mais valem a pena celebrar.
+ *
+ * A cura não é acrescentar dois números à tabela — seria a mesma dívida adiada
+ * dois andares. O rig é construído a partir da string do valor, e construir é
+ * barato (um punhado de caixas por glifo, uma vez por valor); o que era caro
+ * seria refazê-lo por quadro, e disso cuida a memoização — aqui e, do outro
+ * lado, o `atlasXp` do IsoRenderer, que memoiza o ATLAS (o custo real: a
+ * rasterização).
+ *
+ * O teto existe como trava de vazamento, não como régua de escala: os valores
+ * são potências de dois vezes 100, então 32 chaves cobrem de 25 a 8·10^8 e
+ * nenhuma partida real chega perto. Estourado o teto, o rig ainda é DEVOLVIDO —
+ * só não fica guardado. Degradar em desempenho, nunca em imagem.
+ *
+ * Devolve `null` só para o que não é valor de XP: zero (a escala cortou — §16
+ * manda não desenhar), negativo, não-inteiro ou não-finito.
+ */
 export function modeloDeXp(xp: number): No | null {
-  return MODELO_XP[xp] ?? null;
+  const pronto = MODELO_XP[xp];
+  if (pronto) return pronto;
+  if (!Number.isFinite(xp) || !Number.isInteger(xp) || xp <= 0) return null;
+  const guardado = memo.get(xp);
+  if (guardado) return guardado;
+  const rig = criarModeloXpTexto('+' + xp);
+  if (memo.size < TETO_MEMO) memo.set(xp, rig);
+  return rig;
 }

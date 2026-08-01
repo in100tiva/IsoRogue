@@ -53,6 +53,7 @@ import {
   itemPrincipal,
   makeContext,
   makeItem,
+  nivelDoMonstro,
   nomeDaMissao,
   pesosSpawn,
   populate
@@ -331,8 +332,8 @@ describe('T3 — determinismo e regras de população', () => {
       for (let depth = 1; depth <= 3; depth++) {
         const mapa = generate(semente, depth);
         const mapb = generate(semente, depth);
-        const pa = populate(mapa, depth, 1);
-        const pb = populate(mapb, depth, 1);
+        const pa = populate(mapa, depth);
+        const pb = populate(mapb, depth);
         const onde = ondeEsta('T3', { semente, depth });
 
         expect(pa.enemies.map(chaveInimigo), onde + ': inimigos divergem entre duas populações')
@@ -971,52 +972,93 @@ describe('T10 — progressão: descer ' + N.t10Niveis + ' níveis, dificuldade e
 });
 
 /* ================================================================== *
- * T11 — balanceamento §15 do BESTIARIO (XP em escala + spawn por nível)
+ * T11 — balanceamento §15 do BESTIARIO (XP em escala + spawn POR ANDAR)
+ *
+ * A emenda da descida trocou o EIXO da mistura: ela saía do nível do herói e
+ * agora sai do ANDAR, e o nível do monstro sobe um por andar descido. Os três
+ * pedidos do dono que estes testes existem para travar:
+ *   · o goblin é mais comum que o slime desde o andar 1;
+ *   · no andar 3 o slime já é RARO;
+ *   · o nível do monstro sobe de um em um, consecutivamente, e é ele que o XP
+ *     do abate lê.
  * ================================================================== */
 
-describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', () => {
+describe('T11 — a escala de XP e a mistura de spawn pelo ANDAR', () => {
   it('a tabela de pesos segue o contrato, com clamp nos dois extremos', () => {
     // colunas: [chaser (goblin), sentinel (ogro), linker (slime)]
-    expect(pesosSpawn(1)).toEqual([10, 1, 100]);
-    expect(pesosSpawn(2)).toEqual([100, 10, 30]);
-    expect(pesosSpawn(3)).toEqual([40, 100, 10]);
+    expect(pesosSpawn(1)).toEqual([100, 1, 40]);
+    expect(pesosSpawn(2)).toEqual([100, 15, 20]);
+    expect(pesosSpawn(3)).toEqual([60, 100, 8]);
     expect(pesosSpawn(4)).toEqual([15, 100, 3]);
-    expect(pesosSpawn(99), 'T11: acima do 4 vale a régua do 4').toEqual([15, 100, 3]);
-    expect(pesosSpawn(0), 'T11: abaixo do 1 vale a régua do 1').toEqual([10, 1, 100]);
+    expect(pesosSpawn(99), 'T11: abaixo do fundo vale a régua do andar 4').toEqual([15, 100, 3]);
+    expect(pesosSpawn(0), 'T11: acima do topo vale a régua do andar 1').toEqual([100, 1, 40]);
   });
 
-  it('cada monstro declara o nível do contrato: slime 1, goblin 2, ogro 3', () => {
+  it('o goblin é mais comum que o slime em TODO andar da tabela', () => {
+    // o pedido do dono em uma linha: a masmorra deixou de ser dos slimes.
+    for (let andar = 1; andar <= 4; andar++) {
+      const [goblin, , slime] = pesosSpawn(andar);
+      expect(goblin, 'T11: slime mais comum que goblin no andar ' + andar)
+        .toBeGreaterThan(slime);
+    }
+  });
+
+  it('cada arquétipo declara o nível base do contrato: slime 1, goblin 2, ogro 3', () => {
     expect(ARCHETYPES.linker.nivel, 'T11: slime (linker)').toBe(1);
     expect(ARCHETYPES.chaser.nivel, 'T11: goblin (chaser)').toBe(2);
     expect(ARCHETYPES.sentinel.nivel, 'T11: ogro (sentinel)').toBe(3);
   });
 
-  it('a mistura desloca com o nível do herói e permanece determinística', () => {
-    const contar = (nivel: number): Record<ArchetypeKey, number> => {
+  it('o nível do monstro sobe um por andar, consecutivamente', () => {
+    // andar 1: 1/2/3 · andar 2: 2/3/4 · andar 3: 3/4/5 …
+    for (let andar = 1; andar <= 6; andar++) {
+      expect(nivelDoMonstro('linker', andar), 'T11: slime no andar ' + andar).toBe(andar);
+      expect(nivelDoMonstro('chaser', andar), 'T11: goblin no andar ' + andar).toBe(andar + 1);
+      expect(nivelDoMonstro('sentinel', andar), 'T11: ogro no andar ' + andar).toBe(andar + 2);
+    }
+    // o degrau é sempre de EXATAMENTE um — "consecutivamente", não em saltos
+    for (const kind of ['linker', 'chaser', 'sentinel'] as ArchetypeKey[]) {
+      for (let andar = 1; andar <= 9; andar++) {
+        expect(nivelDoMonstro(kind, andar + 1) - nivelDoMonstro(kind, andar),
+          'T11: o degrau de ' + kind + ' entre os andares ' + andar + ' e ' + (andar + 1))
+          .toBe(1);
+      }
+    }
+    // andar inválido degrada para o 1, nunca para nível negativo
+    expect(nivelDoMonstro('chaser', 0), 'T11: andar 0 vale o andar 1').toBe(2);
+    expect(nivelDoMonstro('chaser', Number.NaN), 'T11: andar não-finito vale o andar 1').toBe(2);
+  });
+
+  it('a mistura desloca com o ANDAR e permanece determinística', () => {
+    const contar = (andar: number): Record<ArchetypeKey, number> => {
       const conta: Record<ArchetypeKey, number> = { chaser: 0, sentinel: 0, linker: 0 };
       for (let s = 0; s < 24; s++) {
-        const pop = populate(generate('T11-MISTURA-' + s, 2), 2, nivel);
+        const pop = populate(generate('T11-MISTURA-' + s, andar), andar);
         for (const e of pop.enemies) conta[e.kind]++;
       }
       return conta;
     };
-    const l1 = contar(1);
-    const l2 = contar(2);
-    const l3 = contar(3);
-    const l4 = contar(4);
-    // herói 1: a masmorra é dos slimes (100 contra 10 e 1)
-    expect(l1.linker, 'T11: herói 1 devia ser dos slimes').toBeGreaterThan(l1.chaser * 3);
-    // herói 2: os goblins dominam
-    expect(l2.chaser, 'T11: herói 2 devia ser dos goblins').toBeGreaterThan(l2.linker * 2);
-    // herói 3: os ogros dominam e o slime já é minoria
-    expect(l3.sentinel, 'T11: herói 3 devia ser dos ogros').toBeGreaterThan(l3.chaser);
-    expect(l3.sentinel, 'T11: herói 3 com slime minoritário').toBeGreaterThan(l3.linker * 3);
-    // herói 4+: slime raro em absoluto, ogro comum, goblin em minoria
-    expect(l4.linker, 'T11: herói 4 com slime raro').toBeLessThan(l1.linker / 4);
-    expect(l4.sentinel, 'T11: herói 4 com ogro comum').toBeGreaterThan(l4.chaser * 3);
-    // mesma semente + mesmo nível → mesma mistura, sempre
-    const a = populate(generate('T11-DET', 1), 1, 3).enemies.map((e) => e.kind);
-    const b = populate(generate('T11-DET', 1), 1, 3).enemies.map((e) => e.kind);
+    const a1 = contar(1);
+    const a2 = contar(2);
+    const a3 = contar(3);
+    const a4 = contar(4);
+    const total = (c: Record<ArchetypeKey, number>): number => c.chaser + c.sentinel + c.linker;
+
+    // andar 1: os goblins são a fauna comum e o ogro é achado raro
+    expect(a1.chaser, 'T11: andar 1 devia ser dos goblins').toBeGreaterThan(a1.linker);
+    expect(a1.sentinel / total(a1), 'T11: andar 1 com ogro raro').toBeLessThan(0.05);
+    // andar 2: os goblins seguem dominando e o slime recua
+    expect(a2.chaser, 'T11: andar 2 devia continuar dos goblins').toBeGreaterThan(a2.linker * 2);
+    expect(a2.linker / total(a2), 'T11: andar 2 com slime em recuo').toBeLessThan(a1.linker / total(a1));
+    // andar 3: O PEDIDO DO DONO — o slime já é raro (menos de 10% do andar)
+    expect(a3.linker / total(a3), 'T11: andar 3 devia ter slime RARO').toBeLessThan(0.10);
+    expect(a3.chaser, 'T11: andar 3 com goblin ainda comum').toBeGreaterThan(a3.linker * 3);
+    // andar 4+: slime raríssimo, ogro comum, goblin em minoria
+    expect(a4.linker / total(a4), 'T11: andar 4 com slime raríssimo').toBeLessThan(0.05);
+    expect(a4.sentinel, 'T11: andar 4 com ogro comum').toBeGreaterThan(a4.chaser * 3);
+    // mesma semente + mesmo andar → mesma mistura, sempre
+    const a = populate(generate('T11-DET', 1), 1).enemies.map((e) => e.kind);
+    const b = populate(generate('T11-DET', 1), 1).enemies.map((e) => e.kind);
     expect(a, 'T11: populate divergiu com os mesmos argumentos').toEqual(b);
   }, LENTO);
 
@@ -1091,6 +1133,59 @@ describe('T11 — a escala de XP e a mistura de spawn pelo nível do herói', ()
     matar(fabricar(908, 'sentinel'));
     expect(game.player.level, 'T11: 400 xp devia render quatro níveis').toBe(5);
     expect(game.player.xp, 'T11: 400 xp justos, excedente zero').toBe(0);
+  }, LENTO);
+
+  it('descer DOBRA o XP do mesmo monstro — e ressuscita quem a escala já cortara', () => {
+    /*
+     * O motivo de a emenda existir: com o nível preso ao arquétipo, um herói de
+     * nível 4 nunca mais via XP de slime, e descer não mudava nada. Agora o
+     * mesmo bicho vale um nível a mais por andar, então o corte de três níveis
+     * é uma dívida que a próxima descida paga.
+     *
+     * Cada caso roda numa PARTIDA PRÓPRIA no andar sob teste — `game.depth` é o
+     * que `xpPorAbate` lê, e forçá-lo à mão deixaria o estado incoerente com o
+     * mapa e a população.
+     */
+    const xpDoAbate = (andar: number, kind: ArchetypeKey, nivelHeroi: number): number => {
+      const game = createState('T11-XP-ANDAR', andar);
+      game.player.level = nivelHeroi;
+      game.player.xp = 0;
+      game.player.atk = 50; // golpe certeiro: o abate é o que está em teste
+      let ent: Enemy | null = null;
+      for (const d of DIRS8) {
+        const x = game.player.x + d[0];
+        const y = game.player.y + d[1];
+        if (!isWalkable(game.map, x, y)) continue;
+        if (game.enemies.some((e) => e.x === x && e.y === y)) continue;
+        ent = {
+          id: 990, kind: kind, x: x, y: y, hp: 1, maxHp: 1, atk: 1, range: 1,
+          state: 'idle', plan: '', lastDmg: 0, bump: 0
+        };
+        game.enemies.push(ent);
+        break;
+      }
+      expect(ent, 'T11: sem tile livre ao redor do jogador no andar ' + andar).not.toBe(null);
+      if (!ent) return -1;
+      aplicar(game, 'move:' + (ent.x - game.player.x) + ',' + (ent.y - game.player.y));
+      // o XP do abate é o que a fila visual gravou — lido com o nível de ANTES
+      const abate = game.abatesRecentes[game.abatesRecentes.length - 1];
+      expect(abate, 'T11: o abate não chegou à fila visual').toBeTruthy();
+      return abate.xp;
+    };
+
+    // herói 2 × slime: nível 1 no andar 1 (50 xp), nível 2 no andar 2 (100),
+    // nível 3 no andar 3 (200) — dobra a cada degrau, sem exceção
+    expect(xpDoAbate(1, 'linker', 2), 'T11: slime do andar 1 contra herói 2').toBe(50);
+    expect(xpDoAbate(2, 'linker', 2), 'T11: slime do andar 2 contra herói 2').toBe(100);
+    expect(xpDoAbate(3, 'linker', 2), 'T11: slime do andar 3 contra herói 2').toBe(200);
+
+    // O CORTE QUE A DESCIDA DESFAZ: herói 4 contra slime não rende nada no
+    // andar 1 (três níveis de diferença) e volta a render 25 no andar 2.
+    expect(xpDoAbate(1, 'linker', 4), 'T11: slime do andar 1 contra herói 4 devia ser cortado').toBe(0);
+    expect(xpDoAbate(2, 'linker', 4), 'T11: descer devia ressuscitar o XP do slime').toBe(25);
+
+    // e o goblin do andar 3 (nível 4) contra um herói de nível 1: três acima
+    expect(xpDoAbate(3, 'chaser', 1), 'T11: goblin do andar 3 contra herói 1').toBe(800);
   }, LENTO);
 });
 
@@ -1659,8 +1754,8 @@ describe('T13 — economia e oficina: mercador, bancada, moedas e receitas', () 
       const semente = 'T13-POS-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const a = populate(map, depth, 1);
-        const b = populate(map, depth, 1);
+        const a = populate(map, depth);
+        const b = populate(map, depth);
         const onde = 'semente ' + semente + ' d=' + depth;
 
         /* Determinismo: duas chamadas, os mesmos dois pontos. */
@@ -2217,7 +2312,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       const semente = 'T14-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         const onde = ondeEsta('T14.1', { semente, depth });
         andares++;
 
@@ -2296,7 +2391,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       const semente = 'T14-EXTRAS-' + pad(i, 4);
       for (let depth = 1; depth <= 2; depth++) {
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         const onde = ondeEsta('T14.2', { semente, depth });
         const caldeirao = pop.bancada;
         expect(caldeirao, onde + ': andar sem caldeirão').not.toBe(null);
@@ -2345,7 +2440,7 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       const semente = 'T14-RESERVA-' + pad(i, 4);
       for (let depth = 1; depth <= 2; depth++) {
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         const onde = ondeEsta('T14.3', { semente, depth });
 
         const ocupados = new Map<string, string>();
@@ -2376,8 +2471,8 @@ describe('T14 — a instalação da entrada: mercador e estação no cômodo ini
       const semente = 'T14-DET-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const a = populate(map, depth, 1);
-        const b = populate(map, depth, 1);
+        const a = populate(map, depth);
+        const b = populate(map, depth);
         const onde = ondeEsta('T14.4', { semente, depth });
 
         expect(JSON.stringify(b.alquimiaExtras), onde + ': os extras divergiram entre chamadas')
@@ -2668,8 +2763,8 @@ describe('T15 — missões: geração por andar, abate, entrega e travessia', ()
       const semente = 'T15-GER-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const a = populate(map, depth, 1);
-        const b = populate(map, depth, 1);
+        const a = populate(map, depth);
+        const b = populate(map, depth);
         const onde = ondeEsta('T15.1', { semente, depth });
 
         /* Determinismo: duas chamadas, as mesmas caçadas — alvos, quantias e
@@ -3950,42 +4045,60 @@ describe('T17 — a enseada: canais de água no lugar da parede', () => {
      *   · 0001 d=2: alq 11,8;10,9 → 10,7;11,8 (só a decoração trocou de lado);
      *   · 0002 d=1: banc 6,6 → 3,2;
      *   · 0003 d=1: banc 6,7 → 4,11.
-     * Se um dia `e` ou `it` mudarem aqui, aí sim é stream vazando.
+     * Se um dia `it` mudar aqui, ou uma POSIÇÃO de `e` mudar, aí sim é stream
+     * vazando.
+     *
+     * ------------------------------------------------------------------
+     * O `kind` DE `e` FOI REGRAVADO NA EMENDA DA DESCIDA, e a distinção é o
+     * ponto inteiro deste teste.
+     *
+     * A mistura de spawn trocou de eixo (nível do herói → ANDAR), então os
+     * ARQUÉTIPOS mudaram em todos os seis casos — era isso que o dono pediu, e
+     * um baseline que não mudasse aqui estaria provando que o pedido não foi
+     * atendido. As POSIÇÕES, que são o que T17.5 de fato protege, saíram
+     * IDÊNTICAS às seis linhas anteriores, tile por tile: `pickKind` continua
+     * consumindo exatamente um `rng.int` por inimigo, dê no que der a linha de
+     * pesos. Foi conferido assim, e não no olho — comparando só a parte depois
+     * do `@` de cada entrada, antes e depois da mudança.
+     *
+     * O `seco`, o `it` e o `par` não se mexeram — nem podiam: a água é anterior
+     * à população, os itens vêm depois dos inimigos no mesmo stream e as
+     * paradas depois dos itens.
      * ------------------------------------------------------------------
      */
     const CONGELADO = [
       { seed: 'T17-STREAMS-0001', depth: 1, seco: 813,
-        e: 'linker@8,21 linker@15,21 linker@14,37 linker@24,35 linker@33,16 linker@38,27',
+        e: 'chaser@8,21 chaser@15,21 chaser@14,37 chaser@24,35 chaser@33,16 chaser@38,27',
         it: 'potion@13,23 potion@13,31 potion@22,33 potion@32,15',
         par: 'merc@4,4 banc@4,2 alq@5,2;4,3' },
       { seed: 'T17-STREAMS-0001', depth: 2, seco: 790,
-        e: 'linker@8,15 linker@7,15 linker@21,11 linker@27,6 linker@41,17 linker@9,27 ' +
-          'linker@14,36 linker@24,34',
+        e: 'chaser@8,15 linker@7,15 chaser@21,11 sentinel@27,6 chaser@41,17 chaser@9,27 ' +
+          'sentinel@14,36 chaser@24,34',
         it: 'potion@4,17 potion@18,12 potion@38,11 potion@3,26 potion@22,41',
         par: 'merc@4,5 banc@10,8 alq@10,7;11,8' },
       { seed: 'T17-STREAMS-0002', depth: 1, seco: 802,
-        e: 'chaser@2,36 linker@12,42 linker@20,11 linker@33,8 linker@27,21 linker@41,20',
+        e: 'chaser@2,36 chaser@12,42 chaser@20,11 chaser@33,8 chaser@27,21 chaser@41,20',
         it: 'potion@11,40 potion@26,7 potion@32,8 potion@40,21',
         par: 'merc@2,4 banc@3,2 alq@2,2;4,2' },
       { seed: 'T17-STREAMS-0002', depth: 2, seco: 880,
-        e: 'linker@5,12 linker@19,14 chaser@28,9 linker@29,14 chaser@8,24 linker@4,38 ' +
-          'linker@27,25 linker@24,39',
+        e: 'sentinel@5,12 chaser@19,14 chaser@28,9 chaser@29,14 sentinel@8,24 chaser@4,38 ' +
+          'chaser@27,25 chaser@24,39',
         it: 'potion@4,15 potion@20,9 potion@3,27 potion@9,40 potion@26,25',
         par: 'merc@5,2 banc@3,6 alq@2,6;4,6' },
       { seed: 'T17-STREAMS-0003', depth: 1, seco: 777,
-        e: 'linker@12,11 linker@11,8 linker@22,9 linker@3,20 linker@41,2 linker@17,38',
+        e: 'chaser@12,11 chaser@11,8 chaser@22,9 linker@3,20 chaser@41,2 chaser@17,38',
         it: 'potion@11,12 potion@8,21 potion@38,3 potion@11,36',
         par: 'merc@3,10 banc@4,11 alq@4,10;4,12' },
       { seed: 'T17-STREAMS-0003', depth: 2, seco: 811,
-        e: 'chaser@8,17 chaser@25,12 linker@24,18 linker@32,21 linker@42,18 linker@24,36 ' +
-          'linker@41,31 linker@33,41',
+        e: 'chaser@8,17 chaser@25,12 linker@24,18 chaser@32,21 chaser@42,18 chaser@24,36 ' +
+          'chaser@41,31 chaser@33,41',
         it: 'potion@7,12 potion@21,5 potion@19,19 potion@41,18 potion@31,40',
         par: 'merc@5,7 banc@4,2 alq@5,2;4,3' }
     ];
 
     for (const caso of CONGELADO) {
       const map = generate(caso.seed, caso.depth);
-      const p = populate(map, caso.depth, 1);
+      const p = populate(map, caso.depth);
       const onde = ondeEsta('T17.5', { semente: caso.seed, depth: caso.depth });
 
       let secos = 0;
@@ -5049,7 +5162,7 @@ describe('T20 — o povoamento não tranca a passagem', () => {
       const semente = 'T20-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         andares++;
         solidosPlantados += solidosDoAndar(pop).length;
 
@@ -5086,7 +5199,7 @@ describe('T20 — o povoamento não tranca a passagem', () => {
       const semente = 'T20-ESCADA-' + pad(i, 4);
       for (const depth of [1, 2, 5, 8, 12]) {
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         andares++;
         const v = medirAndar(map, pop);
         if (v.escadaPresa) {
@@ -5113,7 +5226,7 @@ describe('T20 — o povoamento não tranca a passagem', () => {
     for (let i = 0; i < 60; i++) {
       const semente = 'T20-SAIDA-' + pad(i, 4);
       const map = mapaDesenhado(semente, CENARIO_SAIDA, CAIXAS_SAIDA);
-      const pop = populate(map, 1, 1);
+      const pop = populate(map, 1);
       const onde = ondeEsta('T20.3', { semente });
 
       /* A instalação CABE neste cômodo: 15 candidatos seguros contra 1 gargalo.
@@ -5152,7 +5265,7 @@ describe('T20 — o povoamento não tranca a passagem', () => {
     for (let i = 0; i < 40; i++) {
       const semente = 'T20-GARGALO-' + pad(i, 4);
       const map = mapaDesenhado(semente, CENARIO_GARGALO, CAIXAS_GARGALO);
-      const pop = populate(map, 1, 1);
+      const pop = populate(map, 1);
       const onde = ondeEsta('T20.4', { semente });
 
       /*
@@ -5208,7 +5321,7 @@ describe('T20 — o povoamento não tranca a passagem', () => {
       for (let depth = 1; depth <= 3; depth++) {
         andares++;
         const map = generate(semente, depth);
-        const pop = populate(map, depth, 1);
+        const pop = populate(map, depth);
         if (pop.mercador && pop.bancada) continue;
         omissoes++;
 
@@ -5262,8 +5375,8 @@ describe('T20 — o povoamento não tranca a passagem', () => {
       const semente = 'T20-DET-' + pad(i, 4);
       for (let depth = 1; depth <= 3; depth++) {
         const map = generate(semente, depth);
-        const a = populate(map, depth, 1);
-        const b = populate(map, depth, 1);
+        const a = populate(map, depth);
+        const b = populate(map, depth);
         const onde = ondeEsta('T20.5', { semente, depth });
         expect(pontosEmTexto(solidosDoAndar(b)),
           onde + ': o filtro de passagem introduziu deriva entre duas chamadas')

@@ -64,6 +64,7 @@ import {
   ehMaterial,
   faltasDaReceita,
   makeItem,
+  nivelDoMonstro,
   nomeDaMissao,
   normalizeItemKind,
   normalizeMaterialKind,
@@ -355,6 +356,26 @@ function refreshDerived(game: Game): void {
   updateStats(game);
 }
 
+/**
+ * A ficha da FAUNA do andar, no registro: quem mora aqui e em que nível.
+ *
+ * Existe porque a escala de §15 é invisível de outra forma — o nível do monstro
+ * não é campo de `Enemy` (é derivado do andar), e sem esta linha o jogador só
+ * descobre que a masmorra endureceu pelo XP que aparece depois do abate. Uma
+ * linha por andar, na ordem popular do bestiário (Slime, Goblin, Ogro), escrita
+ * por `createState` e por `descend` — os dois únicos pontos em que um andar
+ * começa.
+ *
+ * NÃO entra em `snapshot()`: o registro nunca entrou (só o `stats` e o estado),
+ * então esta linha é texto para gente, não evidência para o oracle.
+ */
+function logFaunaDoAndar(game: Game, depth: number): void {
+  logMsg(game, 'Fauna do andar ' + depth + ': Slime nível ' +
+    nivelDoMonstro('linker', depth) + ', Goblin nível ' +
+    nivelDoMonstro('chaser', depth) + ', Ogro nível ' +
+    nivelDoMonstro('sentinel', depth) + '.', 'sistema');
+}
+
 // --------------------------------------------------------------------------
 // Persistência (sempre tolerante a falhas)
 // --------------------------------------------------------------------------
@@ -382,16 +403,21 @@ function gravarHistorico(game: Game): void {
 // Criação de estado
 // --------------------------------------------------------------------------
 
-export function createState(seedStr: string, depth: number = 1, heroLevel: number = 1): Game {
+/**
+ * Um andar novo por (semente, andar). O terceiro parâmetro `heroLevel` MORREU
+ * na emenda da descida: a mistura de spawn passou a sair do ANDAR (§15.4), e um
+ * parâmetro que não muda nada é pior do que nenhum — ele convida quem lê a
+ * acreditar que muda. `restore` era o único chamador que o preenchia com algo
+ * além do padrão, e hoje repovoa sem ele.
+ */
+export function createState(seedStr: string, depth: number = 1): Game {
   let d = intOr(depth, 1);
   if (d < 1) d = 1;
-  let nivel = intOr(heroLevel, 1);
-  if (nivel < 1) nivel = 1;
   const seed = normalizeSeed(seedStr);
   const map = generate(seed, d);
-  // §15 — a mistura de spawn do primeiro andar usa o nível do herói (1 numa
-  // expedição nova; o nível salvo numa retomada — ver `restore`).
-  const pop = populate(map, d, nivel);
+  // §15 — mistura, contagem e hp/atk saem TODOS do andar; o nível do herói só
+  // manda no XP do abate (`xpPorAbate`).
+  const pop = populate(map, d);
 
   const game: Game = {
     seedStr: seed,
@@ -465,6 +491,7 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
   logMsg(game, 'Nível ' + d + ' — masmorra gerada com a semente ' + seed + '.', 'sistema');
   logNotasDoMapa(game, map);
   logMsg(game, 'Inimigos: ' + game.enemies.length + ' — poções no chão: ' + game.items.length + '.', 'sistema');
+  logFaunaDoAndar(game, d);
   refreshDerived(game);
   return game;
 }
@@ -475,15 +502,23 @@ export function createState(seedStr: string, depth: number = 1, heroLevel: numbe
 
 /**
  * §15 do BESTIARIO — o XP do abate, na escala do dono: 100 quando o monstro é
- * do nível do herói, DOBRANDO por nível acima (200/400) e CAINdo pela metade
- * por nível abaixo (50/25), até zero quando o herói passa três níveis do
- * monstro — um slime deixa de render XP no nível 4, um goblin no 5, um ogro
- * no 6.
+ * do nível do herói, DOBRANDO por nível acima (200/400/800…) e CAINDO pela
+ * metade por nível abaixo (50/25), até zero quando o herói passa três níveis do
+ * monstro.
+ *
+ * O NÍVEL DO MONSTRO É O DO ANDAR (emenda da descida): `nivelDoMonstro` soma
+ * um por andar descido ao nível do arquétipo, então o mesmo goblin vale 2 no
+ * andar 1 e 4 no andar 3. É isso que faz descer render — antes, um herói que
+ * subisse de nível via a masmorra inteira deixar de dar XP e não havia nada
+ * fundo abaixo que voltasse a dar. O corte em três níveis de diferença continua
+ * de pé; ele agora só morde quem fica parado no mesmo andar.
+ *
+ * `depth` é o andar em que o abate acontece, que é o único andar de onde o jogo
+ * tem inimigos — ver `nivelDoMonstro` (entities.ts) sobre por que o nível não
+ * virou campo de `Enemy`.
  */
-function xpPorAbate(p: Player, ent: Enemy): number {
-  const arch = ARCHETYPES[ent.kind];
-  const nivelMonstro = arch && isNum(arch.nivel) ? arch.nivel : 1;
-  const diff = p.level - nivelMonstro;
+function xpPorAbate(p: Player, ent: Enemy, depth: number): number {
+  const diff = p.level - nivelDoMonstro(ent.kind, depth);
   if (diff >= 3) return 0;
   return Math.round(100 * Math.pow(2, -diff));
 }
@@ -567,7 +602,7 @@ function atacarInimigo(game: Game, ent: Enemy): void {
     registrarAbateEmMissoes(game, ent.kind);
     // §15 — o XP do abate vai no registro: é o único feedback visível da
     // escala enquanto a UI não mostra XP (a barra de XP é fase futura).
-    const xp = xpPorAbate(game.player, ent);
+    const xp = xpPorAbate(game.player, ent, game.depth);
     // §16 — e vai para a fila visual: o renderer faz o texto de XP flutuar do
     // tile do abate. O valor daqui é o CERTO — lido antes de `ganharXp` poder
     // subir o nível do herói neste mesmo golpe. Teto de segurança para o jogo
@@ -1407,8 +1442,8 @@ export function descend(g: Game): void {
   if (!g || g.over) return;
   const depth = g.depth + 1;
   const map = generate(g.seedStr, depth);
-  // §15 — a mistura de monstros do andar novo sai do nível ATUAL do herói.
-  const pop = populate(map, depth, g.player.level);
+  // §15 — a mistura de monstros do andar novo sai do PRÓPRIO andar novo.
+  const pop = populate(map, depth);
   const p = g.player;
 
   g.depth = depth;
@@ -1448,6 +1483,7 @@ export function descend(g: Game): void {
   logNotasDoMapa(g, map);
   logMsg(g, 'Inimigos: ' + g.enemies.length + ' — poções no chão: ' +
     g.items.length + '. Vida máxima agora ' + p.maxHp + '.', 'sistema');
+  logFaunaDoAndar(g, depth);
 
   refreshDerived(g);
   autosave(g);
@@ -1880,10 +1916,10 @@ export function restore(dados: unknown): Game | null {
 
   let game: Game;
   try {
-    // §15 — a retomada repovoa com o nível SALVO do herói (usado só se o save
-    // não trouxer a lista de inimigos, que é quem manda quando existe).
-    const nivelSalvo = Math.max(1, intOr(objetoDe(obj.player)?.level, 1));
-    game = createState(seedBruta, depth, nivelSalvo);
+    // §15 — a retomada repovoa por (semente, andar) e nada mais: a mistura não
+    // depende mais do nível do herói, então o save não precisa dele para o
+    // andar sair idêntico ao que foi gravado.
+    game = createState(seedBruta, depth);
   } catch (e) {
     return null;
   }

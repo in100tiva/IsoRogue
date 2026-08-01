@@ -72,9 +72,10 @@ export {
  * Arquétipos
  * ------------------------------------------------------------------ */
 
-/* `cor`/`corDetalhe`/`forma` são dicas para o render; `nivel` é o nível do
- * monstro na escala de balanceamento (§15 do BESTIARIO — dirige o XP do abate
- * e a tabela de spawn por nível do herói); `ideal` é a distância preferida;
+/* `cor`/`corDetalhe`/`forma` são dicas para o render; `nivel` é o nível BASE do
+ * monstro na escala de balanceamento (§15.1 do BESTIARIO — o efetivo soma um por
+ * andar, ver `nivelDoMonstro`, e é ele que dirige o XP do abate); `ideal` é a
+ * distância preferida;
  * `fem` é o gênero gramatical do nome, usado para concordar artigo e particípio
  * nas mensagens do registro ('foge ferida' × 'foge ferido'). */
 export const ARCHETYPES: Record<ArchetypeKey, Archetype> = {
@@ -848,40 +849,81 @@ function distribute(
 }
 
 /**
- * §15 do BESTIARIO — a mistura de spawn, dirigida pelo NÍVEL DO HERÓI (não
- * mais pela profundidade). Cada linha é um degrau do herói; as colunas seguem
- * `KINDS` (chaser/sentinel/linker = Goblin/Ogro/Slime). A progressão pedida
- * pelo dono:
+ * §15 do BESTIARIO — a mistura de spawn, dirigida pelo ANDAR (`map.depth`).
+ * Cada linha é um andar da masmorra; as colunas seguem `KINDS`
+ * (chaser/sentinel/linker = Goblin/Ogro/Slime).
  *
- *   herói 1: 10 goblin · 1 ogro · 100 slime — a cada 10 slimes, 1 goblin; a
- *            cada 10 goblins, 1 ogro (a masmorra é dos slimes);
- *   herói 2: os goblins dominam, ogros aparecem, slimes recuam;
- *   herói 3: os ogros dominam, goblins continuam comuns, slimes raros;
- *   herói 4+: ogros comuns, goblins em minoria, slimes raríssimos — o estado
+ * A RÉGUA MUDOU DE EIXO (emenda da descida): até aqui a mistura saía do NÍVEL
+ * DO HERÓI, e o efeito na mão era o contrário do que o papel prometia — quem
+ * descia sem matar levava a masmorra do andar 1 para o andar 5, e quem subia de
+ * nível numa sala só via a fauna trocar sem sair do lugar. O jogador lê o mundo
+ * pelo ANDAR ("desci, ficou pior"), não pela própria ficha; é ele que manda
+ * agora. O que a profundidade já endurecia — a CONTAGEM e o hp/atk — continua
+ * como estava, e o nível do herói continua mandando no XP (§15.2), que é o lado
+ * da escala em que ele é a pergunta certa.
+ *
+ * A progressão pedida pelo dono:
+ *
+ *   andar 1: os goblins são a fauna comum e os slimes o resto; ogro é achado
+ *            raro — 100 goblin · 1 ogro · 40 slime;
+ *   andar 2: os goblins seguem dominando, os ogros aparecem de verdade e os
+ *            slimes recuam;
+ *   andar 3: os slimes JÁ SÃO RAROS (menos de 5% do andar), os ogros assumem e
+ *            os goblins continuam comuns;
+ *   andar 4+: ogros comuns, goblins em minoria, slimes raríssimos — o estado
  *            final descrito pelo dono, estável dali em diante.
  *
- * O degrau 4 é também a régua dos níveis seguintes: com XP plano de 100 por
- * nível o herói pode subir indefinidamente, e a mistura não volta a mudar.
+ * A linha 4 é a régua de todos os andares seguintes: a masmorra não tem fundo,
+ * e a mistura não volta a mudar depois dela.
  */
 const PESOS_SPAWN: readonly (readonly [number, number, number])[] = [
-  [10, 1, 100],   // herói 1
-  [100, 10, 30],  // herói 2
-  [40, 100, 10],  // herói 3
-  [15, 100, 3]    // herói 4+
+  [100, 1, 40],   // andar 1
+  [100, 15, 20],  // andar 2
+  [60, 100, 8],   // andar 3
+  [15, 100, 3]    // andar 4+
 ];
 
-/** Os pesos da linha do herói (clamp nos dois extremos da tabela). */
-export function pesosSpawn(heroLevel: number): readonly [number, number, number] {
-  let l = Math.floor(heroLevel);
-  if (!Number.isFinite(l) || l < 1) l = 1;
-  if (l > PESOS_SPAWN.length) l = PESOS_SPAWN.length;
-  return PESOS_SPAWN[l - 1];
+/** Os pesos da linha do ANDAR (clamp nos dois extremos da tabela). */
+export function pesosSpawn(andar: number): readonly [number, number, number] {
+  let d = Math.floor(andar);
+  if (!Number.isFinite(d) || d < 1) d = 1;
+  if (d > PESOS_SPAWN.length) d = PESOS_SPAWN.length;
+  return PESOS_SPAWN[d - 1];
 }
 
-/* Sorteio do arquétipo pela linha de `PESOS_SPAWN` do nível do herói.
+/**
+ * O NÍVEL de um monstro no andar em que ele nasceu: o nível do arquétipo
+ * (§15.1 — Slime 1, Goblin 2, Ogro 3) mais um por andar descido.
+ *
+ *   andar 1: slime 1 · goblin 2 · ogro 3
+ *   andar 2: slime 2 · goblin 3 · ogro 4
+ *   andar 3: slime 3 · goblin 4 · ogro 5
+ *
+ * Por que uma FUNÇÃO de (arquétipo, andar) e não um campo em `Enemy`: o nível
+ * é derivável dos dois números que o inimigo já carrega implicitamente, e um
+ * campo novo entraria em `snapshot()`, no save e no oracle para guardar uma
+ * conta de uma linha. Um valor derivado que vira campo é um valor que um dia
+ * discorda da própria fórmula — foi essa a lição de `armaNivel` × `atk`
+ * (types.ts), e ali o campo existe porque o teto PRECISA de memória. Aqui não
+ * precisa: o andar do inimigo é o andar do jogo, e o jogo não guarda inimigo de
+ * andar nenhum além do atual.
+ *
+ * É este número — e não mais `ARCHETYPES[kind].nivel` cru — que entra no XP do
+ * abate (§15.2). O efeito é a razão de ser da mudança: descer passa a valer XP,
+ * porque a mesma criatura no andar de baixo vale o dobro.
+ */
+export function nivelDoMonstro(kind: ArchetypeKey, depth: number): number {
+  const arch = ARCHETYPES[kind];
+  const base = arch && Number.isFinite(arch.nivel) ? arch.nivel : 1;
+  let d = Math.floor(depth);
+  if (!Number.isFinite(d) || d < 1) d = 1;
+  return base + (d - 1);
+}
+
+/* Sorteio do arquétipo pela linha de `PESOS_SPAWN` do andar.
  * Determinístico (consome o rng de população). */
-function pickKind(rng: Rng, heroLevel: number): ArchetypeKey {
-  const weights = pesosSpawn(heroLevel);
+function pickKind(rng: Rng, andar: number): ArchetypeKey {
+  const weights = pesosSpawn(andar);
   let total = 0;
   let i: number;
   for (i = 0; i < weights.length; i++) total += weights[i];
@@ -1734,7 +1776,7 @@ function escolherCaldeirao(
   return melhor;
 }
 
-export function populate(map: GameMap, depth: number, heroLevel: number): Population {
+export function populate(map: GameMap, depth: number): Population {
   const d = depth < 1 ? 1 : depth;
   const rng = makeRng(hash32(map.seed + '#pop#' + d));
   const enemies: Enemy[] = [];
@@ -1761,9 +1803,9 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
   let nextEnemyId = 1;
   distribute(map, rooms, qEnemies, nEnemies, rng, taken, start, stairs,
     function (x: number, y: number): void {
-      // §15 — a MISTURA sai do nível do herói; a profundidade segue endurecendo
-      // contagem (acima) e hp/atk (`makeEnemy`).
-      const kind = pickKind(rng, heroLevel);
+      // §15 — a MISTURA sai do ANDAR, como a contagem (acima) e o hp/atk
+      // (`makeEnemy`): a profundidade é o único eixo de dificuldade do mundo.
+      const kind = pickKind(rng, d);
       enemies.push(makeEnemy(nextEnemyId++, kind, x, y, d));
     });
 
@@ -1794,12 +1836,12 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
    * checagens de `taken` continuam no código como cinto de segurança: no dia em
    * que o raio seguro encolher, a colocação degrada sozinha em vez de sobrepor.
    *
-   * A contrapartida honesta: por virem depois dos inimigos, os pontos também
-   * dependem do nível do herói no instante em que o andar foi povoado (é ele
-   * que dirige `pickKind`, e `rng.int` consome um número variável de u32).
-   * Continua determinístico — mesma semente, mesma profundidade e mesmo nível
-   * dão sempre os mesmos pontos — e o save carrega os pontos escolhidos, então
-   * nada disso é observável numa retomada.
+   * Por virem depois dos inimigos, os pontos herdam a posição do stream deixada
+   * por `pickKind` (`rng.int` consome um número variável de u32). Desde que a
+   * mistura passou a sair do ANDAR, isso deixou de ser uma contrapartida e virou
+   * simplificação: os pontos dependem só de (semente, andar), exatamente como o
+   * mapa — e o save, que os carrega, nunca mais precisa conferir com que nível
+   * de herói o andar foi povoado.
    * ---------------------------------------------------------------- */
   const salaInicial = roomAt(map, start.x, start.y);
 
