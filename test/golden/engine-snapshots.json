@@ -2,7 +2,7 @@
   "formato": 2,
   "oracle": "engine",
   "fonte": "src/engine/**",
-  "fonteSha256": "d254ea0bb4739e0b2e91294367c08a18d7872ae0a23118b1f83e08bf36ff2ea1",
+  "fonteSha256": "64ae47342175bba8aa81a5859afdfa75fa3388aa51eb52dfca54ce109b9af513",
   "fonteArquivos": [
     "src/engine/core.ts",
     "src/engine/dijkstra.ts",
@@ -907,7 +907,7 @@
           },
           {
             "depth": 3,
-            "snapshot": "v6|seed=GOLD-0001|d=3|t=0|over=0|p=7,4,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:17:10|2:linker:18:23:5|3:chaser:15:40:6|4:linker:18:38:12|5:linker:18:2:23|6:linker:18:16:21|7:linker:18:4:38|8:linker:18:14:38|9:linker:18:28:18|10:linker:18:37:25]|I[1:potion:12:13|2:potion:34:15|3:potion:26:22]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:clavaOgro*1:0:0|abate-linker:linker:4:1:gosma:0:19:-:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:espadaGoblin*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:3:peOgro+clavaOgro:0:52:clavaOgro*1:0:0|abate-linker:linker:3:3:gosma:0:21:gosma*1:0:0]|S=0,0,0,0,0,3,5.5|rng=1666310239|rngL=4275861973|merc=6,6|banc=4,2|alq=5,2;4,3|agua=41ac27a0|map=536b1f22",
+            "snapshot": "v6|seed=GOLD-0001|d=3|t=0|over=0|p=7,4,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:17:10|2:linker:18:23:5|3:chaser:15:40:6|4:linker:18:38:12|5:linker:18:2:23|6:linker:18:16:21|7:linker:18:4:38|8:linker:18:14:38|9:linker:18:28:18|10:linker:18:37:25]|I[1:potion:12:13|2:potion:34:15|3:potion:26:22]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:clavaOgro*1:0:0|abate-linker:linker:4:1:gosma:0:19:-:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:espadaGoblin*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:3:peOgro+clavaOgro:0:52:clavaOgro*1:0:0|abate-linker:linker:3:3:gosma:0:21:gosma*1:0:0]|S=0,0,0,0,0,3,5.5|rng=1666310239|rngL=4275861973|merc=6,6|banc=4,2|alq=5,2|agua=41ac27a0|map=536b1f22",
             "jogador": {
               "x": 7,
               "y": 4,
@@ -4414,7 +4414,7 @@
         "niveis": [
           {
             "depth": 2,
-            "snapshot": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+            "snapshot": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
             "jogador": {
               "x": 5,
               "y": 4,
@@ -4832,7 +4832,7 @@
           },
           {
             "depth": 4,
-            "snapshot": "v6|seed=GOLD-0002|d=4|t=0|over=0|p=4,6,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:3:19|2:linker:20:9:16|3:linker:20:4:33|4:linker:20:13:32|5:linker:20:6:37|6:linker:20:10:38|7:linker:20:30:9|8:linker:20:31:19|9:linker:20:40:5|10:linker:20:38:17|11:linker:20:19:28|12:linker:20:24:39]|I[1:potion:3:29|2:potion:24:25|3:potion:21:39]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-linker:linker:3:1:gosma:0:15:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0]|S=0,0,0,0,0,4,3.7|rng=1977310975|rngL=830607785|merc=4,3|banc=4,9|alq=4,8;4,10|agua=acd3c579|map=1ba07019",
+            "snapshot": "v6|seed=GOLD-0002|d=4|t=0|over=0|p=4,6,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:3:19|2:linker:20:9:16|3:linker:20:4:33|4:linker:20:13:32|5:linker:20:6:37|6:linker:20:10:38|7:linker:20:30:9|8:linker:20:31:19|9:linker:20:40:5|10:linker:20:38:17|11:linker:20:19:28|12:linker:20:24:39]|I[1:potion:3:29|2:potion:24:25|3:potion:21:39]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-linker:linker:3:1:gosma:0:15:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0]|S=0,0,0,0,0,4,3.7|rng=1977310975|rngL=830607785|merc=4,10|banc=6,5|alq=-|agua=acd3c579|map=1ba07019",
             "jogador": {
               "x": 4,
               "y": 6,
@@ -5347,7 +5347,7 @@
           },
           {
             "depth": 6,
-            "snapshot": "v6|seed=GOLD-0002|d=6|t=0|over=0|p=6,7,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:3:17|2:linker:24:6:18|3:linker:24:16:4|4:linker:24:25:8|5:chaser:21:17:12|6:linker:24:24:16|7:linker:24:41:2|8:chaser:21:38:15|9:linker:24:5:26|10:linker:24:3:36|11:linker:24:11:40|12:linker:24:24:32|13:linker:24:30:29|14:chaser:21:38:29|15:linker:24:33:33|16:linker:24:40:42]|I[1:potion:14:36|2:potion:27:35]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-linker:linker:3:1:gosma:0:15:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-linker:linker:4:1:gosma:0:19:-:0:0]|S=0,0,0,0,0,6,5.7|rng=2010866213|rngL=797052547|merc=8,5|banc=8,4|alq=8,3;7,4|agua=6f64cf6d|map=569e1d06",
+            "snapshot": "v6|seed=GOLD-0002|d=6|t=0|over=0|p=6,7,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:3:17|2:linker:24:6:18|3:linker:24:16:4|4:linker:24:25:8|5:chaser:21:17:12|6:linker:24:24:16|7:linker:24:41:2|8:chaser:21:38:15|9:linker:24:5:26|10:linker:24:3:36|11:linker:24:11:40|12:linker:24:24:32|13:linker:24:30:29|14:chaser:21:38:29|15:linker:24:33:33|16:linker:24:40:42]|I[1:potion:14:36|2:potion:27:35]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-linker:linker:3:1:gosma:0:15:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-linker:linker:4:1:gosma:0:19:-:0:0]|S=0,0,0,0,0,6,5.7|rng=2010866213|rngL=797052547|merc=8,9|banc=8,4|alq=8,3;7,4|agua=6f64cf6d|map=569e1d06",
             "jogador": {
               "x": 6,
               "y": 7,
@@ -5861,7 +5861,7 @@
         ]
       },
       "inicial": {
-        "snapshot": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+        "snapshot": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
         "jogador": {
           "x": 5,
           "y": 4,
@@ -6289,218 +6289,218 @@
       "aceitos": "11100100000111010111111110111001011111011111011011000100001010001001100000000000110100110010111111111101011110010111100011111001111111111111101000011110111010000000000000000000000000000000000000000000",
       "aceitosTotal": 94,
       "hashesPorComando": [
-        "89164a00",
-        "b40c9b02",
-        "96cf57ad",
-        "96cf57ad",
-        "96cf57ad",
-        "5f260660",
-        "5f260660",
-        "5f260660",
-        "5f260660",
-        "5f260660",
-        "5f260660",
-        "ec65fa3b",
-        "7021a26b",
-        "957531ae",
-        "957531ae",
-        "2409ca63",
-        "2409ca63",
-        "607be14e",
-        "7fe2f2a8",
-        "d7f66440",
-        "4da2e88a",
-        "b6dc312d",
-        "6ea72b5e",
-        "450a3c6b",
-        "3b0ae75c",
-        "3b0ae75c",
-        "af594f62",
-        "b9590d71",
-        "3f91d717",
-        "3f91d717",
-        "3f91d717",
-        "7c54d83e",
-        "7c54d83e",
-        "66c086fd",
-        "d659b888",
-        "7ffea3da",
-        "1d6907bc",
-        "1e634b21",
-        "1e634b21",
-        "6ea5a0ed",
-        "2a7fd3f7",
-        "7b06cf3f",
-        "68ec15fc",
-        "64a345ad",
-        "64a345ad",
-        "8c68b951",
-        "6d5dfe92",
-        "6d5dfe92",
-        "d6a30904",
-        "b7d55d01",
-        "b7d55d01",
-        "b7d55d01",
-        "b7d55d01",
-        "3eead44f",
-        "3eead44f",
-        "3eead44f",
-        "3eead44f",
-        "3eead44f",
-        "1f0f0c2a",
-        "1f0f0c2a",
-        "0c6a3ee8",
-        "0c6a3ee8",
-        "0c6a3ee8",
-        "0c6a3ee8",
-        "353332db",
-        "353332db",
-        "353332db",
-        "892396af",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "bc48c7e9",
-        "c74d4fd4",
-        "9059f5cf",
-        "9059f5cf",
-        "3ec938bd",
-        "3ec938bd",
-        "3ec938bd",
-        "5ba14809",
-        "4dd376bc",
-        "4dd376bc",
-        "4dd376bc",
-        "7a1c3657",
-        "7a1c3657",
-        "25d65bb4",
-        "a9e4cf4c",
-        "d6e19a8a",
-        "6b989547",
-        "4b42def7",
-        "d7e4ef6b",
-        "a1bd1cf5",
-        "ab5e1b90",
-        "35e298c0",
-        "e04528b6",
-        "e04528b6",
-        "9c6723f0",
-        "9c6723f0",
-        "3fd17fb5",
-        "abcd1489",
-        "778dc24b",
-        "bde12cfc",
-        "bde12cfc",
-        "bde12cfc",
-        "52a4bbc7",
-        "52a4bbc7",
-        "adf71003",
-        "48d802dd",
-        "4bc5685b",
-        "a43740f0",
-        "a43740f0",
-        "a43740f0",
-        "a43740f0",
-        "b2020433",
-        "9071856b",
-        "84a7dee7",
-        "f2e35d2c",
-        "9ea2b589",
-        "9ea2b589",
-        "9ea2b589",
-        "2b8b13fe",
-        "6f08db2c",
-        "5d7bf29f",
-        "3c996d47",
-        "6a2e671b",
-        "8c4d288f",
-        "43954cd8",
-        "957766a1",
-        "dae13a00",
-        "bac059d0",
-        "4cf099ea",
-        "4b349491",
-        "f7fd85af",
-        "a977ab48",
-        "a977ab48",
-        "41f12e91",
-        "41f12e91",
-        "41f12e91",
-        "41f12e91",
-        "41f12e91",
-        "76ade596",
-        "2b3edd0a",
-        "11ae4cf8",
-        "f0127b8d",
-        "f0127b8d",
-        "14699871",
-        "a02b7631",
-        "c8f51798",
-        "c8f51798",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053",
-        "e7e6e053"
+        "b7507f4f",
+        "889fd355",
+        "e3ef2472",
+        "e3ef2472",
+        "e3ef2472",
+        "44ccce2f",
+        "44ccce2f",
+        "44ccce2f",
+        "44ccce2f",
+        "44ccce2f",
+        "44ccce2f",
+        "84ebf8ac",
+        "b92cd89c",
+        "6f2b5619",
+        "6f2b5619",
+        "ad4df834",
+        "ad4df834",
+        "e2cccab9",
+        "877f71f7",
+        "8fd0188f",
+        "633a2e3d",
+        "03fbfdf2",
+        "92d45789",
+        "8e15729c",
+        "b0ebd393",
+        "b0ebd393",
+        "a2c1c3b5",
+        "103d661e",
+        "01817150",
+        "01817150",
+        "01817150",
+        "47bc08e9",
+        "47bc08e9",
+        "8f3f39c2",
+        "45098c57",
+        "79350c8d",
+        "c8ce1d73",
+        "a55a570e",
+        "a55a570e",
+        "f456a6b2",
+        "d17a62b0",
+        "b20e0458",
+        "025ff6b3",
+        "b1c31272",
+        "b1c31272",
+        "23df067e",
+        "50644da5",
+        "50644da5",
+        "28aae0db",
+        "19c3e0ee",
+        "19c3e0ee",
+        "19c3e0ee",
+        "19c3e0ee",
+        "4edab3a8",
+        "4edab3a8",
+        "4edab3a8",
+        "4edab3a8",
+        "4edab3a8",
+        "807f485d",
+        "807f485d",
+        "b616d437",
+        "b616d437",
+        "b616d437",
+        "b616d437",
+        "0c3bc9cc",
+        "0c3bc9cc",
+        "0c3bc9cc",
+        "691cd108",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "798ff756",
+        "93998e2b",
+        "a049d528",
+        "a049d528",
+        "a5343482",
+        "a5343482",
+        "a5343482",
+        "7d660c76",
+        "f9388c73",
+        "f9388c73",
+        "f9388c73",
+        "3aad8b90",
+        "3aad8b90",
+        "62b82c8b",
+        "26acdec3",
+        "ec78e03d",
+        "72fda900",
+        "f23d6db0",
+        "20f0259c",
+        "c276a65a",
+        "b5aaee5f",
+        "edbc4d0f",
+        "e07819c1",
+        "e07819c1",
+        "b4231c80",
+        "b4231c80",
+        "814fbeec",
+        "f9d4e050",
+        "1d8981e9",
+        "f568ef52",
+        "f568ef52",
+        "f568ef52",
+        "3f18028e",
+        "3f18028e",
+        "a15ff26c",
+        "6b12c323",
+        "22cdff4c",
+        "351bcabf",
+        "351bcabf",
+        "351bcabf",
+        "351bcabf",
+        "8d454944",
+        "d97cbb9c",
+        "4d2d83a0",
+        "0a42ca23",
+        "c06779f6",
+        "c06779f6",
+        "c06779f6",
+        "fb5702a9",
+        "86684823",
+        "4fd70ab8",
+        "43fe8100",
+        "3eff7d0c",
+        "f66344e8",
+        "ce6f9ea7",
+        "1c6e728e",
+        "091b6f4f",
+        "23a5919f",
+        "24f8b11d",
+        "d9e337be",
+        "d7f6c008",
+        "80eb8717",
+        "80eb8717",
+        "d09fd1be",
+        "d09fd1be",
+        "d09fd1be",
+        "d09fd1be",
+        "d09fd1be",
+        "a5227921",
+        "40d622bd",
+        "e2fa6847",
+        "8fb7fc52",
+        "8fb7fc52",
+        "6b4df11e",
+        "ea3839de",
+        "8f66ae67",
+        "8f66ae67",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164",
+        "b2684164"
       ],
       "snapshots": {
-        "0": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "10": "v6|seed=GOLD-0002|d=2|t=10|over=0|p=6,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:4:12|2:linker:16:5:29|3:linker:16:7:30|4:linker:16:33:19|5:linker:16:37:9|6:linker:16:39:23|7:linker:16:39:29|8:linker:16:30:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=10,0,0,0,0,2,8|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "20": "v6|seed=GOLD-0002|d=2|t=20|over=0|p=5,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:8|2:linker:16:4:19|3:linker:16:2:21|4:linker:16:39:25|5:linker:16:31:15|6:linker:16:39:33|7:linker:16:36:37|8:linker:16:20:39]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=20,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "30": "v6|seed=GOLD-0002|d=2|t=30|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:7:4|2:linker:16:5:9|3:linker:16:4:11|4:linker:16:39:35|5:linker:16:38:20|6:linker:16:32:37|7:linker:16:26:40|8:linker:16:15:31]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=30,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "40": "v6|seed=GOLD-0002|d=2|t=40|over=0|p=3,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:4|2:linker:16:5:7|3:linker:16:5:8|4:linker:16:30:39|5:linker:16:39:30|6:linker:16:22:40|7:linker:16:20:35|8:linker:16:6:29]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=40,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "50": "v6|seed=GOLD-0002|d=2|t=50|over=0|p=8,5,5/46,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:5:4|3:linker:16:6:6|4:linker:16:20:39|5:linker:16:35:37|6:linker:16:16:32|7:linker:16:11:31|8:linker:16:4:19]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=50,1,22,41,0,2,8.6|rng=616143200|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "60": "v6|seed=GOLD-0002|d=2|t=60|over=0|p=12,5,1/46,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:10:4|3:linker:16:9:5|4:linker:16:15:31|5:linker:16:25:40|6:linker:16:7:30|7:linker:16:5:25|8:linker:16:5:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=60,1,22,45,0,2,10.5|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "70": "v6|seed=GOLD-0002|d=2|t=70|over=0|p=15,4,13/46,atk8,poc2,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:12:5|4:linker:16:6:29|5:linker:16:19:35|6:linker:16:2:21|7:linker:16:5:15|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=70,1,22,45,1,2,12|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "80": "v6|seed=GOLD-0002|d=2|t=80|over=0|p=15,4,13/46,atk8,poc2,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:15:6|4:linker:16:4:19|5:linker:16:10:31|6:linker:16:4:11|7:linker:16:6:6|8:linker:16:12:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=80,1,22,45,1,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-        "90": "v6|seed=GOLD-0002|d=2|t=90|over=0|p=14,3,15/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:13:6|3:linker:16:16:4|4:linker:16:5:9|5:linker:16:4:24|6:linker:16:10:5|7:linker:16:16:5|8:linker:16:12:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=90,1,22,55,2,2,12.4|rng=1815873343|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa"
+        "0": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "10": "v6|seed=GOLD-0002|d=2|t=10|over=0|p=6,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:4:12|2:linker:16:5:29|3:linker:16:7:30|4:linker:16:33:19|5:linker:16:37:9|6:linker:16:39:23|7:linker:16:39:29|8:linker:16:30:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=10,0,0,0,0,2,8|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "20": "v6|seed=GOLD-0002|d=2|t=20|over=0|p=5,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:8|2:linker:16:4:19|3:linker:16:2:21|4:linker:16:39:25|5:linker:16:31:15|6:linker:16:39:33|7:linker:16:36:37|8:linker:16:20:39]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=20,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "30": "v6|seed=GOLD-0002|d=2|t=30|over=0|p=5,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:7:4|2:linker:16:5:9|3:linker:16:4:11|4:linker:16:39:35|5:linker:16:38:20|6:linker:16:32:37|7:linker:16:26:40|8:linker:16:15:31]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=30,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "40": "v6|seed=GOLD-0002|d=2|t=40|over=0|p=3,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:4|2:linker:16:5:7|3:linker:16:5:8|4:linker:16:30:39|5:linker:16:39:30|6:linker:16:22:40|7:linker:16:20:35|8:linker:16:6:29]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=40,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "50": "v6|seed=GOLD-0002|d=2|t=50|over=0|p=8,5,5/46,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:5:4|3:linker:16:6:6|4:linker:16:20:39|5:linker:16:35:37|6:linker:16:16:32|7:linker:16:11:31|8:linker:16:4:19]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=50,1,22,41,0,2,8.6|rng=616143200|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "60": "v6|seed=GOLD-0002|d=2|t=60|over=0|p=12,5,1/46,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:8:4|3:linker:16:9:5|4:linker:16:15:31|5:linker:16:25:40|6:linker:16:7:30|7:linker:16:5:25|8:linker:16:5:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=60,1,22,45,0,2,10.5|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "70": "v6|seed=GOLD-0002|d=2|t=70|over=0|p=15,4,13/46,atk8,poc2,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:12:5|4:linker:16:6:29|5:linker:16:19:35|6:linker:16:2:21|7:linker:16:5:15|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=70,1,22,45,1,2,12|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "80": "v6|seed=GOLD-0002|d=2|t=80|over=0|p=15,4,13/46,atk8,poc2,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:15:6|4:linker:16:4:19|5:linker:16:10:31|6:linker:16:4:11|7:linker:16:6:6|8:linker:16:12:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=80,1,22,45,1,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+        "90": "v6|seed=GOLD-0002|d=2|t=90|over=0|p=14,3,15/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:13:6|3:linker:16:16:4|4:linker:16:5:9|5:linker:16:4:24|6:linker:16:10:5|7:linker:16:16:5|8:linker:16:12:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=90,1,22,55,2,2,12.4|rng=1815873343|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa"
       },
       "niveis": [
         {
@@ -6541,7 +6541,7 @@
         "comando": "move:1,1",
         "causa": "Morto pelo Vinculador no nível 2",
         "causaKind": "linker",
-        "snapshot": "v6|seed=GOLD-0002|d=2|t=94|over=1|p=15,4,0/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:14:5|3:linker:16:16:4|4:linker:16:5:6|5:linker:16:2:21|6:linker:16:11:4|7:linker:16:16:5|8:linker:16:12:3]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=94,1,22,74,2,2,12.4|rng=552202003|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+        "snapshot": "v6|seed=GOLD-0002|d=2|t=94|over=1|p=15,4,0/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:14:5|3:linker:16:16:4|4:linker:16:5:6|5:linker:16:2:21|6:linker:16:11:4|7:linker:16:16:5|8:linker:16:12:3]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=94,1,22,74,2,2,12.4|rng=552202003|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
         "jogador": {
           "x": 15,
           "y": 4,
@@ -6557,7 +6557,7 @@
         }
       },
       "final": {
-        "snapshot": "v6|seed=GOLD-0002|d=2|t=94|over=1|p=15,4,0/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:14:5|3:linker:16:16:4|4:linker:16:5:6|5:linker:16:2:21|6:linker:16:11:4|7:linker:16:16:5|8:linker:16:12:3]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=94,1,22,74,2,2,12.4|rng=552202003|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+        "snapshot": "v6|seed=GOLD-0002|d=2|t=94|over=1|p=15,4,0/46,atk8,poc1,lv2:0,mo0,arm0|E[2:linker:10:14:5|3:linker:16:16:4|4:linker:16:5:6|5:linker:16:2:21|6:linker:16:11:4|7:linker:16:16:5|8:linker:16:12:3]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=94,1,22,74,2,2,12.4|rng=552202003|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
         "depth": 2,
         "turn": 94,
         "over": true,
@@ -7396,224 +7396,224 @@
       },
       "resistente": {
         "protocolo": "player.maxHp = 999 no início; antes de cada comando, se !over, player.hp = player.maxHp (idêntico ao T6 de legacy/harness-vanilla.mjs)",
-        "snapshotInicial": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+        "snapshotInicial": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
         "aceitos": "11100100000111010111111110111001011111011111011011000100001010001001100000000000110100110010111111111101011110010101100011111001111111111111101000001110111011000011000001111110111010001011011111011111",
         "aceitosTotal": 118,
         "hashesPorComando": [
-          "431f353a",
-          "8dd8ed50",
-          "8501037f",
-          "8501037f",
-          "8501037f",
-          "127910c6",
-          "127910c6",
-          "127910c6",
-          "127910c6",
-          "127910c6",
-          "127910c6",
-          "67ca526d",
-          "c35db6d5",
-          "513daf24",
-          "513daf24",
-          "35f143a1",
-          "35f143a1",
-          "dde2c918",
-          "03be109a",
-          "c507902e",
-          "1a1e9a64",
-          "07e8c3a7",
-          "0abb70d8",
-          "51f11465",
-          "195016aa",
-          "195016aa",
-          "b0b98e44",
-          "a93c1ccb",
-          "6ec78b8d",
-          "6ec78b8d",
-          "6ec78b8d",
-          "e2992244",
-          "e2992244",
-          "35358417",
-          "81d1561a",
-          "ad984da0",
-          "2160d9fa",
-          "eafa4cf3",
-          "eafa4cf3",
-          "fe3124af",
-          "f686e48d",
-          "70d49f45",
-          "2f096ab2",
-          "cdeb1ffb",
-          "cdeb1ffb",
-          "3c9a728b",
-          "0d7a051c",
-          "0d7a051c",
-          "818309ea",
-          "851e57e3",
-          "851e57e3",
-          "851e57e3",
-          "851e57e3",
-          "1b5e9539",
-          "1b5e9539",
-          "1b5e9539",
-          "1b5e9539",
-          "1b5e9539",
-          "a2cfff58",
-          "a2cfff58",
-          "8080fb52",
-          "8080fb52",
-          "8080fb52",
-          "8080fb52",
-          "d49df6fd",
-          "d49df6fd",
-          "d49df6fd",
-          "5283f19d",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "3d33d6eb",
-          "f6f0c5f2",
-          "612cd6bd",
-          "612cd6bd",
-          "1a1af997",
-          "1a1af997",
-          "1a1af997",
-          "1d22977f",
-          "9892ffc3",
-          "9892ffc3",
-          "9892ffc3",
-          "725f6c46",
-          "4e77b6d7",
-          "f57a7ea4",
-          "09b1b818",
-          "5c0d2dcd",
-          "d7504aba",
-          "04d96d5f",
-          "fdde884c",
-          "146aa96a",
-          "28f2d54b",
-          "d64d0113",
-          "255be457",
-          "255be457",
-          "33dc7e13",
-          "33dc7e13",
-          "de3e9836",
-          "ffc6c9b0",
-          "95f0044a",
-          "2e566215",
-          "2e566215",
-          "2e566215",
-          "8d53d8ea",
-          "8d53d8ea",
-          "224a76c2",
-          "224a76c2",
-          "67567e01",
-          "78e8b157",
-          "78e8b157",
-          "78e8b157",
-          "78e8b157",
-          "8212d08c",
-          "0623eade",
-          "1559354f",
-          "1b9c4d0a",
-          "4bd3bd48",
-          "4bd3bd48",
-          "4bd3bd48",
-          "c849345a",
-          "5e4250aa",
-          "4086c333",
-          "2bab028b",
-          "5901713b",
-          "c52ce3b2",
-          "6ddb99c7",
-          "a7f53d4c",
-          "29936068",
-          "78630c49",
-          "bd1cc08c",
-          "4f1fae82",
-          "d13c08a5",
-          "6f3f1488",
-          "6f3f1488",
-          "dbdc82b9",
-          "dbdc82b9",
-          "dbdc82b9",
-          "dbdc82b9",
-          "dbdc82b9",
-          "dbdc82b9",
-          "2b3075e7",
-          "ff8af9e6",
-          "8db543e2",
-          "8db543e2",
-          "6990d169",
-          "c7080497",
-          "1b438cd9",
-          "1b438cd9",
-          "994bd4eb",
-          "c0767c23",
-          "c9fc7de0",
-          "c9fc7de0",
-          "c9fc7de0",
-          "c9fc7de0",
-          "b19a8e13",
-          "b676f056",
-          "2e0e8e51",
-          "2e0e8e51",
-          "2e0e8e51",
-          "2e0e8e51",
-          "2e0e8e51",
-          "bda93a15",
-          "6f47cd0e",
-          "f9a9c317",
-          "efe91ec8",
-          "1d4d8529",
-          "ed406803",
-          "a4172ea5",
-          "c9125f9e",
-          "9ff21522",
-          "b6a64d4a",
-          "131cc5ea",
-          "bc97985e",
-          "ccdd29db",
-          "ccdd29db",
-          "ccdd29db",
-          "e282e8ab",
-          "e282e8ab",
-          "a492a2d6",
-          "30414eee",
-          "30414eee",
-          "bba34503",
-          "364419aa",
-          "b623af4f",
-          "a872aaa4",
-          "f979a9c5",
-          "de12d758",
-          "9359054e",
-          "09b99135",
-          "561e7b96",
-          "4aa76004",
-          "5a8d2c1d"
+          "e75df26d",
+          "f6be251f",
+          "ec62a398",
+          "ec62a398",
+          "ec62a398",
+          "c9a30a91",
+          "c9a30a91",
+          "c9a30a91",
+          "c9a30a91",
+          "c9a30a91",
+          "c9a30a91",
+          "ed7b5832",
+          "3af83f3a",
+          "0c44f8fb",
+          "0c44f8fb",
+          "bce84f8e",
+          "bce84f8e",
+          "a4545fe7",
+          "4e071b4d",
+          "9ebdb499",
+          "a60ed63b",
+          "5582d860",
+          "9595c2a7",
+          "310dbd8a",
+          "7ac052dd",
+          "7ac052dd",
+          "45f67b1b",
+          "8e3efafc",
+          "0e6d0c52",
+          "0e6d0c52",
+          "0e6d0c52",
+          "77d60f1b",
+          "77d60f1b",
+          "f7251e50",
+          "cc1a60cd",
+          "71012f6f",
+          "01a4b32d",
+          "c7bc5c04",
+          "c7bc5c04",
+          "de2a5f08",
+          "962c6552",
+          "c171eeea",
+          "6dfe1845",
+          "4e563a6c",
+          "4e563a6c",
+          "496d3cbc",
+          "b31bc453",
+          "b31bc453",
+          "598b211d",
+          "0e6285b4",
+          "0e6285b4",
+          "0e6285b4",
+          "0e6285b4",
+          "b4fcfb66",
+          "b4fcfb66",
+          "b4fcfb66",
+          "b4fcfb66",
+          "b4fcfb66",
+          "2daa5127",
+          "2daa5127",
+          "4b72f865",
+          "4b72f865",
+          "4b72f865",
+          "4b72f865",
+          "fd1ca9c2",
+          "fd1ca9c2",
+          "fd1ca9c2",
+          "5aff3ae2",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "863f0d1c",
+          "18052385",
+          "c797d282",
+          "c797d282",
+          "dc0a93d0",
+          "dc0a93d0",
+          "dc0a93d0",
+          "84843798",
+          "32c86e14",
+          "32c86e14",
+          "32c86e14",
+          "29896611",
+          "0f090c10",
+          "b081c87b",
+          "d0234ee7",
+          "79426a92",
+          "7b8f07ed",
+          "a7132e78",
+          "7aa697c3",
+          "ec72c09d",
+          "0df5b37c",
+          "18218b24",
+          "e5ed3990",
+          "e5ed3990",
+          "82acbeeb",
+          "82acbeeb",
+          "8e281733",
+          "c6d13d5d",
+          "930f9fc2",
+          "18aac9c5",
+          "18aac9c5",
+          "18aac9c5",
+          "ccabb24f",
+          "ccabb24f",
+          "cc70fbfd",
+          "cc70fbfd",
+          "beeb1d37",
+          "a7543dff",
+          "a7543dff",
+          "a7543dff",
+          "a7543dff",
+          "b74d68bb",
+          "8c44e21e",
+          "254914a8",
+          "313392bd",
+          "23479917",
+          "23479917",
+          "23479917",
+          "c17f9d0d",
+          "bfb28cdd",
+          "1bca0844",
+          "387dccbc",
+          "f1876fac",
+          "04219145",
+          "7540ad80",
+          "24bd4cc3",
+          "d33ff5b7",
+          "d96152b6",
+          "6cbf4003",
+          "23b2e6d5",
+          "ff2f66ca",
+          "ddeee857",
+          "ddeee857",
+          "757ae8e6",
+          "757ae8e6",
+          "757ae8e6",
+          "757ae8e6",
+          "757ae8e6",
+          "757ae8e6",
+          "f3b61aa0",
+          "6d93ca31",
+          "811db835",
+          "811db835",
+          "26d800d6",
+          "88f79ed0",
+          "4ceded06",
+          "4ceded06",
+          "e2570b1c",
+          "1e4ceaf4",
+          "afa345af",
+          "afa345af",
+          "afa345af",
+          "afa345af",
+          "f36f1824",
+          "d24680e1",
+          "c584db7e",
+          "c584db7e",
+          "c584db7e",
+          "c584db7e",
+          "c584db7e",
+          "51984a7a",
+          "6c35a579",
+          "bb995d50",
+          "c75cfa97",
+          "e2033296",
+          "f6466b54",
+          "d20a8cca",
+          "90f72dc9",
+          "7ba95075",
+          "985f12fd",
+          "eb24dd1d",
+          "e0c4c489",
+          "a3e5c0cc",
+          "a3e5c0cc",
+          "a3e5c0cc",
+          "cfa5f0dc",
+          "cfa5f0dc",
+          "c0623361",
+          "788f1e59",
+          "788f1e59",
+          "c4a94854",
+          "97b455dd",
+          "c6138ea8",
+          "6379f47b",
+          "4a16f96a",
+          "68ed2927",
+          "15a9eeb9",
+          "e312639a",
+          "84930f21",
+          "9caf37db",
+          "63087562"
         ],
         "snapshots": {
-          "0": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "10": "v6|seed=GOLD-0002|d=2|t=10|over=0|p=6,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:4:12|2:linker:16:5:29|3:linker:16:7:30|4:linker:16:33:19|5:linker:16:37:9|6:linker:16:39:23|7:linker:16:39:29|8:linker:16:30:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=10,0,0,0,0,2,8|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "20": "v6|seed=GOLD-0002|d=2|t=20|over=0|p=5,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:8|2:linker:16:4:19|3:linker:16:2:21|4:linker:16:39:25|5:linker:16:31:15|6:linker:16:39:33|7:linker:16:36:37|8:linker:16:20:39]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=20,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "30": "v6|seed=GOLD-0002|d=2|t=30|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:7:4|2:linker:16:5:9|3:linker:16:4:11|4:linker:16:39:35|5:linker:16:38:20|6:linker:16:32:37|7:linker:16:26:40|8:linker:16:15:31]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=30,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "40": "v6|seed=GOLD-0002|d=2|t=40|over=0|p=3,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:4|2:linker:16:5:7|3:linker:16:5:8|4:linker:16:30:39|5:linker:16:39:30|6:linker:16:22:40|7:linker:16:20:35|8:linker:16:6:29]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=40,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "50": "v6|seed=GOLD-0002|d=2|t=50|over=0|p=8,5,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:5:4|3:linker:16:6:6|4:linker:16:20:39|5:linker:16:35:37|6:linker:16:16:32|7:linker:16:11:31|8:linker:16:4:19]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=50,1,22,41,0,2,8.6|rng=616143200|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "60": "v6|seed=GOLD-0002|d=2|t=60|over=0|p=12,5,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:10:4|3:linker:16:9:5|4:linker:16:15:31|5:linker:16:25:40|6:linker:16:7:30|7:linker:16:5:25|8:linker:16:5:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=60,1,22,45,0,2,10.5|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "70": "v6|seed=GOLD-0002|d=2|t=70|over=0|p=14,3,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:13:6|4:linker:16:6:29|5:linker:16:19:35|6:linker:16:2:21|7:linker:16:5:15|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=70,1,22,45,0,2,12|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "80": "v6|seed=GOLD-0002|d=2|t=80|over=0|p=14,4,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:15:6|4:linker:16:4:19|5:linker:16:10:31|6:linker:16:4:11|7:linker:16:6:6|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=80,1,22,45,0,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "90": "v6|seed=GOLD-0002|d=2|t=90|over=0|p=15,4,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:13:6|3:linker:16:14:5|4:linker:16:5:9|5:linker:16:4:24|6:linker:16:10:5|7:linker:16:15:5|8:linker:16:13:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=90,1,22,45,0,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "100": "v6|seed=GOLD-0002|d=2|t=100|over=0|p=14,7,992/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:14:6|3:linker:1:9:5|4:linker:16:12:5|5:linker:16:5:14|6:linker:16:15:6|7:linker:16:13:7|8:linker:16:15:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=100,1,37,111,0,2,12.6|rng=4151392432|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
-          "110": "v6|seed=GOLD-0002|d=2|t=110|over=0|p=13,10,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:16:11|3:linker:1:5:8|4:linker:16:15:10|5:linker:16:5:9|6:linker:9:15:9|7:linker:9:12:7|8:linker:16:15:8]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=110,1,51,173,0,2,13.8|rng=4023510038|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa"
+          "0": "v6|seed=GOLD-0002|d=2|t=0|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:22|2:linker:16:6:39|3:linker:16:17:31|4:linker:16:31:10|5:linker:16:41:2|6:linker:16:31:20|7:linker:16:40:19|8:linker:16:40:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,2,5.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "10": "v6|seed=GOLD-0002|d=2|t=10|over=0|p=6,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:4:12|2:linker:16:5:29|3:linker:16:7:30|4:linker:16:33:19|5:linker:16:37:9|6:linker:16:39:23|7:linker:16:39:29|8:linker:16:30:40]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=10,0,0,0,0,2,8|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "20": "v6|seed=GOLD-0002|d=2|t=20|over=0|p=5,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:8|2:linker:16:4:19|3:linker:16:2:21|4:linker:16:39:25|5:linker:16:31:15|6:linker:16:39:33|7:linker:16:36:37|8:linker:16:20:39]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=20,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "30": "v6|seed=GOLD-0002|d=2|t=30|over=0|p=5,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:7:4|2:linker:16:5:9|3:linker:16:4:11|4:linker:16:39:35|5:linker:16:38:20|6:linker:16:32:37|7:linker:16:26:40|8:linker:16:15:31]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=30,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "40": "v6|seed=GOLD-0002|d=2|t=40|over=0|p=3,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:5:4|2:linker:16:5:7|3:linker:16:5:8|4:linker:16:30:39|5:linker:16:39:30|6:linker:16:22:40|7:linker:16:20:35|8:linker:16:6:29]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=40,0,0,0,0,2,8.1|rng=1943755737|rngL=864163023|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "50": "v6|seed=GOLD-0002|d=2|t=50|over=0|p=8,5,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:5:4|3:linker:16:6:6|4:linker:16:20:39|5:linker:16:35:37|6:linker:16:16:32|7:linker:16:11:31|8:linker:16:4:19]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=50,1,22,41,0,2,8.6|rng=616143200|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "60": "v6|seed=GOLD-0002|d=2|t=60|over=0|p=12,5,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:8:4|3:linker:16:9:5|4:linker:16:15:31|5:linker:16:25:40|6:linker:16:7:30|7:linker:16:5:25|8:linker:16:5:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=60,1,22,45,0,2,10.5|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "70": "v6|seed=GOLD-0002|d=2|t=70|over=0|p=14,3,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:13:6|4:linker:16:6:29|5:linker:16:19:35|6:linker:16:2:21|7:linker:16:5:15|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=70,1,22,45,0,2,12|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "80": "v6|seed=GOLD-0002|d=2|t=80|over=0|p=14,4,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:12:3|3:linker:16:15:6|4:linker:16:4:19|5:linker:16:10:31|6:linker:16:4:11|7:linker:16:6:6|8:linker:16:11:4]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=80,1,22,45,0,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "90": "v6|seed=GOLD-0002|d=2|t=90|over=0|p=15,4,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:13:6|3:linker:16:14:5|4:linker:16:5:9|5:linker:16:4:24|6:linker:16:10:5|7:linker:16:15:5|8:linker:16:13:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=90,1,22,45,0,2,12.4|rng=2447709013|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "100": "v6|seed=GOLD-0002|d=2|t=100|over=0|p=14,7,992/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:14:6|3:linker:1:9:5|4:linker:16:12:5|5:linker:16:5:14|6:linker:16:15:6|7:linker:16:13:7|8:linker:16:15:5]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=100,1,37,111,0,2,12.6|rng=4151392432|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
+          "110": "v6|seed=GOLD-0002|d=2|t=110|over=0|p=13,10,1003/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:10:16:11|3:linker:1:5:8|4:linker:16:15:10|5:linker:16:5:9|6:linker:9:15:9|7:linker:9:12:7|8:linker:16:15:8]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=110,1,51,173,0,2,13.8|rng=4023510038|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa"
         },
         "niveis": [
           {
@@ -7650,7 +7650,7 @@
         ],
         "morte": null,
         "final": {
-          "snapshot": "v6|seed=GOLD-0002|d=2|t=118|over=0|p=14,7,997/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:2:14:8|3:linker:1:5:8|4:linker:16:14:9|5:linker:16:5:9|6:linker:9:15:10|7:linker:9:15:8|8:linker:8:15:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=118,1,67,259,0,2,13.9|rng=168554821|rngL=2695728836|merc=6,2|banc=8,2|alq=7,2;8,3|agua=bbb56ad6|map=1fcd4aaa",
+          "snapshot": "v6|seed=GOLD-0002|d=2|t=118|over=0|p=14,7,997/1003,atk8,poc3,lv2:0,mo0,arm0|E[2:linker:2:14:8|3:linker:1:5:8|4:linker:16:14:9|5:linker:16:5:9|6:linker:9:15:10|7:linker:9:15:8|8:linker:8:15:9]|I[1:potion:2:21|2:potion:4:39|3:potion:17:32|4:potion:39:8|5:potion:30:23|6:gosma:6:6]|B[]|M[abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:1:18:-:0:0]|S=118,1,67,259,0,2,13.9|rng=168554821|rngL=2695728836|merc=6,2|banc=3,6|alq=2,6;4,6|agua=bbb56ad6|map=1fcd4aaa",
           "depth": 2,
           "turn": 118,
           "over": false,
@@ -9666,7 +9666,7 @@
           },
           {
             "depth": 4,
-            "snapshot": "v6|seed=GOLD-0003|d=4|t=0|over=0|p=7,8,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:3:17|2:linker:20:7:26|3:linker:20:7:30|4:linker:20:10:40|5:linker:20:21:29|6:linker:20:36:7|7:linker:20:28:16|8:linker:20:40:19|9:linker:20:27:27|10:linker:20:32:40|11:linker:20:37:33|12:linker:20:41:37]|I[1:potion:10:17|2:potion:36:8|3:potion:27:20]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:clavaOgro*1:0:0]|S=0,0,0,0,0,4,10.4|rng=504969408|rngL=192223126|merc=10,6|banc=11,8|alq=11,7;10,8|agua=3861247c|map=643c01ee",
+            "snapshot": "v6|seed=GOLD-0003|d=4|t=0|over=0|p=7,8,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:3:17|2:linker:20:7:26|3:linker:20:7:30|4:linker:20:10:40|5:linker:20:21:29|6:linker:20:36:7|7:linker:20:28:16|8:linker:20:40:19|9:linker:20:27:27|10:linker:20:32:40|11:linker:20:37:33|12:linker:20:41:37]|I[1:potion:10:17|2:potion:36:8|3:potion:27:20]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:clavaOgro*1:0:0]|S=0,0,0,0,0,4,10.4|rng=504969408|rngL=192223126|merc=10,6|banc=11,8|alq=10,8|agua=3861247c|map=643c01ee",
             "jogador": {
               "x": 7,
               "y": 8,
@@ -14500,7 +14500,7 @@
           },
           {
             "depth": 2,
-            "snapshot": "v6|seed=GOLD-0004|d=2|t=0|over=0|p=4,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:36|2:linker:16:18:8|3:linker:16:25:14|4:chaser:13:24:20|5:linker:16:32:15|6:linker:16:39:17|7:linker:16:19:35|8:linker:16:36:38]|I[1:potion:4:41|2:potion:18:9|3:potion:23:16|4:potion:35:20|5:potion:39:16]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:espadaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:peOgro*1:0:0]|S=0,0,0,0,0,2,3.2|rng=3172693495|rngL=3632945273|merc=5,6|banc=6,4|alq=6,3;6,5|agua=f0b65cea|map=1b81b188",
+            "snapshot": "v6|seed=GOLD-0004|d=2|t=0|over=0|p=4,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:16:6:36|2:linker:16:18:8|3:linker:16:25:14|4:chaser:13:24:20|5:linker:16:32:15|6:linker:16:39:17|7:linker:16:19:35|8:linker:16:36:38]|I[1:potion:4:41|2:potion:18:9|3:potion:23:16|4:potion:35:20|5:potion:39:16]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:espadaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:peOgro*1:0:0]|S=0,0,0,0,0,2,3.2|rng=3172693495|rngL=3632945273|merc=5,6|banc=2,6|alq=2,5;3,6|agua=f0b65cea|map=1b81b188",
             "jogador": {
               "x": 4,
               "y": 4,
@@ -15159,7 +15159,7 @@
           },
           {
             "depth": 5,
-            "snapshot": "v6|seed=GOLD-0004|d=5|t=0|over=0|p=7,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:22:7:13|2:linker:22:11:13|3:linker:22:8:18|4:linker:22:23:4|5:linker:22:18:20|6:linker:22:31:6|7:linker:22:31:11|8:linker:22:27:21|9:linker:22:39:24|10:linker:22:9:32|11:linker:22:9:39|12:linker:22:28:33|13:linker:22:30:39|14:linker:22:39:30]|I[1:potion:11:11|2:potion:6:18|3:potion:21:2|4:potion:34:21]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:espadaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:peOgro*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:1:peOgro+clavaOgro:0:28:clavaOgro*1:0:0]|S=0,0,0,0,0,5,6.8|rng=3122360638|rngL=3649722892|merc=6,2|banc=8,6|alq=7,6;9,6|agua=bf41eaae|map=886a01a6",
+            "snapshot": "v6|seed=GOLD-0004|d=5|t=0|over=0|p=7,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:22:7:13|2:linker:22:11:13|3:linker:22:8:18|4:linker:22:23:4|5:linker:22:18:20|6:linker:22:31:6|7:linker:22:31:11|8:linker:22:27:21|9:linker:22:39:24|10:linker:22:9:32|11:linker:22:9:39|12:linker:22:28:33|13:linker:22:30:39|14:linker:22:39:30]|I[1:potion:11:11|2:potion:6:18|3:potion:21:2|4:potion:34:21]|B[]|M[abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:espadaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:peOgro*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0|abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:1:peOgro+clavaOgro:0:28:clavaOgro*1:0:0]|S=0,0,0,0,0,5,6.8|rng=3122360638|rngL=3649722892|merc=6,2|banc=9,6|alq=8,6;10,6|agua=bf41eaae|map=886a01a6",
             "jogador": {
               "x": 7,
               "y": 4,
@@ -23298,7 +23298,7 @@
           },
           {
             "depth": 5,
-            "snapshot": "v6|seed=GOLD-0006|d=5|t=0|over=0|p=5,4,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:22:14:2|2:linker:22:12:9|3:linker:22:3:24|4:linker:22:11:22|5:linker:22:13:28|6:linker:22:10:41|7:linker:22:22:5|8:linker:22:19:11|9:linker:22:19:24|10:linker:22:42:15|11:linker:22:18:27|12:linker:22:18:34|13:linker:22:31:30|14:linker:22:38:42]|I[1:potion:12:18|2:potion:18:20|3:potion:42:17|4:potion:19:36]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:peOgro*1:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0]|S=0,0,0,0,0,5,2.2|rng=3109705616|rngL=3512453042|merc=3,4|banc=5,6|alq=-|agua=6a04ac23|map=85c6d4b7",
+            "snapshot": "v6|seed=GOLD-0006|d=5|t=0|over=0|p=5,4,46/46,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:22:14:2|2:linker:22:12:9|3:linker:22:3:24|4:linker:22:11:22|5:linker:22:13:28|6:linker:22:10:41|7:linker:22:22:5|8:linker:22:19:11|9:linker:22:19:24|10:linker:22:42:15|11:linker:22:18:27|12:linker:22:18:34|13:linker:22:31:30|14:linker:22:38:42]|I[1:potion:12:18|2:potion:18:20|3:potion:42:17|4:potion:19:36]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:peOgro*1:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0]|S=0,0,0,0,0,5,2.2|rng=3109705616|rngL=3512453042|merc=3,4|banc=5,2|alq=-|agua=6a04ac23|map=85c6d4b7",
             "jogador": {
               "x": 5,
               "y": 4,
@@ -23858,7 +23858,7 @@
           },
           {
             "depth": 7,
-            "snapshot": "v6|seed=GOLD-0006|d=7|t=0|over=0|p=4,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:26:10:11|2:linker:26:19:5|3:linker:26:20:11|4:chaser:22:2:24|5:linker:26:14:22|6:linker:26:21:19|7:linker:26:20:32|8:linker:26:18:40|9:linker:26:29:4|10:linker:26:39:4|11:linker:26:29:15|12:linker:26:39:13|13:linker:26:28:29|14:chaser:22:39:21|15:linker:26:36:26|16:linker:26:29:39|17:linker:26:38:41|18:chaser:22:37:33]|I[1:potion:19:39|2:potion:40:22|3:potion:42:37]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:peOgro*1:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:-:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0]|S=0,0,0,0,0,7,3.4|rng=3143260854|rngL=3478897804|merc=3,2|banc=3,6|alq=2,6;4,6|agua=4aeb323b|map=2e2ddb16",
+            "snapshot": "v6|seed=GOLD-0006|d=7|t=0|over=0|p=4,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:26:10:11|2:linker:26:19:5|3:linker:26:20:11|4:chaser:22:2:24|5:linker:26:14:22|6:linker:26:21:19|7:linker:26:20:32|8:linker:26:18:40|9:linker:26:29:4|10:linker:26:39:4|11:linker:26:29:15|12:linker:26:39:13|13:linker:26:28:29|14:chaser:22:39:21|15:linker:26:36:26|16:linker:26:29:39|17:linker:26:38:41|18:chaser:22:37:33]|I[1:potion:19:39|2:potion:40:22|3:potion:42:37]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:2:3:peOgro+clavaOgro:0:44:peOgro*1:0:0|abate-linker:linker:3:1:gosma:0:15:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:-:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-linker:linker:2:1:gosma:0:11:-:0:0]|S=0,0,0,0,0,7,3.4|rng=3143260854|rngL=3478897804|merc=3,2|banc=6,6|alq=6,5;5,6|agua=4aeb323b|map=2e2ddb16",
             "jogador": {
               "x": 4,
               "y": 4,
@@ -31867,7 +31867,7 @@
           },
           {
             "depth": 5,
-            "snapshot": "v6|seed=GOLD-0008|d=5|t=0|over=0|p=8,5,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:chaser:19:10:16|2:linker:22:4:13|3:linker:22:18:9|4:linker:22:5:21|5:linker:22:12:25|6:linker:22:7:34|7:linker:22:4:38|8:linker:22:17:35|9:chaser:19:27:12|10:linker:22:32:13|11:linker:22:40:11|12:linker:22:33:21|13:linker:22:41:28|14:linker:22:28:41]|I[1:potion:6:16|2:potion:5:15|3:potion:37:21|4:potion:27:42]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0]|S=0,0,0,0,0,5,7|rng=1158186690|rngL=2745986216|merc=6,6|banc=7,7|alq=6,7;8,7|agua=59c8bff3|map=247b93b3",
+            "snapshot": "v6|seed=GOLD-0008|d=5|t=0|over=0|p=8,5,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:chaser:19:10:16|2:linker:22:4:13|3:linker:22:18:9|4:linker:22:5:21|5:linker:22:12:25|6:linker:22:7:34|7:linker:22:4:38|8:linker:22:17:35|9:chaser:19:27:12|10:linker:22:32:13|11:linker:22:40:11|12:linker:22:33:21|13:linker:22:41:28|14:linker:22:28:41]|I[1:potion:6:16|2:potion:5:15|3:potion:37:21|4:potion:27:42]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0]|S=0,0,0,0,0,5,7|rng=1158186690|rngL=2745986216|merc=6,6|banc=8,3|alq=8,2;9,3|agua=59c8bff3|map=247b93b3",
             "jogador": {
               "x": 8,
               "y": 5,
@@ -32141,7 +32141,7 @@
           },
           {
             "depth": 6,
-            "snapshot": "v6|seed=GOLD-0008|d=6|t=0|over=0|p=6,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:11:13|2:linker:24:7:22|3:linker:24:14:6|4:linker:24:21:7|5:linker:24:25:23|6:linker:24:42:6|7:linker:24:39:13|8:linker:24:41:23|9:linker:24:7:29|10:linker:24:11:30|11:linker:24:5:42|12:linker:24:17:41|13:linker:24:26:27|14:linker:24:39:34|15:linker:24:24:41|16:linker:24:38:41]|I[1:potion:25:13|2:potion:6:42]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-chaser:chaser:2:2:orelhaGoblin+espadaGoblin:0:18:-:0:0|abate-sentinel:sentinel:4:1:peOgro+clavaOgro:0:28:clavaOgro*1:0:0|abate-linker:linker:4:3:gosma:0:25:-:0:0]|S=0,0,0,0,0,6,2.9|rng=1141409071|rngL=2796319073|merc=9,4|banc=3,4|alq=2,4;4,4|agua=3f51376d|map=8e4c10a",
+            "snapshot": "v6|seed=GOLD-0008|d=6|t=0|over=0|p=6,4,50/50,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:11:13|2:linker:24:7:22|3:linker:24:14:6|4:linker:24:21:7|5:linker:24:25:23|6:linker:24:42:6|7:linker:24:39:13|8:linker:24:41:23|9:linker:24:7:29|10:linker:24:11:30|11:linker:24:5:42|12:linker:24:17:41|13:linker:24:26:27|14:linker:24:39:34|15:linker:24:24:41|16:linker:24:38:41]|I[1:potion:25:13|2:potion:6:42]|B[]|M[abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:2:2:peOgro+clavaOgro:0:32:clavaOgro*1:0:0|abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:-:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:-:0:0|abate-chaser:chaser:2:2:orelhaGoblin+espadaGoblin:0:18:-:0:0|abate-sentinel:sentinel:4:1:peOgro+clavaOgro:0:28:clavaOgro*1:0:0|abate-linker:linker:4:3:gosma:0:25:-:0:0]|S=0,0,0,0,0,6,2.9|rng=1141409071|rngL=2796319073|merc=5,6|banc=6,2|alq=5,2;7,2|agua=3f51376d|map=8e4c10a",
             "jogador": {
               "x": 6,
               "y": 4,
@@ -35878,7 +35878,7 @@
           },
           {
             "depth": 4,
-            "snapshot": "v6|seed=GOLD-0009|d=4|t=0|over=0|p=4,6,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:15:16|2:linker:20:23:17|3:sentinel:13:10:34|4:linker:20:20:28|5:chaser:17:21:34|6:linker:20:32:5|7:linker:20:39:6|8:linker:20:31:19|9:linker:20:40:16|10:linker:20:41:31|11:linker:20:31:41|12:linker:20:41:37]|I[1:potion:5:34|2:potion:20:25|3:potion:36:27]|B[]|M[abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:-:0:0|abate-sentinel:sentinel:3:3:peOgro+clavaOgro:0:48:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0]|S=0,0,0,0,0,4,5.8|rng=379517230|rngL=3882688680|merc=5,4|banc=6,5|alq=6,4;6,6|agua=5025c7be|map=6f1ec824",
+            "snapshot": "v6|seed=GOLD-0009|d=4|t=0|over=0|p=4,6,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:15:16|2:linker:20:23:17|3:sentinel:13:10:34|4:linker:20:20:28|5:chaser:17:21:34|6:linker:20:32:5|7:linker:20:39:6|8:linker:20:31:19|9:linker:20:40:16|10:linker:20:41:31|11:linker:20:31:41|12:linker:20:41:37]|I[1:potion:5:34|2:potion:20:25|3:potion:36:27]|B[]|M[abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:-:0:0|abate-sentinel:sentinel:3:3:peOgro+clavaOgro:0:48:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0]|S=0,0,0,0,0,4,5.8|rng=379517230|rngL=3882688680|merc=5,4|banc=2,8|alq=2,7;3,8|agua=5025c7be|map=6f1ec824",
             "jogador": {
               "x": 4,
               "y": 6,
@@ -36393,7 +36393,7 @@
           },
           {
             "depth": 6,
-            "snapshot": "v6|seed=GOLD-0009|d=6|t=0|over=0|p=4,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:7:24|2:linker:24:11:22|3:linker:24:6:37|4:linker:24:15:30|5:linker:24:12:37|6:linker:24:26:6|7:linker:24:24:14|8:linker:24:21:21|9:linker:24:40:3|10:linker:24:36:12|11:linker:24:42:22|12:linker:24:24:27|13:linker:24:31:27|14:linker:24:30:37|15:linker:24:40:28|16:linker:24:40:40]|I[1:potion:36:7|2:potion:32:19]|B[]|M[abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:-:0:0|abate-sentinel:sentinel:3:3:peOgro+clavaOgro:0:48:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0|abate-chaser:chaser:2:2:orelhaGoblin+espadaGoblin:0:18:-:0:0|abate-sentinel:sentinel:4:3:peOgro+clavaOgro:0:52:-:0:0|abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:orelhaGoblin*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,6,3.2|rng=345961992|rngL=3916243918|merc=6,4|banc=5,6|alq=4,6;6,6|agua=38db9558|map=50912c8d",
+            "snapshot": "v6|seed=GOLD-0009|d=6|t=0|over=0|p=4,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:7:24|2:linker:24:11:22|3:linker:24:6:37|4:linker:24:15:30|5:linker:24:12:37|6:linker:24:26:6|7:linker:24:24:14|8:linker:24:21:21|9:linker:24:40:3|10:linker:24:36:12|11:linker:24:42:22|12:linker:24:24:27|13:linker:24:31:27|14:linker:24:30:37|15:linker:24:40:28|16:linker:24:40:40]|I[1:potion:36:7|2:potion:32:19]|B[]|M[abate-chaser:chaser:3:3:orelhaGoblin+espadaGoblin:0:27:-:0:0|abate-sentinel:sentinel:3:3:peOgro+clavaOgro:0:48:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:-:0:0|abate-chaser:chaser:2:2:orelhaGoblin+espadaGoblin:0:18:-:0:0|abate-sentinel:sentinel:4:3:peOgro+clavaOgro:0:52:-:0:0|abate-chaser:chaser:4:3:orelhaGoblin+espadaGoblin:0:31:orelhaGoblin*1:0:0|abate-linker:linker:3:2:gosma:0:18:-:0:0]|S=0,0,0,0,0,6,3.2|rng=345961992|rngL=3916243918|merc=4,2|banc=2,4|alq=-|agua=38db9558|map=50912c8d",
             "jogador": {
               "x": 4,
               "y": 4,
@@ -40730,7 +40730,7 @@
           },
           {
             "depth": 2,
-            "snapshot": "v6|seed=GOLD-0010|d=2|t=0|over=0|p=6,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:chaser:13:17:13|2:linker:16:6:18|3:linker:16:24:5|4:linker:16:42:9|5:linker:16:40:24|6:linker:16:3:29|7:linker:16:14:32|8:linker:16:27:37]|I[1:potion:4:22|2:potion:27:5|3:potion:42:7|4:potion:42:21|5:potion:26:36]|B[]|M[abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0]|S=0,0,0,0,0,2,4.4|rng=817249350|rngL=2045235176|merc=4,4|banc=4,2|alq=5,2;4,3|agua=1510d394|map=e2232bdd",
+            "snapshot": "v6|seed=GOLD-0010|d=2|t=0|over=0|p=6,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:chaser:13:17:13|2:linker:16:6:18|3:linker:16:24:5|4:linker:16:42:9|5:linker:16:40:24|6:linker:16:3:29|7:linker:16:14:32|8:linker:16:27:37]|I[1:potion:4:22|2:potion:27:5|3:potion:42:7|4:potion:42:21|5:potion:26:36]|B[]|M[abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0]|S=0,0,0,0,0,2,4.4|rng=817249350|rngL=2045235176|merc=4,4|banc=4,2|alq=3,2;5,2|agua=1510d394|map=e2232bdd",
             "jogador": {
               "x": 6,
               "y": 4,
@@ -41148,7 +41148,7 @@
           },
           {
             "depth": 4,
-            "snapshot": "v6|seed=GOLD-0010|d=4|t=0|over=0|p=5,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:13:5|2:linker:20:7:13|3:linker:20:16:16|4:linker:20:6:27|5:linker:20:3:36|6:linker:20:12:26|7:linker:20:15:39|8:linker:20:31:3|9:linker:20:35:16|10:linker:20:30:22|11:linker:20:37:27|12:linker:20:25:41]|I[1:potion:25:4|2:potion:40:13|3:potion:23:22]|B[]|M[abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:espadaGoblin*1:0:0|abate-sentinel:sentinel:3:2:peOgro+clavaOgro:0:36:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0|abate-sentinel:sentinel:3:2:peOgro+clavaOgro:0:36:-:0:0]|S=0,0,0,0,0,4,4.8|rng=850804588|rngL=2145900890|merc=5,6|banc=2,4|alq=2,3;3,4|agua=22583102|map=61d7569a",
+            "snapshot": "v6|seed=GOLD-0010|d=4|t=0|over=0|p=5,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:20:13:5|2:linker:20:7:13|3:linker:20:16:16|4:linker:20:6:27|5:linker:20:3:36|6:linker:20:12:26|7:linker:20:15:39|8:linker:20:31:3|9:linker:20:35:16|10:linker:20:30:22|11:linker:20:37:27|12:linker:20:25:41]|I[1:potion:25:4|2:potion:40:13|3:potion:23:22]|B[]|M[abate-linker:linker:3:2:gosma:0:18:gosma*1:0:0|abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:espadaGoblin*1:0:0|abate-sentinel:sentinel:3:2:peOgro+clavaOgro:0:36:-:0:0|abate-linker:linker:4:3:gosma:0:25:gosma*1:0:0|abate-chaser:chaser:4:2:orelhaGoblin+espadaGoblin:0:26:-:0:0|abate-sentinel:sentinel:3:2:peOgro+clavaOgro:0:36:-:0:0]|S=0,0,0,0,0,4,4.8|rng=850804588|rngL=2145900890|merc=7,3|banc=3,4|alq=3,3;2,4|agua=22583102|map=61d7569a",
             "jogador": {
               "x": 5,
               "y": 4,
@@ -44935,7 +44935,7 @@
           },
           {
             "depth": 3,
-            "snapshot": "v6|seed=GOLD-0011|d=3|t=0|over=0|p=6,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:16:2|2:linker:18:19:7|3:linker:18:26:8|4:linker:18:39:5|5:linker:18:38:13|6:linker:18:13:26|7:linker:18:14:35|8:linker:18:27:26|9:linker:18:28:42|10:linker:18:42:39]|I[1:potion:28:4|2:potion:34:10|3:potion:34:37]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:orelhaGoblin*1:0:0]|S=0,0,0,0,0,3,4.1|rng=2262019466|rngL=3297272088|merc=3,4|banc=7,2|alq=6,2;8,2|agua=e4f3c3f8|map=6d6ac377",
+            "snapshot": "v6|seed=GOLD-0011|d=3|t=0|over=0|p=6,4,44/44,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:16:2|2:linker:18:19:7|3:linker:18:26:8|4:linker:18:39:5|5:linker:18:38:13|6:linker:18:13:26|7:linker:18:14:35|8:linker:18:27:26|9:linker:18:28:42|10:linker:18:42:39]|I[1:potion:28:4|2:potion:34:10|3:potion:34:37]|B[]|M[abate-chaser:chaser:3:2:orelhaGoblin+espadaGoblin:0:22:-:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:orelhaGoblin*1:0:0]|S=0,0,0,0,0,3,4.1|rng=2262019466|rngL=3297272088|merc=4,4|banc=7,2|alq=6,2;8,2|agua=e4f3c3f8|map=6d6ac377",
             "jogador": {
               "x": 6,
               "y": 4,
@@ -49283,7 +49283,7 @@
         "niveis": [
           {
             "depth": 3,
-            "snapshot": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
+            "snapshot": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
             "jogador": {
               "x": 4,
               "y": 5,
@@ -50013,7 +50013,7 @@
           },
           {
             "depth": 6,
-            "snapshot": "v6|seed=GOLD-0012|d=6|t=0|over=0|p=4,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:3:11|2:linker:24:13:11|3:linker:24:6:18|4:linker:24:11:29|5:linker:24:5:39|6:linker:24:11:37|7:linker:24:21:5|8:linker:24:23:14|9:linker:24:28:16|10:linker:24:37:2|11:linker:24:40:18|12:linker:24:28:22|13:linker:24:27:33|14:linker:24:21:32|15:linker:24:39:23|16:linker:24:33:38]|I[1:potion:39:15|2:potion:26:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:peOgro*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:clavaOgro*1:0:0|abate-linker:linker:4:3:gosma:0:25:-:0:0]|S=0,0,0,0,0,6,2.6|rng=3727171740|rngL=3856645770|merc=2,4|banc=3,6|alq=2,6;4,6|agua=11e0afb9|map=10969a1f",
+            "snapshot": "v6|seed=GOLD-0012|d=6|t=0|over=0|p=4,4,48/48,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:24:3:11|2:linker:24:13:11|3:linker:24:6:18|4:linker:24:11:29|5:linker:24:5:39|6:linker:24:11:37|7:linker:24:21:5|8:linker:24:23:14|9:linker:24:28:16|10:linker:24:37:2|11:linker:24:40:18|12:linker:24:28:22|13:linker:24:27:33|14:linker:24:21:32|15:linker:24:39:23|16:linker:24:33:38]|I[1:potion:39:15|2:potion:26:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0|abate-chaser:chaser:3:1:orelhaGoblin+espadaGoblin:0:17:-:0:0|abate-sentinel:sentinel:3:1:peOgro+clavaOgro:0:24:peOgro*1:0:0|abate-chaser:chaser:4:1:orelhaGoblin+espadaGoblin:0:21:-:0:0|abate-sentinel:sentinel:2:1:peOgro+clavaOgro:0:20:clavaOgro*1:0:0|abate-linker:linker:4:2:gosma:0:22:gosma*1:0:0|abate-chaser:chaser:2:3:orelhaGoblin+espadaGoblin:0:23:orelhaGoblin*1:0:0|abate-sentinel:sentinel:4:2:peOgro+clavaOgro:0:40:clavaOgro*1:0:0|abate-linker:linker:4:3:gosma:0:25:-:0:0]|S=0,0,0,0,0,6,2.6|rng=3727171740|rngL=3856645770|merc=2,4|banc=6,6|alq=6,5;5,6|agua=11e0afb9|map=10969a1f",
             "jogador": {
               "x": 4,
               "y": 4,
@@ -50846,7 +50846,7 @@
         ]
       },
       "inicial": {
-        "snapshot": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
+        "snapshot": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
         "jogador": {
           "x": 4,
           "y": 5,
@@ -51283,224 +51283,214 @@
         "move:-1,1",
         "wait"
       ],
-      "aceitos": "11111110001111100001111111100111101111111111010011100101011001001111100000111111010011111011101111111100000000000011011111000100111011101111010111010111101101111000100001100001000111110100011111001101",
-      "aceitosTotal": 122,
+      "aceitos": "11111110001111100001111111100111111110000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "aceitosTotal": 28,
       "hashesPorComando": [
-        "7835e9e7",
-        "0fef96e1",
-        "8be45c4c",
-        "036d9704",
-        "56032755",
-        "0a211292",
-        "9765981b",
-        "9765981b",
-        "9765981b",
-        "9765981b",
-        "e74a1e7d",
-        "c54506f8",
-        "30738a2f",
-        "514776dc",
-        "495fc384",
-        "495fc384",
-        "495fc384",
-        "495fc384",
-        "495fc384",
-        "60008ebb",
-        "d5e01ca6",
-        "7c2be8bd",
-        "20915bdd",
-        "5561dbff",
-        "83a616c3",
-        "cbb2e529",
-        "18b4a67f",
-        "18b4a67f",
-        "18b4a67f",
-        "262176e1",
-        "9ec7e918",
-        "b418160c",
-        "47861839",
-        "47861839",
-        "19933023",
-        "f143329b",
-        "5152b968",
-        "6f24949f",
-        "dc83d380",
-        "33f8b862",
-        "8da24ea9",
-        "1c661957",
-        "78a2f661",
-        "639c5b13",
-        "639c5b13",
-        "5c6706c2",
-        "5c6706c2",
-        "5c6706c2",
-        "50a31f40",
-        "10aa9668",
-        "aa9e7046",
-        "aa9e7046",
-        "aa9e7046",
-        "95cf569c",
-        "95cf569c",
-        "c772d45d",
-        "c772d45d",
-        "6fe9b7c3",
-        "20839e16",
-        "20839e16",
-        "20839e16",
-        "eda5bb30",
-        "eda5bb30",
-        "eda5bb30",
-        "9f2636de",
-        "e3627043",
-        "43271f5a",
-        "409351b2",
-        "ad033c2f",
-        "ad033c2f",
-        "ad033c2f",
-        "ad033c2f",
-        "ad033c2f",
-        "ad033c2f",
-        "021ab8bf",
-        "ffe5de91",
-        "41afcd74",
-        "bf4cb5d4",
-        "4713d7b0",
-        "12db8e8e",
-        "12db8e8e",
-        "2bc90242",
-        "2bc90242",
-        "2bc90242",
-        "efad9ca6",
-        "049330b8",
-        "0f7e079d",
-        "b496a82b",
-        "af001704",
-        "af001704",
-        "c7d88a31",
-        "a59e5f34",
-        "8654ffd9",
-        "8654ffd9",
-        "f4e7d991",
-        "76a5dca0",
-        "5fbfe054",
-        "6f565674",
-        "76abcbe1",
-        "50a480ee",
-        "c159999f",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "da7b9a36",
-        "c1b03dd7",
-        "fadc183a",
-        "fadc183a",
-        "2a01d467",
-        "38548c8b",
-        "1b954d0c",
-        "66406904",
-        "fcab64a4",
-        "fcab64a4",
-        "fcab64a4",
-        "fcab64a4",
-        "321a9aa3",
-        "321a9aa3",
-        "321a9aa3",
-        "aab4c4a4",
-        "d8ffddca",
-        "8128fad1",
-        "8128fad1",
-        "d03e910e",
-        "510d70a9",
-        "8bfc3593",
-        "8bfc3593",
-        "45e6d3ec",
-        "4e6b884c",
-        "91e23cdf",
-        "c4bd6965",
-        "c4bd6965",
-        "badb1dae",
-        "badb1dae",
-        "6a3c4731",
-        "53e31ad5",
-        "9b3029c1",
-        "9b3029c1",
-        "df732665",
-        "df732665",
-        "d2099a6b",
-        "117cafe7",
-        "48b1cfc5",
-        "43d85a67",
-        "43d85a67",
-        "6c7c0753",
-        "c9661395",
-        "c9661395",
-        "fdeb6659",
-        "940cdc3c",
-        "5b37981a",
-        "e9fc7c9f",
-        "e9fc7c9f",
-        "e9fc7c9f",
-        "e9fc7c9f",
-        "42faa531",
-        "42faa531",
-        "42faa531",
-        "42faa531",
-        "42faa531",
-        "8dbacf41",
-        "6a356664",
-        "6a356664",
-        "6a356664",
-        "6a356664",
-        "6a356664",
-        "615cb3d5",
-        "615cb3d5",
-        "615cb3d5",
-        "615cb3d5",
-        "d95c2cd3",
-        "48d8e551",
-        "e9195613",
-        "5166e70c",
-        "39e23c42",
-        "39e23c42",
-        "236e9a8f",
-        "236e9a8f",
-        "236e9a8f",
-        "236e9a8f",
-        "d5fd4783",
-        "60c9ca92",
-        "f5bdb1ae",
-        "e65f9533",
-        "e19f6312",
-        "e19f6312",
-        "e19f6312",
-        "b7def29e",
-        "275449c8",
-        "275449c8",
-        "60213e24"
+        "66104cb1",
+        "37e3b06f",
+        "4837c682",
+        "88c84c9a",
+        "782d9233",
+        "206cd1d4",
+        "71c0e47c",
+        "71c0e47c",
+        "71c0e47c",
+        "71c0e47c",
+        "9ad12a9a",
+        "09a8a284",
+        "256627ba",
+        "43089550",
+        "d103cc7e",
+        "d103cc7e",
+        "d103cc7e",
+        "d103cc7e",
+        "d103cc7e",
+        "e44a977d",
+        "69235eb7",
+        "7b16f2cd",
+        "6e91c025",
+        "4742ea53",
+        "51933296",
+        "7479bc97",
+        "43d0c1eb",
+        "43d0c1eb",
+        "43d0c1eb",
+        "06d77590",
+        "16318230",
+        "2449f07b",
+        "d05f114c",
+        "8ae25dbe",
+        "07452672",
+        "e7d6eddc",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26",
+        "6d32ef26"
       ],
       "snapshots": {
-        "0": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "10": "v6|seed=GOLD-0012|d=3|t=10|over=0|p=5,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:10:5|3:linker:18:16:6|4:linker:18:21:8|5:linker:18:12:22|6:linker:18:14:15|7:linker:18:18:25|8:linker:18:28:39|9:linker:18:32:39|10:linker:18:38:29]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=10,0,0,0,0,3,6.1|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "20": "v6|seed=GOLD-0012|d=3|t=20|over=0|p=5,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:11:6|5:linker:18:12:12|6:linker:18:10:6|7:linker:18:13:18|8:linker:18:38:37|9:linker:18:38:33|10:linker:18:30:26]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=20,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "30": "v6|seed=GOLD-0012|d=3|t=30|over=0|p=2,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:12:8|8:linker:18:38:27|9:linker:18:34:25|10:linker:18:20:25]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=30,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "40": "v6|seed=GOLD-0012|d=3|t=40|over=0|p=5,8,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:28:28|9:linker:18:24:25|10:linker:18:13:20]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=40,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "50": "v6|seed=GOLD-0012|d=3|t=50|over=0|p=3,4,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:18:25|9:linker:18:14:24|10:linker:18:12:10]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=50,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "60": "v6|seed=GOLD-0012|d=3|t=60|over=0|p=2,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:18|9:linker:18:14:14|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=60,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "70": "v6|seed=GOLD-0012|d=3|t=70|over=0|p=3,7,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=70,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "80": "v6|seed=GOLD-0012|d=3|t=80|over=0|p=4,7,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=80,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "90": "v6|seed=GOLD-0012|d=3|t=90|over=0|p=4,7,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=90,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "100": "v6|seed=GOLD-0012|d=3|t=100|over=0|p=4,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=100,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "110": "v6|seed=GOLD-0012|d=3|t=110|over=0|p=3,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=110,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "120": "v6|seed=GOLD-0012|d=3|t=120|over=0|p=3,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=120,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57"
+        "0": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+        "10": "v6|seed=GOLD-0012|d=3|t=10|over=0|p=5,5,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:5:4|2:linker:18:10:5|3:linker:18:16:6|4:linker:18:21:8|5:linker:18:12:22|6:linker:18:14:15|7:linker:18:18:25|8:linker:18:28:39|9:linker:18:32:39|10:linker:18:38:29]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=10,0,0,0,0,3,6.1|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+        "20": "v6|seed=GOLD-0012|d=3|t=20|over=0|p=5,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:4:4|2:linker:18:2:5|3:linker:18:7:5|4:linker:18:11:6|5:linker:18:12:12|6:linker:18:10:6|7:linker:18:13:18|8:linker:18:38:37|9:linker:18:38:33|10:linker:18:30:26]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=20,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57"
       },
       "niveis": [
         {
@@ -51535,21 +51525,41 @@
           ]
         }
       ],
-      "morte": null,
-      "final": {
-        "snapshot": "v6|seed=GOLD-0012|d=3|t=122|over=0|p=2,6,42/42,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=122,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "depth": 3,
-        "turn": 122,
-        "over": false,
-        "cause": "",
-        "causeKind": "",
+      "morte": {
+        "turno": 28,
+        "comandoIndice": 36,
+        "comando": "move:1,-1",
+        "causa": "Morto pelo Vinculador no nível 3",
+        "causaKind": "linker",
+        "snapshot": "v6|seed=GOLD-0012|d=3|t=28|over=1|p=3,5,0/42,atk7,poc2,lv1:0,mo0,arm0|E[1:linker:18:4:4|2:linker:18:4:6|3:linker:18:3:4|4:linker:18:6:5|5:linker:18:10:6|6:linker:18:5:6|7:linker:18:12:11|8:linker:18:38:30|9:linker:18:37:26|10:linker:18:23:25]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=28,0,0,47,1,3,6.3|rng=1149496203|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
         "jogador": {
-          "x": 2,
-          "y": 6,
-          "hp": 42,
+          "x": 3,
+          "y": 5,
+          "hp": 0,
           "maxHp": 42,
           "atk": 7,
-          "potions": 3,
+          "potions": 2,
+          "level": 1,
+          "xp": 0,
+          "bolsa": [],
+          "moedas": 0,
+          "armaNivel": 0
+        }
+      },
+      "final": {
+        "snapshot": "v6|seed=GOLD-0012|d=3|t=28|over=1|p=3,5,0/42,atk7,poc2,lv1:0,mo0,arm0|E[1:linker:18:4:4|2:linker:18:4:6|3:linker:18:3:4|4:linker:18:6:5|5:linker:18:10:6|6:linker:18:5:6|7:linker:18:12:11|8:linker:18:38:30|9:linker:18:37:26|10:linker:18:23:25]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=28,0,0,47,1,3,6.3|rng=1149496203|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+        "depth": 3,
+        "turn": 28,
+        "over": true,
+        "cause": "Morto pelo Vinculador no nível 3",
+        "causeKind": "linker",
+        "jogador": {
+          "x": 3,
+          "y": 5,
+          "hp": 0,
+          "maxHp": 42,
+          "atk": 7,
+          "potions": 2,
           "level": 1,
           "xp": 0,
           "bolsa": [],
@@ -51560,131 +51570,131 @@
           {
             "id": 1,
             "kind": "linker",
-            "x": 7,
-            "y": 5,
+            "x": 4,
+            "y": 4,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
-            "state": "wait",
-            "plan": "aguarda aliado",
+            "state": "attack",
+            "plan": "ataca corpo a corpo",
             "lastDmg": 0
           },
           {
             "id": 2,
             "kind": "linker",
-            "x": 8,
-            "y": 5,
+            "x": 4,
+            "y": 6,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
-            "state": "wait",
-            "plan": "aguarda aliado",
+            "state": "hunt",
+            "plan": "avança para (4,6)",
             "lastDmg": 0
           },
           {
             "id": 3,
             "kind": "linker",
-            "x": 9,
-            "y": 5,
+            "x": 3,
+            "y": 4,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
-            "state": "wait",
-            "plan": "aguarda aliado",
+            "state": "attack",
+            "plan": "ataca corpo a corpo",
             "lastDmg": 0
           },
           {
             "id": 4,
             "kind": "linker",
-            "x": 10,
-            "y": 6,
-            "hp": 18,
-            "maxHp": 18,
-            "atk": 6,
-            "range": 1,
-            "state": "wait",
-            "plan": "aguarda aliado",
-            "lastDmg": 0
-          },
-          {
-            "id": 5,
-            "kind": "linker",
-            "x": 11,
-            "y": 7,
-            "hp": 18,
-            "maxHp": 18,
-            "atk": 6,
-            "range": 1,
-            "state": "wait",
-            "plan": "aguarda aliado",
-            "lastDmg": 0
-          },
-          {
-            "id": 6,
-            "kind": "linker",
-            "x": 10,
+            "x": 6,
             "y": 5,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
             "state": "wait",
-            "plan": "aguarda aliado",
+            "plan": "ronda aguardando aliado",
             "lastDmg": 0
           },
           {
-            "id": 7,
+            "id": 5,
             "kind": "linker",
-            "x": 11,
+            "x": 10,
             "y": 6,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
             "state": "wait",
-            "plan": "aguarda aliado",
+            "plan": "ronda aguardando aliado",
+            "lastDmg": 0
+          },
+          {
+            "id": 6,
+            "kind": "linker",
+            "x": 5,
+            "y": 6,
+            "hp": 18,
+            "maxHp": 18,
+            "atk": 6,
+            "range": 1,
+            "state": "wait",
+            "plan": "circula à espreita",
+            "lastDmg": 0
+          },
+          {
+            "id": 7,
+            "kind": "linker",
+            "x": 12,
+            "y": 11,
+            "hp": 18,
+            "maxHp": 18,
+            "atk": 6,
+            "range": 1,
+            "state": "wait",
+            "plan": "ronda aguardando aliado",
             "lastDmg": 0
           },
           {
             "id": 8,
             "kind": "linker",
-            "x": 13,
-            "y": 8,
+            "x": 38,
+            "y": 30,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
             "state": "wait",
-            "plan": "aguarda aliado",
+            "plan": "ronda aguardando aliado",
             "lastDmg": 0
           },
           {
             "id": 9,
             "kind": "linker",
-            "x": 12,
-            "y": 8,
+            "x": 37,
+            "y": 26,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
             "state": "wait",
-            "plan": "aguarda aliado",
+            "plan": "ronda aguardando aliado",
             "lastDmg": 0
           },
           {
             "id": 10,
             "kind": "linker",
-            "x": 12,
-            "y": 7,
+            "x": 23,
+            "y": 25,
             "hp": 18,
             "maxHp": 18,
             "atk": 6,
             "range": 1,
             "state": "wait",
-            "plan": "aguarda aliado",
+            "plan": "ronda aguardando aliado",
             "lastDmg": 0
           }
         ],
@@ -51713,24 +51723,24 @@
           }
         ],
         "stats": {
-          "turns": 122,
+          "turns": 28,
           "kills": 0,
           "dmgDealt": 0,
-          "dmgTaken": 0,
-          "itemsUsed": 0,
+          "dmgTaken": 47,
+          "itemsUsed": 1,
           "deepest": 3,
-          "explorePct": 6.7
+          "explorePct": 6.3
         },
-        "explorePct": 6.7,
+        "explorePct": 6.3,
         "visiveis": {
-          "tamanho": 66,
-          "hash": "d0870cb6"
+          "tamanho": 76,
+          "hash": "65756e7e"
         },
         "explorados": {
-          "tamanho": 103,
-          "hash": "a42be626"
+          "tamanho": 98,
+          "hash": "26d5fd07"
         },
-        "rngCombat": 3676838883,
+        "rngCombat": 1149496203,
         "rngLoot": 3806312913,
         "proxItemId": 4,
         "mapa": {
@@ -51871,6 +51881,96 @@
             "cls": "info"
           },
           {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 10,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 11,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
             "turn": 11,
             "text": "Você aguarda, atento aos ruídos.",
             "cls": "info"
@@ -51881,378 +51981,488 @@
             "cls": "info"
           },
           {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 13,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 16,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
             "turn": 22,
             "text": "Você aguarda, atento aos ruídos.",
             "cls": "info"
           },
           {
             "turn": 24,
-            "text": "Sua vida já está completa.",
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 34,
-            "text": "Não há escada aqui.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 35,
-            "text": "O caldeirão borbulha. A estação pede gosma e ferro.",
-            "cls": "info"
+            "turn": 24,
+            "text": "O Vinculador golpeia e causa 5 de dano.",
+            "cls": "ruim"
           },
           {
-            "turn": 35,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 38,
-            "text": "A água barra o caminho.",
-            "cls": "info"
-          },
-          {
-            "turn": 39,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 48,
-            "text": "O caldeirão borbulha. A estação pede gosma e ferro.",
-            "cls": "info"
-          },
-          {
-            "turn": 48,
-            "text": "A água barra o caminho.",
-            "cls": "info"
-          },
-          {
-            "turn": 48,
-            "text": "A estação de alquimia. O caldeirão fica ao lado.",
-            "cls": "info"
-          },
-          {
-            "turn": 52,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 54,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 55,
-            "text": "Não há escada aqui.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 79,
-            "text": "A água barra o caminho.",
-            "cls": "info"
-          },
-          {
-            "turn": 80,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 85,
-            "text": "Sua vida já está completa.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 88,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 89,
-            "text": "Não há escada aqui.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 90,
-            "text": "Sua vida já está completa.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 94,
-            "text": "Sua vida já está completa.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 100,
-            "text": "Não há escada aqui.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 100,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 104,
-            "text": "O mercador ergue os olhos: há o que negociar.",
-            "cls": "info"
-          },
-          {
-            "turn": 105,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
-          },
-          {
-            "turn": 106,
-            "text": "Você entra na sala 0 (arredondada).",
-            "cls": "info"
-          },
-          {
-            "turn": 107,
-            "text": "Sua vida já está completa.",
+            "turn": 24,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 113,
-            "text": "Sua vida já está completa.",
+            "turn": 24,
+            "text": "Você bebe uma poção e recupera 5 de vida (42/42).",
+            "cls": "bom"
+          },
+          {
+            "turn": 25,
+            "text": "O Vinculador golpeia e causa 5 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 25,
+            "text": "O Vinculador golpeia e causa 7 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 25,
+            "text": "O Vinculador golpeia e causa 6 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 26,
+            "text": "O Vinculador golpeia e causa 6 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 26,
+            "text": "O Vinculador avança com o aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 114,
-            "text": "A água barra o caminho.",
-            "cls": "info"
+            "turn": 26,
+            "text": "O Vinculador golpeia e causa 5 de dano.",
+            "cls": "ruim"
           },
           {
-            "turn": 119,
-            "text": "Sua vida já está completa.",
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
             "cls": "aviso"
           },
           {
-            "turn": 121,
-            "text": "Você aguarda, atento aos ruídos.",
-            "cls": "info"
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 27,
+            "text": "O Vinculador aguarda um aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 28,
+            "text": "O Vinculador golpeia e causa 7 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 28,
+            "text": "O Vinculador avança com o aliado.",
+            "cls": "aviso"
+          },
+          {
+            "turn": 28,
+            "text": "O Vinculador golpeia e causa 6 de dano.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 28,
+            "text": "Você tomba diante do Vinculador.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 28,
+            "text": "Morto pelo Vinculador no nível 3.",
+            "cls": "ruim"
+          },
+          {
+            "turn": 28,
+            "text": "Expedição encerrada no turno 28 — 0 inimigos derrotados, 6.3% do nível explorado.",
+            "cls": "sistema"
           }
         ]
       },
       "resistente": {
         "protocolo": "player.maxHp = 999 no início; antes de cada comando, se !over, player.hp = player.maxHp (idêntico ao T6 de legacy/harness-vanilla.mjs)",
-        "snapshotInicial": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-        "aceitos": "11111110001111100001111111100111101111111111010011100101011001001111100000111111010011111011101111111100000000000011011111000100111011101111010111010111101101111000100001100001000111110100011111001101",
-        "aceitosTotal": 122,
+        "snapshotInicial": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+        "aceitos": "11111110001111100001111111100111101111101011011110111111101111001111110100101111010100101010001001111111010000000011011111000100111011101111010111010111101101111000100001100001000111110100011111001101",
+        "aceitosTotal": 124,
         "hashesPorComando": [
-          "26b5d1b1",
-          "003a4d83",
-          "30a97016",
-          "ef222dbe",
-          "29fe4a97",
-          "a94cdf00",
-          "02e0a379",
-          "02e0a379",
-          "02e0a379",
-          "02e0a379",
-          "47d78903",
-          "62353936",
-          "c83050f5",
-          "93d50c82",
-          "feb2a432",
-          "feb2a432",
-          "feb2a432",
-          "feb2a432",
-          "feb2a432",
-          "cc27ec09",
-          "3c3d5788",
-          "3525b7bf",
-          "8eaef44b",
-          "69d00159",
-          "1558fa1d",
-          "ea185b3f",
-          "f76da1a1",
-          "f76da1a1",
-          "f76da1a1",
-          "82af343b",
-          "ad0d5586",
-          "d5f3179a",
-          "29ee1847",
-          "29ee1847",
-          "12418591",
-          "bf9e0fd5",
-          "29b9cd5a",
-          "1390c389",
-          "c73c079a",
-          "d7405848",
-          "b40baf47",
-          "62286e55",
-          "d6690fef",
-          "525d3375",
-          "525d3375",
-          "5bca85e8",
-          "5bca85e8",
-          "5bca85e8",
-          "b1ddea02",
-          "a3e6dda6",
-          "78e17d44",
-          "78e17d44",
-          "78e17d44",
-          "56756732",
-          "56756732",
-          "161606b7",
-          "161606b7",
-          "c65d776d",
-          "cf645bf0",
-          "cf645bf0",
-          "cf645bf0",
-          "efcb9c72",
-          "efcb9c72",
-          "efcb9c72",
-          "b2928514",
-          "a11ee43d",
-          "584e9134",
-          "6af27e84",
-          "e44f0815",
-          "e44f0815",
-          "e44f0815",
-          "e44f0815",
-          "e44f0815",
-          "e44f0815",
-          "f1eaa3a5",
-          "3262140b",
-          "d6bd6a26",
-          "7fac972e",
-          "b86fd382",
-          "5365b698",
-          "5365b698",
-          "237530b4",
-          "237530b4",
-          "237530b4",
-          "72a46884",
-          "be6cdae6",
-          "ad41f90f",
-          "36cc5f3d",
-          "08b6cd26",
-          "08b6cd26",
-          "c6a30743",
-          "8f43cbee",
-          "abf1d40b",
-          "abf1d40b",
-          "7e1cf22b",
-          "6130059e",
-          "a375ea72",
-          "721c7d0e",
-          "4697d9bb",
-          "3c75fcbc",
-          "60026059",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "c88c44d0",
-          "cd7035b5",
-          "0a2ff8b0",
-          "0a2ff8b0",
-          "1dec5a91",
-          "9402ca29",
-          "170cc886",
-          "b919aeda",
-          "9315524a",
-          "9315524a",
-          "9315524a",
-          "9315524a",
-          "0da70829",
-          "0da70829",
-          "0da70829",
-          "ad94edaa",
-          "29125ac4",
-          "25497d07",
-          "25497d07",
-          "f4a12894",
-          "114350fb",
-          "05819601",
-          "05819601",
-          "c7016b16",
-          "4da12822",
-          "7dd7ab49",
-          "ca380fcb",
-          "ca380fcb",
-          "debeb678",
-          "debeb678",
-          "f52f8acb",
-          "adc7ce77",
-          "54820fc7",
-          "54820fc7",
-          "3448344b",
-          "3448344b",
-          "d6c0d695",
-          "015d2d01",
-          "fa381b1b",
-          "9c541f6d",
-          "9c541f6d",
-          "039eb58d",
-          "ac106da7",
-          "ac106da7",
-          "1b060197",
-          "0b1d117e",
-          "bce2b478",
-          "fe626c71",
-          "fe626c71",
-          "fe626c71",
-          "fe626c71",
-          "78c0089b",
-          "78c0089b",
-          "78c0089b",
-          "78c0089b",
-          "78c0089b",
-          "e5446373",
-          "88bf3406",
-          "88bf3406",
-          "88bf3406",
-          "88bf3406",
-          "88bf3406",
-          "a3ccdd73",
-          "a3ccdd73",
-          "a3ccdd73",
-          "a3ccdd73",
-          "b074cc15",
-          "15005ee3",
-          "b5ff38d1",
-          "7606f71e",
-          "99bf87d0",
-          "99bf87d0",
-          "93f81091",
-          "93f81091",
-          "93f81091",
-          "93f81091",
-          "111f2d79",
-          "ea98e004",
-          "29a98c2c",
-          "1bb87ad5",
-          "1231adb4",
-          "1231adb4",
-          "1231adb4",
-          "936fb17c",
-          "d7a3c302",
-          "d7a3c302",
-          "c0839fd6"
+          "1253013f",
+          "d412933d",
+          "83ff6278",
+          "82962cc0",
+          "735dcf21",
+          "b24dc7b6",
+          "6732ec2e",
+          "6732ec2e",
+          "6732ec2e",
+          "6732ec2e",
+          "620972f8",
+          "14d291f2",
+          "878cf3b0",
+          "d75b9e26",
+          "7d3054e8",
+          "7d3054e8",
+          "7d3054e8",
+          "7d3054e8",
+          "7d3054e8",
+          "ef7d0597",
+          "549df00d",
+          "e845ba3f",
+          "60148bf3",
+          "e33a3c2d",
+          "40b154cc",
+          "1b8f8599",
+          "a84da995",
+          "a84da995",
+          "a84da995",
+          "a29ae20e",
+          "9abed46a",
+          "45fea9fd",
+          "91496669",
+          "60caea9a",
+          "f940a96e",
+          "199bedf1",
+          "1ff20e80",
+          "e3eca9bb",
+          "405fc462",
+          "c2b3e7ed",
+          "1595f280",
+          "489c2341",
+          "d5fe4982",
+          "c9d4a4f8",
+          "508a0686",
+          "dbbc6bc0",
+          "943b68f3",
+          "3af21ce2",
+          "e31faebe",
+          "ab2acfb9",
+          "e4e8079d",
+          "4177e892",
+          "3215dec9",
+          "7effd534",
+          "6a1366fb",
+          "bac61301",
+          "2cb5b872",
+          "2cb5b872",
+          "c16e0ee6",
+          "4bf6983c",
+          "7494f314",
+          "93cd2aa1",
+          "93cd2aa1",
+          "93cd2aa1",
+          "b40e81d9",
+          "ab307579",
+          "1f437466",
+          "c7eb6f0a",
+          "acf79b36",
+          "2a94e1fa",
+          "fc585144",
+          "91929791",
+          "36a32171",
+          "36a32171",
+          "6eb879ef",
+          "b1736b63",
+          "fd73cd66",
+          "068ba088",
+          "5be2203b",
+          "10076e5d",
+          "38a14cc7",
+          "063f8616",
+          "3b096341",
+          "238c2380",
+          "379764d6",
+          "379764d6",
+          "f385cf88",
+          "ce623853",
+          "37a705f3",
+          "94c44903",
+          "1c1631b5",
+          "6b1ff1ed",
+          "6b1ff1ed",
+          "6b1ff1ed",
+          "02936ea9",
+          "fe7ad15c",
+          "fe7ad15c",
+          "40a5d7b0",
+          "b628421d",
+          "f896ca38",
+          "d24b7db3",
+          "f53d8e89",
+          "46211f37",
+          "2c3991f1",
+          "2c3991f1",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "5ee1c150",
+          "8548c49d",
+          "1b92b5d0",
+          "1b92b5d0",
+          "583c5411",
+          "d14626d7",
+          "ab3a7020",
+          "bd988582",
+          "ee805033",
+          "ee805033",
+          "ee805033",
+          "ee805033",
+          "e2833e6b",
+          "e2833e6b",
+          "e2833e6b",
+          "2a99b9c2",
+          "63fb6306",
+          "19ad0eb9",
+          "19ad0eb9",
+          "8fb5500e",
+          "8755179d",
+          "bd5e7c01",
+          "bd5e7c01",
+          "82c4a4c2",
+          "c6bad218",
+          "00c6535f",
+          "7f84acdb",
+          "7f84acdb",
+          "edb5875a",
+          "edb5875a",
+          "73f39c6d",
+          "24e91a77",
+          "7ad074d1",
+          "7ad074d1",
+          "a858a447",
+          "a858a447",
+          "4afc9d2b",
+          "b9213b5d",
+          "37f726b5",
+          "3ec5a3b3",
+          "3ec5a3b3",
+          "3060f57b",
+          "18c4d321",
+          "18c4d321",
+          "12c14393",
+          "c46ae10a",
+          "a450a76a",
+          "8051d82f",
+          "8051d82f",
+          "8051d82f",
+          "8051d82f",
+          "bbe52fe9",
+          "bbe52fe9",
+          "bbe52fe9",
+          "bbe52fe9",
+          "bbe52fe9",
+          "83142657",
+          "aed11326",
+          "aed11326",
+          "aed11326",
+          "aed11326",
+          "aed11326",
+          "d2cb52ad",
+          "d2cb52ad",
+          "d2cb52ad",
+          "d2cb52ad",
+          "7aa2cd95",
+          "b6b35959",
+          "675261ad",
+          "37cb817e",
+          "2fd37c6e",
+          "2fd37c6e",
+          "e89a130b",
+          "e89a130b",
+          "e89a130b",
+          "e89a130b",
+          "0d44d795",
+          "bfa83ce0",
+          "ecab57a2",
+          "2b09e831",
+          "cf226c88",
+          "cf226c88",
+          "cf226c88",
+          "0cc0f446",
+          "04f63dc6",
+          "04f63dc6",
+          "368491cc"
         ],
         "snapshots": {
-          "0": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "10": "v6|seed=GOLD-0012|d=3|t=10|over=0|p=5,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:10:5|3:linker:18:16:6|4:linker:18:21:8|5:linker:18:12:22|6:linker:18:14:15|7:linker:18:18:25|8:linker:18:28:39|9:linker:18:32:39|10:linker:18:38:29]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=10,0,0,0,0,3,6.1|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "20": "v6|seed=GOLD-0012|d=3|t=20|over=0|p=5,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:11:6|5:linker:18:12:12|6:linker:18:10:6|7:linker:18:13:18|8:linker:18:38:37|9:linker:18:38:33|10:linker:18:30:26]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=20,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "30": "v6|seed=GOLD-0012|d=3|t=30|over=0|p=2,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:12:8|8:linker:18:38:27|9:linker:18:34:25|10:linker:18:20:25]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=30,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "40": "v6|seed=GOLD-0012|d=3|t=40|over=0|p=5,8,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:28:28|9:linker:18:24:25|10:linker:18:13:20]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=40,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "50": "v6|seed=GOLD-0012|d=3|t=50|over=0|p=3,4,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:18:25|9:linker:18:14:24|10:linker:18:12:10]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=50,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "60": "v6|seed=GOLD-0012|d=3|t=60|over=0|p=2,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:18|9:linker:18:14:14|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=60,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "70": "v6|seed=GOLD-0012|d=3|t=70|over=0|p=3,7,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=70,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "80": "v6|seed=GOLD-0012|d=3|t=80|over=0|p=4,7,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=80,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "90": "v6|seed=GOLD-0012|d=3|t=90|over=0|p=4,7,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=90,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "100": "v6|seed=GOLD-0012|d=3|t=100|over=0|p=4,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=100,0,0,0,0,3,6.6|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "110": "v6|seed=GOLD-0012|d=3|t=110|over=0|p=3,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=110,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
-          "120": "v6|seed=GOLD-0012|d=3|t=120|over=0|p=3,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=120,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57"
+          "0": "v6|seed=GOLD-0012|d=3|t=0|over=0|p=4,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:12:6|2:linker:18:13:14|3:linker:18:24:3|4:linker:18:24:16|5:linker:18:6:23|6:linker:18:10:25|7:linker:18:28:25|8:linker:18:20:42|9:linker:18:28:34|10:linker:18:32:33]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=0,0,0,0,0,3,4.8|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "10": "v6|seed=GOLD-0012|d=3|t=10|over=0|p=5,5,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:5:4|2:linker:18:10:5|3:linker:18:16:6|4:linker:18:21:8|5:linker:18:12:22|6:linker:18:14:15|7:linker:18:18:25|8:linker:18:28:39|9:linker:18:32:39|10:linker:18:38:29]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=10,0,0,0,0,3,6.1|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "20": "v6|seed=GOLD-0012|d=3|t=20|over=0|p=5,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:4:4|2:linker:18:2:5|3:linker:18:7:5|4:linker:18:11:6|5:linker:18:12:12|6:linker:18:10:6|7:linker:18:13:18|8:linker:18:38:37|9:linker:18:38:33|10:linker:18:30:26]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=20,0,0,0,0,3,6.3|rng=3676838883|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "30": "v6|seed=GOLD-0012|d=3|t=30|over=0|p=2,5,978/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:10:3:5|2:linker:10:3:6|3:linker:18:3:4|4:linker:18:4:6|5:linker:18:8:5|6:linker:18:4:5|7:linker:18:12:8|8:linker:18:38:27|9:linker:18:34:25|10:linker:18:20:25]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=30,0,16,71,0,3,6.3|rng=3548956489|rngL=3806312913|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "40": "v6|seed=GOLD-0012|d=3|t=40|over=0|p=2,6,1003/1003,atk8,poc3,lv2:50,mo0,arm0|E[1:linker:1:6:5|4:linker:1:5:5|5:linker:18:4:5|6:linker:18:4:4|7:linker:18:5:3|8:linker:18:28:28|9:linker:18:24:25|10:linker:18:13:20]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:2:17:-:0:0]|S=40,2,78,213,0,3,6.3|rng=197954548|rngL=3174477243|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "50": "v6|seed=GOLD-0012|d=3|t=50|over=0|p=4,5,991/1003,atk8,poc3,lv2:50,mo0,arm0|E[1:linker:1:13:10|4:linker:1:13:9|5:linker:18:5:5|6:linker:18:5:4|7:linker:18:4:6|8:linker:18:18:25|9:linker:18:14:24|10:linker:18:12:10]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:2:17:-:0:0]|S=50,2,78,259,0,3,6.3|rng=1965579164|rngL=3174477243|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "60": "v6|seed=GOLD-0012|d=3|t=60|over=0|p=6,3,991/1003,atk8,poc3,lv2:50,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|5:linker:11:5:3|6:linker:3:6:5|7:linker:18:5:4|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:7:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:2:17:-:0:0]|S=60,2,100,357,0,3,6.3|rng=2405591243|rngL=3174477243|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "70": "v6|seed=GOLD-0012|d=3|t=70|over=0|p=4,4,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:6:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:7:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=70,4,141,437,0,3,6.6|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "80": "v6|seed=GOLD-0012|d=3|t=80|over=0|p=5,8,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:6:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=80,4,141,437,0,3,6.6|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "90": "v6|seed=GOLD-0012|d=3|t=90|over=0|p=4,6,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:7:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=90,4,141,437,0,3,6.6|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "100": "v6|seed=GOLD-0012|d=3|t=100|over=0|p=4,8,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:7:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=100,4,141,437,0,3,6.6|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "110": "v6|seed=GOLD-0012|d=3|t=110|over=0|p=5,8,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:7:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=110,4,141,437,0,3,6.7|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
+          "120": "v6|seed=GOLD-0012|d=3|t=120|over=0|p=3,4,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:7:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=120,4,141,437,0,3,6.7|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57"
         },
         "niveis": [
           {
@@ -52289,22 +52499,27 @@
         ],
         "morte": null,
         "final": {
-          "snapshot": "v6|seed=GOLD-0012|d=3|t=122|over=0|p=2,6,999/999,atk7,poc3,lv1:0,mo0,arm0|E[1:linker:18:7:5|2:linker:18:8:5|3:linker:18:9:5|4:linker:18:10:6|5:linker:18:11:7|6:linker:18:10:5|7:linker:18:11:6|8:linker:18:13:8|9:linker:18:12:8|10:linker:18:12:7]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:0:17:-:0:0]|S=122,0,0,0,0,3,6.7|rng=3676838883|rngL=3806312913|merc=3,8|banc=6,4|alq=6,3;6,5|agua=367b7f42|map=af495a57",
+          "snapshot": "v6|seed=GOLD-0012|d=3|t=124|over=0|p=2,6,1007/1007,atk9,poc3,lv3:25,mo0,arm0|E[1:linker:1:14:17|4:linker:1:14:16|6:linker:3:7:5|8:linker:18:13:19|9:linker:18:13:18|10:linker:18:8:5]|I[1:potion:23:15|2:potion:26:25|3:potion:37:35]|B[gosma1]|M[abate-chaser:chaser:2:1:orelhaGoblin+espadaGoblin:0:13:-:0:0|abate-linker:linker:2:3:gosma:4:17:-:0:0]|S=124,4,141,437,0,3,6.7|rng=1014037509|rngL=2542641573|merc=3,8|banc=4,2|alq=5,2;4,3|agua=367b7f42|map=af495a57",
           "depth": 3,
-          "turn": 122,
+          "turn": 124,
           "over": false,
           "cause": "",
           "causeKind": "",
           "jogador": {
             "x": 2,
             "y": 6,
-            "hp": 999,
-            "maxHp": 999,
-            "atk": 7,
+            "hp": 1007,
+            "maxHp": 1007,
+            "atk": 9,
             "potions": 3,
-            "level": 1,
-            "xp": 0,
-            "bolsa": [],
+            "level": 3,
+            "xp": 25,
+            "bolsa": [
+              {
+                "kind": "gosma",
+                "n": 1
+              }
+            ],
             "moedas": 0,
             "armaNivel": 0
           },
@@ -52312,99 +52527,47 @@
             {
               "id": 1,
               "kind": "linker",
-              "x": 7,
-              "y": 5,
-              "hp": 18,
+              "x": 14,
+              "y": 17,
+              "hp": 1,
               "maxHp": 18,
               "atk": 6,
               "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
-            },
-            {
-              "id": 2,
-              "kind": "linker",
-              "x": 8,
-              "y": 5,
-              "hp": 18,
-              "maxHp": 18,
-              "atk": 6,
-              "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
-            },
-            {
-              "id": 3,
-              "kind": "linker",
-              "x": 9,
-              "y": 5,
-              "hp": 18,
-              "maxHp": 18,
-              "atk": 6,
-              "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
+              "state": "flee",
+              "plan": "encurralado, sem saída",
+              "lastDmg": 9
             },
             {
               "id": 4,
               "kind": "linker",
-              "x": 10,
-              "y": 6,
-              "hp": 18,
+              "x": 14,
+              "y": 16,
+              "hp": 1,
               "maxHp": 18,
               "atk": 6,
               "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
-            },
-            {
-              "id": 5,
-              "kind": "linker",
-              "x": 11,
-              "y": 7,
-              "hp": 18,
-              "maxHp": 18,
-              "atk": 6,
-              "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
+              "state": "flee",
+              "plan": "encurralado, sem saída",
+              "lastDmg": 9
             },
             {
               "id": 6,
               "kind": "linker",
-              "x": 10,
+              "x": 7,
               "y": 5,
-              "hp": 18,
+              "hp": 3,
               "maxHp": 18,
               "atk": 6,
               "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
-            },
-            {
-              "id": 7,
-              "kind": "linker",
-              "x": 11,
-              "y": 6,
-              "hp": 18,
-              "maxHp": 18,
-              "atk": 6,
-              "range": 1,
-              "state": "wait",
-              "plan": "aguarda aliado",
-              "lastDmg": 0
+              "state": "flee",
+              "plan": "encurralado, sem saída",
+              "lastDmg": 7
             },
             {
               "id": 8,
               "kind": "linker",
               "x": 13,
-              "y": 8,
+              "y": 19,
               "hp": 18,
               "maxHp": 18,
               "atk": 6,
@@ -52416,8 +52579,8 @@
             {
               "id": 9,
               "kind": "linker",
-              "x": 12,
-              "y": 8,
+              "x": 13,
+              "y": 18,
               "hp": 18,
               "maxHp": 18,
               "atk": 6,
@@ -52429,8 +52592,8 @@
             {
               "id": 10,
               "kind": "linker",
-              "x": 12,
-              "y": 7,
+              "x": 8,
+              "y": 5,
               "hp": 18,
               "maxHp": 18,
               "atk": 6,
@@ -52440,7 +52603,7 @@
               "lastDmg": 0
             }
           ],
-          "inimigosVivos": 10,
+          "inimigosVivos": 6,
           "itens": [
             {
               "id": 1,
@@ -52465,10 +52628,10 @@
             }
           ],
           "stats": {
-            "turns": 122,
-            "kills": 0,
-            "dmgDealt": 0,
-            "dmgTaken": 0,
+            "turns": 124,
+            "kills": 4,
+            "dmgDealt": 141,
+            "dmgTaken": 437,
             "itemsUsed": 0,
             "deepest": 3,
             "explorePct": 6.7
@@ -52482,9 +52645,9 @@
             "tamanho": 103,
             "hash": "a42be626"
           },
-          "rngCombat": 3676838883,
-          "rngLoot": 3806312913,
-          "proxItemId": 4,
+          "rngCombat": 1014037509,
+          "rngLoot": 2542641573,
+          "proxItemId": 5,
           "mapa": {
             "seed": "GOLD-0012",
             "depth": 3,
@@ -52623,6 +52786,96 @@
               "cls": "info"
             },
             {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 10,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 11,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
               "turn": 11,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
@@ -52633,9 +52886,149 @@
               "cls": "info"
             },
             {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 13,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 16,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
               "turn": 22,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 24,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
             },
             {
               "turn": 24,
@@ -52643,142 +53036,1067 @@
               "cls": "aviso"
             },
             {
-              "turn": 34,
+              "turn": 25,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 25,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 26,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 27,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 28,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 28,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 28,
+              "text": "Você atinge o Vinculador por 8 de dano (10/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 29,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 29,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 29,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 29,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 29,
+              "text": "Você atinge o Vinculador por 8 de dano (10/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 30,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 30,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 30,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 30,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 30,
+              "text": "Você atinge o Vinculador por 6 de dano (12/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 31,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 31,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 31,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 31,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 31,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 31,
+              "text": "Você atinge o Vinculador por 7 de dano (3/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 32,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 32,
               "text": "Não há escada aqui.",
               "cls": "aviso"
             },
             {
-              "turn": 35,
-              "text": "O caldeirão borbulha. A estação pede gosma e ferro.",
+              "turn": 32,
+              "text": "Você atinge o Vinculador por 6 de dano (6/18).",
               "cls": "info"
+            },
+            {
+              "turn": 33,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 33,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 33,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 33,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 33,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 33,
+              "text": "Você abate o Vinculador com 8 de dano (+100 xp).",
+              "cls": "bom"
+            },
+            {
+              "turn": 33,
+              "text": "Você alcança o nível 2 de experiência. Vida máxima 1003, ataque 8.",
+              "cls": "bom"
+            },
+            {
+              "turn": 34,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 34,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 34,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 34,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 34,
+              "text": "Você abate o Vinculador com 9 de dano (+50 xp).",
+              "cls": "bom"
+            },
+            {
+              "turn": 35,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 35,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 35,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
             },
             {
               "turn": 35,
               "text": "Você aguarda, atento aos ruídos.",
+              "cls": "info"
+            },
+            {
+              "turn": 36,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 36,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 36,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 36,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 36,
+              "text": "Você atinge o Vinculador por 8 de dano (10/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 37,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 37,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 37,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 37,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 37,
+              "text": "Você atinge o Vinculador por 9 de dano (1/18).",
               "cls": "info"
             },
             {
               "turn": 38,
-              "text": "A água barra o caminho.",
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 38,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 38,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 38,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 38,
+              "text": "Você atinge o Vinculador por 9 de dano (1/18).",
               "cls": "info"
             },
             {
               "turn": 39,
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 39,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 39,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 40,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 41,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
-              "turn": 48,
-              "text": "O caldeirão borbulha. A estação pede gosma e ferro.",
-              "cls": "info"
+              "turn": 45,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 45,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 45,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 45,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 45,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 46,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 46,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 46,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 47,
+              "text": "O Vinculador aguarda um aliado.",
+              "cls": "aviso"
             },
             {
               "turn": 48,
-              "text": "A água barra o caminho.",
-              "cls": "info"
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
             },
             {
               "turn": 48,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 48,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 48,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 48,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 48,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 49,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 49,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 49,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 50,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 50,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 50,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 50,
+              "text": "Você atinge o Vinculador por 7 de dano (11/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 51,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 51,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 51,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 52,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 52,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 52,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 53,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 53,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 54,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 54,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 55,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 55,
               "text": "A estação de alquimia. O caldeirão fica ao lado.",
               "cls": "info"
             },
             {
-              "turn": 52,
+              "turn": 56,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 56,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 56,
+              "text": "Você atinge o Vinculador por 8 de dano (10/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 57,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 57,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 57,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 57,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
-              "turn": 54,
+              "turn": 58,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 58,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 58,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 58,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 58,
+              "text": "Você atinge o Vinculador por 7 de dano (3/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 59,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 59,
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 59,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 59,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 59,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
-              "turn": 55,
+              "turn": 60,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 60,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 60,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 60,
               "text": "Não há escada aqui.",
               "cls": "aviso"
             },
             {
-              "turn": 79,
+              "turn": 60,
+              "text": "Você atinge o Vinculador por 8 de dano (10/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 61,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 61,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 61,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 61,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 61,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 61,
+              "text": "Você atinge o Vinculador por 7 de dano (4/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 62,
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 62,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 62,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 62,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 62,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 63,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 63,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 63,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 63,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 63,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 64,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 64,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 64,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 64,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 64,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 64,
+              "text": "Você atinge o Vinculador por 9 de dano (1/18).",
+              "cls": "info"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador foge ferido.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 65,
+              "text": "Você abate o Vinculador com 8 de dano (+50 xp).",
+              "cls": "bom"
+            },
+            {
+              "turn": 65,
+              "text": "O Vinculador larga um frasco de gosma.",
+              "cls": "bom"
+            },
+            {
+              "turn": 65,
+              "text": "Você alcança o nível 3 de experiência. Vida máxima 1007, ataque 9.",
+              "cls": "bom"
+            },
+            {
+              "turn": 66,
+              "text": "O Vinculador golpeia e causa 6 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 66,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 66,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 66,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 66,
+              "text": "Você abate o Vinculador com 9 de dano (+25 xp).",
+              "cls": "bom"
+            },
+            {
+              "turn": 67,
+              "text": "Você recolhe um frasco de gosma (1 no total).",
+              "cls": "bom"
+            },
+            {
+              "turn": 68,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 68,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 68,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 68,
+              "text": "O Vinculador golpeia e causa 7 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 69,
+              "text": "O Vinculador golpeia e causa 5 de dano.",
+              "cls": "ruim"
+            },
+            {
+              "turn": 69,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 69,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 69,
+              "text": "O Vinculador avança com o aliado.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 81,
               "text": "A água barra o caminho.",
               "cls": "info"
             },
             {
-              "turn": 80,
+              "turn": 82,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
-              "turn": 85,
+              "turn": 87,
               "text": "Sua vida já está completa.",
-              "cls": "aviso"
-            },
-            {
-              "turn": 88,
-              "text": "Você aguarda, atento aos ruídos.",
-              "cls": "info"
-            },
-            {
-              "turn": 89,
-              "text": "Não há escada aqui.",
               "cls": "aviso"
             },
             {
               "turn": 90,
-              "text": "Sua vida já está completa.",
-              "cls": "aviso"
-            },
-            {
-              "turn": 94,
-              "text": "Sua vida já está completa.",
-              "cls": "aviso"
-            },
-            {
-              "turn": 100,
-              "text": "Não há escada aqui.",
-              "cls": "aviso"
-            },
-            {
-              "turn": 100,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
-              "turn": 104,
-              "text": "O mercador ergue os olhos: há o que negociar.",
-              "cls": "info"
+              "turn": 91,
+              "text": "Não há escada aqui.",
+              "cls": "aviso"
             },
             {
-              "turn": 105,
+              "turn": 92,
+              "text": "Sua vida já está completa.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 96,
+              "text": "Sua vida já está completa.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 102,
+              "text": "Não há escada aqui.",
+              "cls": "aviso"
+            },
+            {
+              "turn": 102,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             },
             {
               "turn": 106,
-              "text": "Você entra na sala 0 (arredondada).",
+              "text": "O mercador ergue os olhos: há o que negociar.",
               "cls": "info"
             },
             {
               "turn": 107,
+              "text": "Você aguarda, atento aos ruídos.",
+              "cls": "info"
+            },
+            {
+              "turn": 108,
+              "text": "Você entra na sala 0 (arredondada).",
+              "cls": "info"
+            },
+            {
+              "turn": 109,
               "text": "Sua vida já está completa.",
               "cls": "aviso"
             },
             {
-              "turn": 113,
+              "turn": 115,
               "text": "Sua vida já está completa.",
               "cls": "aviso"
             },
             {
-              "turn": 114,
+              "turn": 116,
               "text": "A água barra o caminho.",
               "cls": "info"
             },
             {
-              "turn": 119,
+              "turn": 121,
               "text": "Sua vida já está completa.",
               "cls": "aviso"
             },
             {
-              "turn": 121,
+              "turn": 123,
               "text": "Você aguarda, atento aos ruídos.",
               "cls": "info"
             }

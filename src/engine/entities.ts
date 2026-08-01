@@ -1044,6 +1044,362 @@ export function makeItem(id: number, x: number, y: number, kind: ItemKind = 'pot
 }
 
 /* ------------------------------------------------------------------ *
+ * A PASSAGEM — o povoamento não pode trancar o andar
+ *
+ * O BRIEF exige em R15 "BFS ao final garantindo 100% dos tiles caminháveis
+ * conectados" e em R16 "áreas isoladas são conectadas ou o mapa é regenerado".
+ * O gerador CUMPRE: o portão vive dentro de `generate()` (mapgen.ts), com BFS,
+ * reparo por túnel e laço de regeneração até `CONFIG.MAX_REGEN`.
+ *
+ * Só que os SÓLIDOS PERMANENTES do andar — mercador, caldeirão e a decoração da
+ * estação — nascem aqui, em `populate()`, DEPOIS daquele portão, e por isso ele
+ * nunca os viu. Desde a fase 2.2 os três recusam o passo como uma parede
+ * (`esbarrar`, em game.ts), e o resultado apareceu numa captura de tela do
+ * dono: o mercador plantado no ÚNICO tile de saída da sala inicial, o herói
+ * preso no cômodo, a escada do outro lado, a partida acabada antes do primeiro
+ * monstro. O gerador entregava o mapa inteiro; o povoador o partia.
+ *
+ * MEDIDO ANTES DO CONSERTO, em 3000 andares (500 sementes × 6 profundidades):
+ * 34,7% saíam com o mapa PARTIDO e 14,2% com a ESCADA INALCANÇÁVEL. A mesma
+ * varredura sem sólido nenhum deu 0 de 3000 — ou seja, água e vazio (que também
+ * barram) já estão cobertos pelo portão do gerador, e a quebra inteira era do
+ * povoamento. Nos piores casos sobravam 24 de ~780 tiles: a sala inicial e nada
+ * mais.
+ *
+ * O CONSERTO, em uma frase: nenhum sólido permanente pode nascer num PONTO DE
+ * ARTICULAÇÃO do grafo do passo — um tile cuja retirada parte o grafo em dois.
+ * ------------------------------------------------------------------ */
+
+/**
+ * A aresta (x,y) → (x+dx, y+dy) existe para o PASSO DO JOGADOR?
+ *
+ * A vizinhança é a de `mover` (game.ts), NÃO a do BFS de conectividade do
+ * gerador (que é de quatro direções). Usar a errada torna todo este módulo
+ * inútil ou paranoico: com 4-vizinhança, um tile vira "gargalo" onde a diagonal
+ * passa tranquila; com 8-vizinhança crua, o filtro libera cantos que o jogo não
+ * deixa cortar. Só a vizinhança REAL do passo responde à pergunta real.
+ *
+ * O detalhe que decide tudo: o teste de canto de `mover` consulta `isWalkable`,
+ * ou seja o TERRENO. Um móvel parado na quina NÃO fecha a diagonal — ele só
+ * tira o próprio tile do caminho. É por isso que `fora` entra na checagem do
+ * DESTINO e fica de fora da checagem do CANTO. Fosse o contrário, o filtro
+ * recusaria tiles que não trancam nada e a estação sumiria de cômodos onde ela
+ * cabe perfeitamente.
+ */
+function passoLigado(
+  map: GameMap,
+  fora: Set<number>,
+  x: number,
+  y: number,
+  dx: number,
+  dy: number
+): boolean {
+  const nx = x + dx;
+  const ny = y + dy;
+  if (!walkable(map, nx, ny)) return false;
+  if (fora.has(idx(map.w, nx, ny))) return false;
+  if (dx !== 0 && dy !== 0) {
+    if (!walkable(map, nx, y)) return false;
+    if (!walkable(map, x, ny)) return false;
+  }
+  return true;
+}
+
+/**
+ * Os PONTOS DE ARTICULAÇÃO do grafo do passo, ignorando os tiles de `fora`.
+ * Devolve um bitmap w*h com 1 em cada tile cuja retirada partiria o grafo.
+ *
+ * É o Tarjan clássico — DFS com `descoberta` e low-link `baixo` —, com duas
+ * escolhas que valem um parágrafo cada:
+ *
+ * · POR QUE TARJAN, e não uma BFS por candidato. Medido em 200 andares: a BFS
+ *   candidato a candidato custa 7,687 ms por andar contra 0,676 ms de um passe
+ *   de Tarjan — onze vezes mais —, e a exatidão é a MESMA. Conferido contra a
+ *   verdade medida por BFS em 14.100 candidatos de 600 andares: 1150 tiles
+ *   partem o mapa, 1150 acusados, zero falso negativo e zero falso positivo.
+ *
+ * · POR QUE A PILHA É EXPLÍCITA, e não recursão. O andar tem 45×45 = 2025 tiles
+ *   e o caminho de DFS num traçado degenerado pode encostar nesse número.
+ *   Recursão de dois mil quadros não estoura o V8 de hoje, mas depende do
+ *   tamanho do quadro e do que mais já está na pilha — e um engine puro não
+ *   pede desculpa por `RangeError`. A pilha explícita custa duas linhas e não
+ *   tem teto.
+ *
+ * O grafo pode estar DESCONEXO (o `fora` já retirou tiles, ou o mapa foi
+ * fabricado à mão por ferramenta): o laço externo visita cada componente, e a
+ * articulação é sempre relativa ao componente em que o tile vive — que é
+ * exatamente a pergunta certa.
+ */
+function articulacoes(map: GameMap, fora: Set<number>): Uint8Array {
+  const w = map.w;
+  const n = w * map.h;
+  const arti = new Uint8Array(n);
+  const descoberta = new Int32Array(n).fill(-1);
+  const baixo = new Int32Array(n);
+  const pai = new Int32Array(n).fill(-1);
+  /* `pilha` guarda o tile; `proxima`, indexada pelo TILE, guarda a direção de
+   * DIRS8 que falta tentar nele. Juntas são o "ponto de retorno" que a recursão
+   * guardaria sozinha no quadro. Indexar por tile é seguro porque cada tile
+   * entra na pilha no máximo uma vez (só se empilha o não descoberto, e a
+   * descoberta é marcada no empilhamento). */
+  const pilha = new Int32Array(n);
+  const proxima = new Int32Array(n);
+  let relogio = 0;
+
+  for (let raiz = 0; raiz < n; raiz++) {
+    if (descoberta[raiz] !== -1) continue;
+    const rx = raiz % w;
+    const ry = (raiz - rx) / w;
+    if (!walkable(map, rx, ry) || fora.has(raiz)) continue;
+
+    /* A RAIZ tem regra própria: ela é articulação quando tem DOIS OU MAIS
+     * filhos na árvore de DFS (com um só, tudo que pendia dela continua ligado
+     * por esse filho). O resto do grafo usa o teste de low-link. */
+    let filhosDaRaiz = 0;
+    let topo = 0;
+    descoberta[raiz] = relogio;
+    baixo[raiz] = relogio;
+    relogio++;
+    pilha[0] = raiz;
+    proxima[raiz] = 0;
+
+    while (topo >= 0) {
+      const u = pilha[topo];
+      if (proxima[u] < DIRS8.length) {
+        const d = DIRS8[proxima[u]];
+        proxima[u]++;
+        const ux = u % w;
+        const uy = (u - ux) / w;
+        if (!passoLigado(map, fora, ux, uy, d[0], d[1])) continue;
+        const v = (uy + d[1]) * w + (ux + d[0]);
+        if (v === pai[u]) continue; // a aresta de árvore de volta ao pai
+        if (descoberta[v] !== -1) {
+          /* Aresta de retorno: o ancestral já visto puxa o low-link para cima
+           * na árvore — é ela que prova que existe desvio. */
+          if (descoberta[v] < baixo[u]) baixo[u] = descoberta[v];
+          continue;
+        }
+        pai[v] = u;
+        descoberta[v] = relogio;
+        baixo[v] = relogio;
+        relogio++;
+        if (u === raiz) filhosDaRaiz++;
+        topo++;
+        pilha[topo] = v;
+        proxima[v] = 0;
+        continue;
+      }
+      /* Esgotou as oito direções: desempilha, devolve o low-link ao pai e
+       * decide se o PAI é articulação — nenhum descendente de `u` alcançou algo
+       * anterior ao pai, logo tirar o pai isola a subárvore. */
+      topo--;
+      const p = pai[u];
+      if (p === -1) continue;
+      if (baixo[u] < baixo[p]) baixo[p] = baixo[u];
+      if (p !== raiz && baixo[u] >= descoberta[p]) arti[p] = 1;
+    }
+
+    if (filhosDaRaiz > 1) arti[raiz] = 1;
+  }
+  return arti;
+}
+
+/**
+ * O guarda-passagem do povoamento: os tiles já fechados por sólido permanente e
+ * o mapa de articulações do grafo QUE SOBROU.
+ *
+ * POR QUE RECALCULAR A CADA PEÇA, e não uma vez só no mapa intacto (que seria
+ * um terço do custo): porque a colocação é SEQUENCIAL, e duas peças que
+ * sozinhas não são gargalo podem, EM CONJUNTO, estrangular um corredor de
+ * largura dois. Medido: com Tarjan calculado uma única vez sobram 176 de 2400
+ * andares partidos (7,33%); com Tarjan refeito a cada peça, 0 de 2400.
+ *
+ * E o zero não é sorte medida, é INDUÇÃO: se G é conexo e t não é articulação
+ * de G, então G−t é conexo; refazendo a conta depois de cada retirada, o grafo
+ * final é conexo por construção, peça a peça. É essa prova — e não a varredura
+ * — que garante o invariante para as sementes que ninguém rodou. T20.1 e T20.2
+ * medem 1350 andares e confirmam: nenhum partido, nenhuma escada presa.
+ *
+ * O PREÇO, medido em 200 andares: `populate` inteiro passou de 0,13..0,30 ms
+ * para 3,53 ms por andar — até cinco passes de Tarjan (o mapa intacto e um por
+ * peça) mais a BFS do cinto de segurança. Caro em proporção, irrelevante em
+ * absoluto: o andar é povoado uma vez por descida, o jogo é por turnos e a
+ * alternativa é a partida travada na primeira sala.
+ */
+interface Passagem {
+  /** Tiles fora do grafo: os sólidos permanentes já plantados neste andar. */
+  fora: Set<number>;
+  /** w*h — 1 no tile cuja retirada PARTIRIA o grafo do passo. */
+  arti: Uint8Array;
+}
+
+function abrirPassagem(map: GameMap): Passagem {
+  const fora = new Set<number>();
+  return { fora: fora, arti: articulacoes(map, fora) };
+}
+
+/** Fecha o tile para sempre e refaz as articulações do grafo que sobrou. */
+function fecharTile(map: GameMap, passagem: Passagem, i: number): void {
+  passagem.fora.add(i);
+  passagem.arti = articulacoes(map, passagem.fora);
+}
+
+/**
+ * Alcance do PASSO a partir de `start`, ignorando os tiles de `fora` — mesma
+ * vizinhança de `passoLigado`, ou seja, a de `mover`.
+ */
+function alcancePeloPasso(
+  map: GameMap,
+  fora: Set<number>,
+  start: Point
+): { vistos: Uint8Array; total: number } {
+  const w = map.w;
+  const n = w * map.h;
+  const vistos = new Uint8Array(n);
+  if (!walkable(map, start.x, start.y)) return { vistos: vistos, total: 0 };
+  const si = idx(w, start.x, start.y);
+  if (fora.has(si)) return { vistos: vistos, total: 0 };
+
+  const fila = new Int32Array(n);
+  let ini = 0;
+  let fim = 0;
+  vistos[si] = 1;
+  fila[fim++] = si;
+  let total = 1;
+  while (ini < fim) {
+    const cur = fila[ini++];
+    const cx = cur % w;
+    const cy = (cur - cx) / w;
+    for (let k = 0; k < DIRS8.length; k++) {
+      const d = DIRS8[k];
+      if (!passoLigado(map, fora, cx, cy, d[0], d[1])) continue;
+      const ni = (cy + d[1]) * w + (cx + d[0]);
+      if (vistos[ni]) continue;
+      vistos[ni] = 1;
+      total++;
+      fila[fim++] = ni;
+    }
+  }
+  return { vistos: vistos, total: total };
+}
+
+/** A instalação da entrada, enquanto ela ainda pode encolher. */
+export interface Instalacao {
+  mercador: Point | null;
+  bancada: Point | null;
+  extras: Point[];
+}
+
+/**
+ * A MESMA poda do cinto de segurança, para quem NÃO passou por `populate`.
+ *
+ * Existe por causa de um buraco medido: `populate` ganhou o filtro de
+ * articulação, mas o RESTORE de save não. Um save gravado por build anterior à
+ * correção traz as posições antigas, e `restore` as aceita conferindo apenas
+ * `isWalkable` — o andar volta trancado. Medido em 3000 andares com posições
+ * produzidas pelo código pré-correção: 35,07% partidos e 15,53% com a escada
+ * presa, exatamente os números que a correção tinha acabado de eliminar. E como
+ * a partida autossalva a cada turno, a posição quebrada se REGRAVA: o andar
+ * trancado não se conserta sozinho.
+ *
+ * Não é dívida de uma vez só. Um save PERFEITO no mapa em que foi gravado quebra
+ * quando o mapa muda debaixo dele — 12,19% dos saves sãos partem quando o
+ * `mapgen` muda, e este projeto mexeu em `mapgen` três vezes nos últimos quatro
+ * PRs. Toda mudança futura de geração reabre a porta; por isso a validação mora
+ * aqui, e não numa migração de versão de save.
+ *
+ * O `taken` descartável é deliberado: quem chama isto está reconstruindo um
+ * estado pronto, não distribuindo conteúdo, então não há nada depois para
+ * respeitar a reserva. A poda em si é idêntica à de `populate` — extras primeiro,
+ * caldeirão depois, mercador por último.
+ */
+export function validarInstalacao(map: GameMap, start: Point, inst: Instalacao): void {
+  podarAtePassar(map, start, inst, new Set<number>());
+}
+
+/**
+ * CINTO DE SEGURANÇA — nunca entregar um andar partido.
+ *
+ * Uma BFS ao final, com TODOS os sólidos bloqueados, e a poda da instalação
+ * enquanto o andar estiver partido. Na mesma disciplina das checagens de
+ * `taken` mais abaixo e do bloqueio explícito de água e vazio em `makeContext`:
+ * a trava que continua no código depois de a regra já a tornar desnecessária.
+ *
+ * E ela É desnecessária hoje, por prova: o filtro incremental de `Passagem`
+ * garante por indução que o grafo final é conexo, e em 1350 andares medidos
+ * (T20.1 e T20.2) esta BFS nunca teve o que podar — T20.6 fecha a conta pelo
+ * outro lado, provando que as poucas peças AUSENTES faltaram por não haver
+ * tile seguro, e não por poda. Ela fica porque a garantia depende de TODO
+ * sólido novo passar pelo filtro: o dia em que alguém acrescentar um quarto
+ * móvel sem lembrar disso, o andar degrada em vez de trancar.
+ *
+ * A REFERÊNCIA É O ANDAR SEM SÓLIDO NENHUM, e não o total de tiles caminháveis.
+ * Comparar com o total seria frágil: um mapa fabricado à mão (ferramenta ou
+ * teste) pode ter bolsão inalcançável por terreno, e o cinto começaria a podar
+ * peça inocente por culpa do relevo. A pergunta certa é "os sólidos custaram
+ * algo ALÉM dos próprios tiles?", e essa não depende do mapa.
+ */
+function podarAtePassar(map: GameMap, start: Point, inst: Instalacao, taken: Set<number>): void {
+  /* Andar sem instalação nenhuma não precisa nem da BFS de referência. */
+  if (!inst.mercador && !inst.bancada && inst.extras.length === 0) return;
+  const pristino = alcancePeloPasso(map, new Set<number>(), start);
+  for (;;) {
+    const fora = new Set<number>();
+    let ocupados = 0;
+    const conta = (p: Point | null): void => {
+      if (!p) return;
+      const i = idx(map.w, p.x, p.y);
+      fora.add(i);
+      if (pristino.vistos[i]) ocupados++;
+    };
+    conta(inst.mercador);
+    conta(inst.bancada);
+    for (let k = 0; k < inst.extras.length; k++) conta(inst.extras[k]);
+    if (fora.size === 0) return;
+
+    const agora = alcancePeloPasso(map, fora, start);
+    if (agora.total + ocupados >= pristino.total) return;
+
+    /* PARTIU. A ordem da poda é de custo CRESCENTE para a partida:
+     *   1. os EXTRAS, do último para o primeiro — são decoração pura, sem
+     *      interação nenhuma (`esbarrar` só narra a estação ao lado), e o andar
+     *      não perde sistema algum sem eles;
+     *   2. o CALDEIRÃO — a oficina do andar. Cai antes do mercador porque a
+     *      estação já degrada por desenho (ela existe com uma peça só) e porque
+     *      perder o balcão custa UM sistema, não a economia inteira;
+     *   3. o MERCADOR, por último. Ele foi a queixa que criou a fase 2.1 — o
+     *      dono jogou uma expedição inteira e não achou o vendedor —, e um
+     *      andar sem ele é aquele bug de conteúdo invisível de volta.
+     * Nesta ordem os extras nunca sobrevivem ao caldeirão: estante e mesa
+     * flutuando sem oficina seriam cenário mentiroso. */
+    /* DEVOLVER O TILE A `taken` JUNTO COM A PODA, e não só apagar a peça.
+     *
+     * `taken` é o conjunto de tiles reservados, e as missões e o despojo da
+     * fase 3 rodam DEPOIS deste ponto e o consultam. Podar sem liberar deixaria
+     * o tile reservado para uma peça que não existe mais: nada nasceria ali de
+     * novo, e o andar perderia conteúdo duas vezes pela mesma poda — uma vez a
+     * peça, outra o que ocuparia a vaga.
+     *
+     * Hoje isto é inalcançável (o filtro de articulação garante que a poda
+     * nunca dispara), e é exatamente por isso que precisa estar certo agora: no
+     * dia em que o cinto virar a linha de defesa real, ninguém vai lembrar de
+     * revisar a contabilidade de `taken`. */
+    const liberar = (p: Point | null): void => {
+      if (p) taken.delete(idx(map.w, p.x, p.y));
+    };
+    if (inst.extras.length > 0) {
+      liberar(inst.extras.pop() ?? null);
+    } else if (inst.bancada) {
+      liberar(inst.bancada);
+      inst.bancada = null;
+    } else {
+      liberar(inst.mercador);
+      inst.mercador = null;
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
  * Pontos de parada — mercador e estação de alquimia (fase 2 / 2.1)
  * ------------------------------------------------------------------ */
 
@@ -1076,18 +1432,32 @@ export const ALQUIMIA_EXTRAS_MAX = 2;
  *
  * O contrato é: candidatos coletados em ordem CANÔNICA pelo chamador (índice
  * linear crescente — varredura linha a linha), embaralhados pelo rng de
- * POPULAÇÃO e escolhido o de menor índice do resultado, isto é, `cand[0]`. É a
+ * POPULAÇÃO e escolhido o PRIMEIRO do resultado que possa receber sólido. É a
  * mesma disciplina de `distribute`, e é o que faz a colocação depender só da
  * semente: a ordem de entrada não é acidente de iteração, e o sorteio não é
  * `pick` (que consumiria o stream de forma diferente conforme o tamanho da
  * lista... e, pior, deixaria a ordem de entrada invisível na leitura).
  *
- * Lista vazia devolve `null`: mapa sem tile elegível não inventa ponto.
+ * POR QUE O FILTRO DA PASSAGEM VEM DEPOIS DO EMBARALHO, e não antes. Porque
+ * `shuffle` é Fisher–Yates: ele consome um sorteio por posição, então a
+ * QUANTIDADE de u32 gastos depende do TAMANHO da lista. Filtrar antes encolhe a
+ * lista, muda o consumo e desloca tudo o que vem depois no mesmo stream — as
+ * caçadas da fase 3, inclusive —, o que faria um conserto de conectividade
+ * mexer em conteúdo que não tem nada a ver com ele. Filtrar depois custa zero
+ * u32 e dá EXATAMENTE a mesma distribuição: sortear a lista inteira e pegar o
+ * primeiro seguro é o mesmo que sortear só os seguros e pegar o primeiro.
+ *
+ * Sem nenhum candidato seguro devolve `null`: mapa que não tem onde pôr não
+ * inventa ponto — e, desde a fase da passagem, também não tranca o andar para
+ * arrumar um.
  */
-function escolherParada(rng: Rng, cand: Candidate[]): Candidate | null {
+function escolherParada(rng: Rng, arti: Uint8Array, cand: Candidate[]): Candidate | null {
   if (cand.length === 0) return null;
   rng.shuffle(cand);
-  return cand[0];
+  for (let k = 0; k < cand.length; k++) {
+    if (!arti[cand[k].i]) return cand[k];
+  }
+  return null;
 }
 
 /** O ponto está dentro da caixa da sala? Sem sala (corredor), tudo vale. */
@@ -1108,6 +1478,12 @@ function naSala(room: Room | null, x: number, y: number): boolean {
  * `taken` já carrega início, escada, todo inimigo e todo item deste andar — é
  * ele que garante "nunca sobre start, escada, item ou inimigo" sem uma segunda
  * varredura das listas.
+ *
+ * ELEGIBILIDADE, e só ela: esta função responde "o tile SERVE?", não "o tile é
+ * SEGURO?". A segurança — o filtro de pontos de articulação — mora em
+ * `tileDoSolido`, logo abaixo, e a separação é deliberada: a varredura de
+ * candidatos precisa da lista ELEGÍVEL inteira, porque o tamanho dela dirige o
+ * consumo de u32 do `shuffle` (o porquê está por extenso em `escolherParada`).
  */
 function tileDaEntrada(
   map: GameMap,
@@ -1124,6 +1500,29 @@ function tileDaEntrada(
   if (cheb(x, y, start.x, start.y) < PARADA_DIST_MIN) return false;
   if (stairs && x === stairs.x && y === stairs.y) return false;
   return !taken.has(idx(map.w, x, y));
+}
+
+/**
+ * O tile é elegível E não tranca o andar. É a porta única por onde passa TODA
+ * peça sólida da instalação — mercador, caldeirão e decoração.
+ *
+ * R15/R16 estendidos ao povoamento: o gerador garante 100% dos tiles
+ * caminháveis conectados, e nenhuma peça nossa tem o direito de desfazer isso.
+ * O sólido que um dia for colocado sem passar por aqui é o sólido que vai
+ * trancar o andar de novo.
+ */
+function tileDoSolido(
+  map: GameMap,
+  taken: Set<number>,
+  arti: Uint8Array,
+  start: Point,
+  stairs: Point | null,
+  escopo: Room | null,
+  x: number,
+  y: number
+): boolean {
+  if (!tileDaEntrada(map, taken, start, stairs, escopo, x, y)) return false;
+  return !arti[idx(map.w, x, y)];
 }
 
 /** Tiles elegíveis no anel 2..4 do início, dentro do escopo. Ordem canônica. */
@@ -1160,6 +1559,19 @@ interface Entrada {
  *
  * Devolve também o escopo EFETIVO, porque é ele que os extras da estação usam
  * para não atravessarem a parede para o cômodo vizinho.
+ *
+ * A DEGRADAÇÃO É O RAMO PERIGOSO, e é bom que isto esteja escrito: o anel nu
+ * inclui CORREDOR, que é gargalo por definição. É por aqui que nascia o pior
+ * caso do bug da passagem — sala inicial minúscula, anel nu, três candidatos e
+ * os três dentro do mesmo corredor de largura um. O filtro de `tileDoSolido`
+ * recusa os três na hora da escolha, e o cômodo fica sem instalação: andar sem
+ * mercador é conteúdo a menos, andar trancado é partida perdida.
+ *
+ * A degradação continua olhando a ELEGIBILIDADE, não a segurança — sala com
+ * tiles elegíveis não cai para o anel nu ainda que todos eles tranquem o andar.
+ * É de propósito: o anel nu é pior candidato do que a sala em toda dimensão que
+ * importa (visibilidade, pertencimento ao cômodo, risco de gargalo), então
+ * ampliar a busca por causa da segurança seria trocar um problema por outro.
  */
 function entradaDoInicio(
   map: GameMap,
@@ -1174,8 +1586,8 @@ function entradaDoInicio(
 }
 
 /**
- * Os tiles de DECORAÇÃO de uma estação plantada em `caldeirao`: até
- * `ALQUIMIA_EXTRAS_MAX` vizinhos ORTOGONAIS livres, escolhidos na ordem fixa de
+ * Quantos tiles de DECORAÇÃO uma estação plantada em `caldeirao` COMPORTARIA:
+ * até `ALQUIMIA_EXTRAS_MAX` vizinhos ORTOGONAIS livres, na ordem fixa de
  * `DIRS4` e devolvidos em ordem canônica de índice linear.
  *
  * Duas ordens diferentes de propósito: a de ESCOLHA é `DIRS4` (leste, sul,
@@ -1183,10 +1595,18 @@ function entradaDoInicio(
  * ARMAZENAMENTO é o índice crescente, que é o que faz a lista sair igual no
  * `snapshot()` e no save venha de onde vier. Dois vizinhos ortogonais quaisquer
  * do mesmo tile formam sempre um L ou uma linha — não há terceira forma.
+ *
+ * Esta é a versão que só CONTA, e serve à nota de `escolherCaldeirao`. Ela lê o
+ * `arti` que já está na mão (sem o caldeirão candidato fechado), então a conta
+ * é uma ESTIMATIVA — de propósito. Ela vale como PREFERÊNCIA entre candidatos,
+ * e refazer Tarjan duas vezes para cada um dos ~24 candidatos do anel custaria
+ * trinta vezes o povoamento inteiro para melhorar um desempate estético. Quem
+ * planta de verdade é `plantarExtras`, e esse não estima nada.
  */
 function extrasDaEstacao(
   map: GameMap,
   taken: Set<number>,
+  arti: Uint8Array,
   start: Point,
   stairs: Point | null,
   escopo: Room | null,
@@ -1196,8 +1616,53 @@ function extrasDaEstacao(
   for (let d = 0; d < DIRS4.length && out.length < ALQUIMIA_EXTRAS_MAX; d++) {
     const x = caldeirao.x + DIRS4[d][0];
     const y = caldeirao.y + DIRS4[d][1];
-    if (!tileDaEntrada(map, taken, start, stairs, escopo, x, y)) continue;
+    if (!tileDoSolido(map, taken, arti, start, stairs, escopo, x, y)) continue;
     out.push({ x: x, y: y, i: idx(map.w, x, y) });
+  }
+  out.sort(function (a, b) { return a.i - b.i; });
+  return out;
+}
+
+/**
+ * Planta a DECORAÇÃO de verdade, mesma ordem de escolha e mesma ordem de
+ * armazenamento de `extrasDaEstacao`, com UMA diferença que é o motivo de esta
+ * função existir: cada peça aceita é FECHADA NA HORA e o mapa de articulações é
+ * refeito antes de a próxima ser considerada.
+ *
+ * Porque dois tiles que sozinhos não são gargalo podem, juntos, estrangular um
+ * corredor de largura dois — e a decoração é o maior ofensor medido do bug
+ * original (culpada sozinha em 525 dos 1041 andares partidos, contra 339 do
+ * mercador). Estante e mesa são cenário; trancar o andar com cenário seria a
+ * pior versão possível deste bug.
+ *
+ * A varredura é de UMA passada por `DIRS4`, e isso deixa dinheiro na mesa de
+ * propósito: um vizinho recusado no começo pode voltar a caber depois que outro
+ * extra entrou (o extra que entrou pode ter sido, ele mesmo, o beco que o
+ * primeiro isolava). Reexaminar em laço renderia decoração no rabo da
+ * distribuição e custaria mais um Tarjan por passada — a estação completa já
+ * sai em 89% dos andares (T14.1), e cenário não vale um orçamento a mais.
+ */
+function plantarExtras(
+  map: GameMap,
+  taken: Set<number>,
+  passagem: Passagem,
+  start: Point,
+  stairs: Point | null,
+  escopo: Room | null,
+  caldeirao: Point
+): Candidate[] {
+  const out: Candidate[] = [];
+  for (let d = 0; d < DIRS4.length && out.length < ALQUIMIA_EXTRAS_MAX; d++) {
+    const x = caldeirao.x + DIRS4[d][0];
+    const y = caldeirao.y + DIRS4[d][1];
+    if (!tileDoSolido(map, taken, passagem.arti, start, stairs, escopo, x, y)) continue;
+    const i = idx(map.w, x, y);
+    out.push({ x: x, y: y, i: i });
+    /* Território reservado NA HORA, nos dois sentidos: `taken` é o que impede um
+     * despojo futuro de cair dentro da estante, e `fecharTile` tira o tile do
+     * grafo antes de o próximo extra ser sequer olhado. */
+    taken.add(i);
+    fecharTile(map, passagem, i);
   }
   out.sort(function (a, b) { return a.i - b.i; });
   return out;
@@ -1221,11 +1686,25 @@ function extrasDaEstacao(
  * de população — e o `>` (e não `>=`) do laço mantém o PRIMEIRO empatado, isto
  * é, o sorteado. Determinismo pela semente, com preferência estrutural por
  * cima.
+ *
+ * ATENÇÃO AO `encostado`, que é onde este desempate encontra o bug da passagem:
+ * premiar o tile com parede ortogonal ao lado é premiar exatamente onde moram
+ * portas e bocas de corredor — a heurística de estética empurra a estação PARA
+ * os gargalos. Por isso o gargalo é DESCARTADO no topo do laço, antes de a nota
+ * existir: a estética só opina sobre tiles que já provaram não trancar o andar.
+ * Pontuar primeiro e filtrar depois seria deixar a estética escolher e a
+ * segurança só reclamar.
+ *
+ * O descarte fica AQUI, e não na varredura de candidatos, pelo motivo de
+ * `escolherParada`: encolher a lista antes do `shuffle` mudaria quantos u32 o
+ * embaralho consome, e com eles tudo o que vem depois no stream de população.
+ * `melhor` começa em `null` justamente porque `cand[0]` pode ser um gargalo.
  */
 function escolherCaldeirao(
   rng: Rng,
   map: GameMap,
   taken: Set<number>,
+  arti: Uint8Array,
   start: Point,
   stairs: Point | null,
   escopo: Room | null,
@@ -1233,11 +1712,12 @@ function escolherCaldeirao(
 ): Candidate | null {
   if (cand.length === 0) return null;
   rng.shuffle(cand);
-  let melhor: Candidate = cand[0];
+  let melhor: Candidate | null = null;
   let melhorNota = -1;
   for (let k = 0; k < cand.length; k++) {
     const c = cand[k];
-    const extras = extrasDaEstacao(map, taken, start, stairs, escopo, c).length;
+    if (arti[c.i]) continue;
+    const extras = extrasDaEstacao(map, taken, arti, start, stairs, escopo, c).length;
     let encostado = 0;
     for (let d = 0; d < DIRS4.length; d++) {
       if (!walkable(map, c.x + DIRS4[d][0], c.y + DIRS4[d][1])) {
@@ -1323,34 +1803,54 @@ export function populate(map: GameMap, depth: number, heroLevel: number): Popula
    * ---------------------------------------------------------------- */
   const salaInicial = roomAt(map, start.x, start.y);
 
+  /* A PASSAGEM abre aqui e acompanha as três peças: cada uma escolhe num grafo
+   * que já perdeu as anteriores. Ver a seção "A PASSAGEM" no topo do módulo —
+   * este é o objeto que impede o povoamento de trancar o andar. */
+  const passagem = abrirPassagem(map);
+
   let mercador: Point | null = null;
   const entradaMercador = entradaDoInicio(map, taken, start, stairs, salaInicial);
-  const escolhido = escolherParada(rng, entradaMercador.cand);
+  const escolhido = escolherParada(rng, passagem.arti, entradaMercador.cand);
   if (escolhido) {
     mercador = { x: escolhido.x, y: escolhido.y };
-    /* Reservado: a estação não pode nascer em cima do mercador. */
+    /* Reservado nos dois sentidos: `taken` para a estação não nascer em cima do
+     * mercador, `fecharTile` para o caldeirão ser sorteado já contando com o
+     * corpo dele no caminho. */
     taken.add(escolhido.i);
+    fecharTile(map, passagem, escolhido.i);
   }
 
   /* A estação vem depois do mercador e enxerga o tile dele já tomado — é o
    * desempate que a interface documenta ("populate reserva o tile do mercador
    * ANTES de sortear a bancada"), e o que garante que os dois nunca coincidem. */
   const entradaEstacao = entradaDoInicio(map, taken, start, stairs, salaInicial);
-  const caldeirao = escolherCaldeirao(rng, map, taken, start, stairs,
+  const caldeirao = escolherCaldeirao(rng, map, taken, passagem.arti, start, stairs,
     entradaEstacao.escopo, entradaEstacao.cand);
   let bancada: Point | null = null;
   const alquimiaExtras: Point[] = [];
   if (caldeirao) {
     bancada = { x: caldeirao.x, y: caldeirao.y };
     taken.add(caldeirao.i);
-    const extras = extrasDaEstacao(map, taken, start, stairs, entradaEstacao.escopo, caldeirao);
+    fecharTile(map, passagem, caldeirao.i);
+    const extras = plantarExtras(map, taken, passagem, start, stairs,
+      entradaEstacao.escopo, caldeirao);
     for (let k = 0; k < extras.length; k++) {
-      /* Território reservado: decoração não tem interação, mas ocupa o tile —
-       * é isso que impede um despojo futuro de cair dentro da estante. */
-      taken.add(extras[k].i);
       alquimiaExtras.push({ x: extras[k].x, y: extras[k].y });
     }
   }
+
+  /* O cinto de segurança, depois de a instalação inteira estar de pé. Não deve
+   * podar nada — o filtro incremental já garante o andar conexo por indução —,
+   * e é justamente por isso que ele fica: é a trava que sobra para o dia em que
+   * um sólido novo entrar por outra porta. */
+  const instalacao: Instalacao = {
+    mercador: mercador,
+    bancada: bancada,
+    extras: alquimiaExtras
+  };
+  podarAtePassar(map, start, instalacao, taken);
+  mercador = instalacao.mercador;
+  bancada = instalacao.bancada;
 
   /* ---------------------------------------------------------------- *
    * Missões (fase 3) — depois de TUDO, sempre.
