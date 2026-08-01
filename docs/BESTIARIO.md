@@ -608,7 +608,7 @@ seção tinha de preservar, saiu idêntica — ajoelhada e caída nas mesmas pos
 
 # Balanceamento (a fase que a §10 anunciava)
 
-## 15. Níveis de monstro, XP em escala e spawn por nível do herói
+## 15. Níveis de monstro, XP em escala e spawn por ANDAR
 
 > **Emenda 2026-07-30.** Esta é a fase de "balanceamento de níveis e dificuldade" que a
 > §10 reservava — feita com o dono, com o oracle **regenerado de propósito** pelo mesmo
@@ -617,9 +617,21 @@ seção tinha de preservar, saiu idêntica — ajoelhada e caída nas mesmas pos
 > oracle; T11 novo cobre a escala). O que a §10 e a emenda anterior dizem sobre pesos de
 > spawn e XP por arquétipo fica como registro do estado anterior — esta seção manda.
 
+> **Emenda 2026-08-01 (a descida).** O dono pediu três mudanças de balanceamento junto
+> com a bússola da saída (§9 do docs/CONTRACTS.md): **o nível do monstro sobe um por
+> andar**, **a mistura de spawn passa a sair do ANDAR** e não mais do nível do herói, e
+> **o goblin é mais comum que o slime desde o andar 1**, com o slime já **raro no andar
+> 3**. Oracle regenerado de propósito, com a divergência classificada campo a campo
+> (só o bloco `E[…]` mudou; **nenhum inimigo mudou de posição**, o que prova que
+> nenhum u32 vazou) — a conta inteira está em
+> `obsidian/07 - Changelog/2026-08-01-a-descida-e-o-balanceamento-por-andar.md`.
+> Onde esta emenda e o texto de 2026-07-30 discordarem, **esta manda**.
+
 ### 15.1 Os níveis dos monstros
 
-| Monstro | Arquétipo | `nivel` |
+O nível BASE é do arquétipo:
+
+| Monstro | Arquétipo | `nivel` base |
 |---|---|---|
 | Slime | `linker` | **1** |
 | Goblin | `chaser` | **2** |
@@ -628,11 +640,37 @@ seção tinha de preservar, saiu idêntica — ajoelhada e caída nas mesmas pos
 `nivel` substitui os campos `xp` e `peso` de `ARCHETYPES`, abolidos. É um dado do
 ARQUÉTIPO, não da entidade — `Enemy` continua com os mesmos campos de sempre.
 
+**O nível EFETIVO soma um por andar descido** (emenda 2026-08-01):
+
+```
+nivelDoMonstro(kind, andar) = ARCHETYPES[kind].nivel + (andar − 1)
+```
+
+| andar | Slime | Goblin | Ogro |
+|---|---|---|---|
+| 1 | 1 | 2 | 3 |
+| 2 | 2 | 3 | 4 |
+| 3 | 3 | 4 | 5 |
+
+É uma **função** de (arquétipo, andar), e não um campo novo em `Enemy`: o valor é
+derivável dos dois números que o inimigo já carrega implicitamente, e um campo entraria
+em `snapshot()`, no save e no oracle para guardar uma conta de uma linha. Valor derivado
+que vira campo é valor que um dia discorda da própria fórmula.
+
+O jogador lê esse número em dois lugares: no **balão da criatura** (`Nível 4 (você: 2)`)
+e na linha de **Fauna do andar** que o registro imprime a cada andar novo.
+
 ### 15.2 O XP do abate, na escala do dono
 
 ```
 xp = 100 × 2^(nivelMonstro − nivelHeroi)     — zero quando nivelHeroi ≥ nivelMonstro + 3
 ```
+
+onde `nivelMonstro` é o **nível efetivo** de §15.1, ou seja o do andar.
+
+A tabela abaixo é a do **andar 1**; cada andar descido desloca as colunas um degrau para
+a direita (no andar 2 a coluna "slime" carrega os números da coluna "goblin", e assim por
+diante):
 
 | herói \ monstro | slime (1) | goblin (2) | ogro (3) |
 |---|---|---|---|
@@ -645,8 +683,23 @@ xp = 100 × 2^(nivelMonstro − nivelHeroi)     — zero quando nivelHeroi ≥ n
 
 Dobra por nível ACIMA (matar bicho mais forte recompensa o risco — decisão do dono) e
 cai pela metade por nível abaixo, até parar de render. O registro do abate mostra o XP
-(`+100 xp`, ou `sem xp — monstro muito abaixo do seu nível`): é o único feedback da
-escala enquanto a UI não tem barra de XP.
+(`+100 xp`, ou `sem xp — monstro muito abaixo do seu nível`), e o flutuante 3D de §16 o
+mostra no mundo.
+
+**A DESCIDA É QUE PAGA O CORTE** (emenda 2026-08-01). Antes, um herói de nível 4 nunca
+mais via XP de slime, e descer não mudava nada — a masmorra inteira parava de render.
+Com o nível do monstro subindo por andar, o corte de três níveis virou uma dívida que a
+próxima escada quita:
+
+| | andar 1 | andar 2 | andar 3 |
+|---|---|---|---|
+| herói 2 mata slime | 50 | 100 | 200 |
+| herói 4 mata slime | **0** (cortado) | **25** | 50 |
+
+Consequência para o render: o conjunto de valores **deixou de ser fechado** em
+25/50/100/200/400. Um goblin do andar 3 contra um herói de nível 1 rende 800.
+`modeloDeXp` (`src/render/characters/xpTexto.ts`) passou a forjar o rig de qualquer valor
+sob demanda, com memoização — ver §16.2.
 
 ### 15.3 Nível do herói: 100 XP plano, excedente carrega
 
@@ -655,21 +708,43 @@ sobe e o **excedente é carregado** — as duas decisões são do dono: um ogro 
 com 0 acumulado rende 4 níveis de uma vez. Os bônus por nível (+4 maxHp/+4 hp/+1 atk)
 ficaram INALTERADOS nesta fase: o que cada nível dá em status é a próxima conversa.
 
-### 15.4 A mistura de spawn, pelo nível do herói
+### 15.4 A mistura de spawn, pelo ANDAR
 
-`populate(map, depth, heroLevel)` — a mistura sai da linha do herói em `PESOS_SPAWN`
-(colunas em `KINDS`: chaser/sentinel/linker). A profundidade segue endurecendo
-**contagem** e **hp/atk** (intocados); ela não mexe mais na mistura.
+> Emenda 2026-08-01. **A régua trocou de eixo**: era o nível do herói, agora é o andar.
+> O texto anterior (mistura por nível do herói, com a tabela `10/1/100 … 15/100/3`) fica
+> como registro do estado que existiu entre 2026-07-30 e esta data.
 
-| herói | goblin | ogro | slime | leitura |
-|---|---|---|---|---|
-| 1 | 10 | 1 | 100 | a cada 10 slimes, 1 goblin; a cada 10 goblins, 1 ogro |
-| 2 | 100 | 10 | 30 | goblins dominam; ogros aparecem; slimes recuam |
-| 3 | 40 | 100 | 10 | ogros dominam; slimes raros |
-| 4+ | 15 | 100 | 3 | ogros comuns, goblins em minoria, slimes raríssimos |
+`populate(map, depth)` — a mistura sai da linha do ANDAR em `PESOS_SPAWN` (colunas em
+`KINDS`: chaser/sentinel/linker). A profundidade já endurecia **contagem** e **hp/atk**;
+agora ela dirige os três eixos, e é o único eixo de dificuldade do mundo.
 
-A linha 4 é a régua de todos os níveis seguintes (com XP plano o herói pode subir
-indefinidamente; a mistura estabiliza no estado final descrito pelo dono).
+**Por que o eixo mudou.** Pelo nível do herói, o efeito na mão era o contrário do que o
+papel prometia: quem descia sem matar levava a masmorra do andar 1 para o andar 5, e quem
+subia de nível numa sala só via a fauna trocar sem sair do lugar. O jogador lê o mundo
+pelo ANDAR — *"desci, ficou pior"* —, não pela própria ficha. O nível do herói continua
+mandando no **XP** (§15.2), que é o lado da escala em que ele é a pergunta certa.
+
+`heroLevel` foi **removido** de `populate()` e de `createState()`: parâmetro que não muda
+nada é pior do que nenhum, porque convida quem lê a acreditar que muda.
+
+Pesos e a mistura medida em 40 sementes por andar:
+
+| andar | goblin | ogro | slime | medido (goblin/ogro/slime) | leitura |
+|---|---|---|---|---|---|
+| 1 | 100 | 1 | 40 | 69,6 % / 0,8 % / 29,6 % | os goblins são a fauna comum; ogro é achado raro |
+| 2 | 100 | 15 | 20 | 72,8 % / 11,9 % / 15,3 % | goblins seguem dominando; ogros aparecem; slimes recuam |
+| 3 | 60 | 100 | 8 | 40,5 % / 53,3 % / **6,3 %** | os ogros assumem; goblins comuns; **slimes raros** |
+| 4+ | 15 | 100 | 3 | 16,0 % / 81,9 % / 2,1 % | ogros comuns, goblins em minoria, slimes raríssimos |
+
+A linha 4 é a régua de todos os andares seguintes: a masmorra não tem fundo, e a mistura
+não volta a mudar depois dela.
+
+Os dois pedidos do dono estão travados em T11 (`test/engine.test.ts`): **o goblin é mais
+comum que o slime em todo andar da tabela** e **no andar 3 o slime é raro** (menos de
+10 %). O preço medido está no changelog: um bot ingênuo que anda direto para a escada sem
+beber poção e sem recuar passou de 25 % para 32,5 % de mortes no andar 1 — trocar 90 % de
+slime (que só ataca com aliado colado) por 70 % de goblin (que persegue e bate) é trocar
+cenário por combate.
 
 ### 15.5 O que NÃO se fez nesta fase
 
@@ -720,10 +795,22 @@ cura é a **pré-distorção de outdoors**: da álgebra de §4.2 saem os dois pa
 bitmap lê perfeito e cada pixel continua um cubo isométrico — a leitura vem do bitmap,
 o volume vem do cubo. Fica registrado para o próximo texto do jogo.
 
-O conjunto de valores é FECHADO (25/50/100/200/400, da fórmula de §15): um atlas por
-valor, forjado sob demanda. Valor fora do conjunto não desenha nada (degradar sem
-lançar) — uma escala futura que gere outro valor só precisa de um modelo a mais em
-`MODELO_XP`.
+O conjunto de valores era FECHADO (25/50/100/200/400, da fórmula de §15): um atlas por
+valor, forjado sob demanda.
+
+> **Emenda 2026-08-01.** O conjunto **deixou de ser fechado**. Com o nível do monstro
+> subindo por andar (§15.1), 800 e 1600 são valores comuns — um goblin do andar 3 contra
+> um herói de nível 1 rende 800. Com a tabela fechada esses abates simplesmente não
+> mostravam texto, e o flutuante sumia exatamente nos abates que mais valem a pena
+> celebrar. Acrescentar dois números à tabela seria a mesma dívida adiada dois andares:
+> `modeloDeXp` passou a **construir o rig a partir da string do valor**, com memoização
+> (teto de 32 chaves, que é trava de vazamento e não régua de escala — os valores são
+> potências de dois vezes 100). Estourado o teto, o rig ainda é devolvido, só não fica
+> guardado: degradar em desempenho, nunca em imagem. O atlas continua memoizado do outro
+> lado, no `atlasXp` do `IsoRenderer` — é lá que mora o custo real, a rasterização.
+> `MODELO_XP` continua existindo com os cinco valores pré-forjados no import, porque são
+> os que quase todo abate rende. Valor que **não é XP** (zero, negativo, quebrado) segue
+> devolvendo `null` e não desenha nada.
 
 ### 16.3 O painel: ANDAR × NÍVEL × XP
 
